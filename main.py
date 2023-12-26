@@ -1,22 +1,22 @@
-import json
 import re
 
 import requests
 import spacy
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from sqlalchemy import create_engine
+
 from sqlalchemy.orm import Session
 
 from models import Knowledge, Message
-from request_schemas import KAIGenerationInputSchema, KAITokenCountSchema
+from request_schemas import KAITokenCountSchema, KAIGenerationInputSchema, OAIGenerationInputSchema
+from settings import SIDE_API_URL, MAIN_API_URL, CONTEXT_PERCENTAGE, DB_ENGINE, MAIN_API_AUTH, MODEL_INPUT_SEQUENCE, \
+    MODEL_OUTPUT_SEQUENCE, MAIN_API_BACKEND
+from transformers import AutoTokenizer
 
 app = FastAPI()
 nlp = spacy.load("en_core_web_trf")
-KOBOLD_URL = 'http://127.0.0.1:5001'
-SIDE_API_URL = 'http://127.0.0.1:5002'
-CONTEXT_PERCENTAGE = 0.25
-db = create_engine('sqlite:///db.sqlite3')
+db = create_engine(DB_ENGINE)
 
 
 def make_summary_prompt(session, term):
@@ -35,12 +35,12 @@ def summarize(session, term):
     print(kobold_response)
 
 
-def orm_get_or_create(session, model, **kwargs):
-    instance = session.query(model).filter_by(**kwargs).first()
+def orm_get_or_create(session, db_model, **kwargs):
+    instance = session.query(db_model).filter_by(**kwargs).first()
     if instance:
         return instance
     else:
-        instance = model(**kwargs)
+        instance = db_model(**kwargs)
         session.add(instance)
         session.commit()
         return instance
@@ -49,7 +49,8 @@ def orm_get_or_create(session, model, **kwargs):
 def process_prompt(prompt):
     print(prompt)
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL']
-    messages = re.split(r"<\|user\|>|<\|model\|>", prompt)  # TODO make the instruct mode in/out changeable
+    pattern = re.escape(MODEL_INPUT_SEQUENCE) + r'|' + re.escape(MODEL_OUTPUT_SEQUENCE)
+    messages = re.split(pattern, prompt)
     last_messages = messages[-3:-1]
     docs = list(nlp.pipe(last_messages))
     with Session(db) as session:
@@ -64,18 +65,32 @@ def process_prompt(prompt):
                 knowledge_entity.messages.append(db_message)
                 session.add(knowledge_entity)
                 session.commit()
-            for entity in doc.ents:
-                print(entity.text, entity.label_, spacy.explain(entity.label_))
-                summarize(session, entity.text)
+            # for entity in doc.ents:
+            #     print(entity.text, entity.label_, spacy.explain(entity.label_))
+            #     summarize(session, entity.text)
 
 
 def count_context(text):
-    token_count_endpoint = KOBOLD_URL + '/api/extra/tokencount'
-    request_body = {'prompt': text}
-    kobold_response = requests.post(token_count_endpoint, json=request_body)
-    value = int(kobold_response.json()['value'])
-    return value
+    if MAIN_API_BACKEND == 'OpenAI':
+        models_endpoint = MAIN_API_URL + '/v1/models'
+        response = requests.get(models_endpoint, headers={'Authorization': f'Bearer {MAIN_API_AUTH}'})
+        model_name = response.json()['data'][0]['id']
+        # Default to llama tokenizer if model tokenizer is not on huggingface
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+        except OSError as s:
+            print(s)
+            tokenizer = AutoTokenizer.from_pretrained('oobabooga/llama-tokenizer')
+        encoded = tokenizer(text)
+        token_amount = len(encoded['input_ids'])
+        return token_amount
 
+    else:
+        token_count_endpoint = MAIN_API_URL + '/api/extra/tokencount'
+        request_body = {'prompt': text}
+        kobold_response = requests.post(token_count_endpoint, json=request_body)
+        value = int(kobold_response.json()['value'])
+        return value
 
 def get_context_length(api_url: str) -> int:
     length_endpoint = api_url + '/v1/config/max_context_length'
@@ -84,11 +99,12 @@ def get_context_length(api_url: str) -> int:
     return value
 
 
-def fill_context(prompt):
-    max_context = get_context_length(KOBOLD_URL)
+def fill_context(prompt, context_size):
+    max_context = context_size
     max_memoir_context = max_context * CONTEXT_PERCENTAGE
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL']
-    messages = re.split(r"<\|user\|>|<\|model\|>", prompt)  # TODO make the instruct mode in/out changeable
+    pattern = re.escape(MODEL_INPUT_SEQUENCE) + r'|' + re.escape(MODEL_OUTPUT_SEQUENCE)
+    messages = re.split(pattern, prompt)
     prompt_definitions = messages[0]  # first portion should always be instruction and char definitions
     docs = list(nlp.pipe(messages))
     full_ent_list = []
@@ -128,42 +144,68 @@ def fill_context(prompt):
     return final_prompt
 
 
-def get_passthrough(endpoint: str) -> dict:
-    passthrough_url = KOBOLD_URL + endpoint
-    kobold_response = requests.get(passthrough_url)
-    return json.loads(kobold_response.text)
+def get_passthrough(endpoint: str, auth_token=None) -> dict:
+    passthrough_url = MAIN_API_URL + endpoint
+    kobold_response = requests.get(passthrough_url, headers={'Authorization': f'Bearer {auth_token}'})
+    return kobold_response.json()
 
 
+def get_model_name():
+    if MAIN_API_BACKEND == 'OpenAI':
+        pass
+    else:
+        pass
+
+
+# KAI Endpoint
 @app.get('/api/v1/model')
 async def model():
     return get_passthrough('/api/v1/model')
 
 
+# KAI Endpoint
 @app.get('/api/v1/info/version')
 async def info_version():
     return get_passthrough('/api/v1/info/version')
 
 
+# KAI Endpoint
 @app.get('/api/extra/version')
 async def extra_version():
     return get_passthrough('/api/extra/version')
 
 
+# KAI Endpoint
 @app.post('/api/v1/generate')
-async def generate(k_request: KAIGenerationInputSchema):
-    passthrough_json = k_request.model_dump(exclude_defaults=True)
+async def generate(k_request: Request):
+    passthrough_json = await k_request.json()
     process_prompt(passthrough_json['prompt'])
-    passthrough_url = KOBOLD_URL + '/api/v1/generate'
+    passthrough_url = MAIN_API_URL + '/api/v1/generate'
     kobold_response = requests.post(passthrough_url, json=passthrough_json)
-    return kobold_response.content
+    return kobold_response.json()
 
 
+# KAI Endpoint
 @app.post('/api/extra/tokencount')
 async def token_count(k_request: KAITokenCountSchema):
     passthrough_json = k_request.model_dump(exclude_defaults=True)
-    passthrough_url = KOBOLD_URL + '/api/extra/tokencount'
+    passthrough_url = MAIN_API_URL + '/api/extra/tokencount'
     kobold_response = requests.post(passthrough_url, json=passthrough_json)
-    return json.loads(kobold_response.text)
+    return kobold_response.json()
+
+
+# Aphrodite/Ooba/OAI endpoint
+@app.get('/v1/models')
+async def get_models(request: Request):
+    return get_passthrough('/v1/models', MAIN_API_AUTH)
+
+
+@app.post('/v1/completions')
+async def completions(k_request: OAIGenerationInputSchema):
+    passthrough_json = k_request.model_dump()
+    passthrough_url = MAIN_API_URL + '/api/v1/completions'
+    kobold_response = requests.post(passthrough_url, json=passthrough_json)
+    return kobold_response.json()
 
 
 if __name__ == '__main__':
