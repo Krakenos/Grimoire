@@ -203,26 +203,25 @@ async def get_models(request: Request):
 
 
 @app.post('/v1/completions')
-async def completions(k_request: OAIGenerationInputSchema, request: Request):
-    def streaming_messages():
-        passthrough_json = k_request.model_dump()
-        passthrough_url = MAIN_API_URL + '/v1/completions'
-        kobold_response = requests.post(passthrough_url, stream=True,
-                                        headers={'Authorization': f'Bearer {MAIN_API_AUTH}'}, json=passthrough_json)
-        client = sseclient.SSEClient(kobold_response)
+async def completions(oai_request: OAIGenerationInputSchema, request: Request):
+    def streaming_messages(url, data_json):
+        streaming_response = requests.post(url, stream=True,
+                                        headers={'Authorization': f'Bearer {MAIN_API_AUTH}'}, json=data_json)
+        client = sseclient.SSEClient(streaming_response)
         for event in client.events():
             yield f'data: {event.data}\n\n'
 
-    if k_request.stream:
-        return StreamingResponse(streaming_messages(), media_type="text/event-stream")
+    passthrough_json = oai_request.model_dump()
+    passthrough_url = MAIN_API_URL + '/v1/completions'
+    passthrough_json['api_server'] = MAIN_API_URL + '/'
+
+    if oai_request.stream:
+        return StreamingResponse(streaming_messages(passthrough_url, passthrough_json), media_type="text/event-stream")
 
     else:
-        passthrough_json = k_request.model_dump()
-        passthrough_url = MAIN_API_URL + '/v1/completions'
-        passthrough_json['api_server'] = MAIN_API_URL + '/'
-        kobold_response = requests.post(passthrough_url, headers={'Authorization': f'Bearer {MAIN_API_AUTH}'},
+        engine_response = requests.post(passthrough_url, headers={'Authorization': f'Bearer {MAIN_API_AUTH}'},
                                         json=passthrough_json)
-        return kobold_response.json()
+        return engine_response.json()
 
 
 if __name__ == '__main__':

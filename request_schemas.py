@@ -14,6 +14,7 @@ class KAIGenerationInputSchema(BaseModel):
     max_context_length: PositiveInt
     max_length: PositiveInt
 
+
 class OAIGenerationInputSchema(BaseModel):
     model_config = ConfigDict(extra='allow')
 
