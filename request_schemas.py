@@ -18,3 +18,5 @@ class OAIGenerationInputSchema(BaseModel):
     model_config = ConfigDict(extra='allow')
 
     prompt: str
+    truncation_length: PositiveInt
+    stream: bool = False

@@ -2,17 +2,18 @@ import re
 
 import requests
 import spacy
+import sseclient
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import create_engine
-
 from sqlalchemy.orm import Session
+from transformers import AutoTokenizer
 
 from models import Knowledge, Message
-from request_schemas import KAITokenCountSchema, KAIGenerationInputSchema, OAIGenerationInputSchema
+from request_schemas import KAITokenCountSchema, OAIGenerationInputSchema
 from settings import SIDE_API_URL, MAIN_API_URL, CONTEXT_PERCENTAGE, DB_ENGINE, MAIN_API_AUTH, MODEL_INPUT_SEQUENCE, \
     MODEL_OUTPUT_SEQUENCE, MAIN_API_BACKEND
-from transformers import AutoTokenizer
 
 app = FastAPI()
 nlp = spacy.load("en_core_web_trf")
@@ -91,6 +92,7 @@ def count_context(text):
         kobold_response = requests.post(token_count_endpoint, json=request_body)
         value = int(kobold_response.json()['value'])
         return value
+
 
 def get_context_length(api_url: str) -> int:
     length_endpoint = api_url + '/v1/config/max_context_length'
@@ -201,11 +203,26 @@ async def get_models(request: Request):
 
 
 @app.post('/v1/completions')
-async def completions(k_request: OAIGenerationInputSchema):
-    passthrough_json = k_request.model_dump()
-    passthrough_url = MAIN_API_URL + '/api/v1/completions'
-    kobold_response = requests.post(passthrough_url, json=passthrough_json)
-    return kobold_response.json()
+async def completions(k_request: OAIGenerationInputSchema, request: Request):
+    def streaming_messages():
+        passthrough_json = k_request.model_dump()
+        passthrough_url = MAIN_API_URL + '/v1/completions'
+        kobold_response = requests.post(passthrough_url, stream=True,
+                                        headers={'Authorization': f'Bearer {MAIN_API_AUTH}'}, json=passthrough_json)
+        client = sseclient.SSEClient(kobold_response)
+        for event in client.events():
+            yield f'data: {event.data}\n\n'
+
+    if k_request.stream:
+        return StreamingResponse(streaming_messages(), media_type="text/event-stream")
+
+    else:
+        passthrough_json = k_request.model_dump()
+        passthrough_url = MAIN_API_URL + '/v1/completions'
+        passthrough_json['api_server'] = MAIN_API_URL + '/'
+        kobold_response = requests.post(passthrough_url, headers={'Authorization': f'Bearer {MAIN_API_AUTH}'},
+                                        json=passthrough_json)
+        return kobold_response.json()
 
 
 if __name__ == '__main__':
