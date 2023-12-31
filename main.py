@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from transformers import AutoTokenizer
 
+from loggers import general_logger, summary_logger, context_logger
 from models import Knowledge, Message
 from request_schemas import KAITokenCountSchema, OAIGenerationInputSchema
 from settings import SIDE_API_URL, MAIN_API_URL, CONTEXT_PERCENTAGE, DB_ENGINE, MAIN_API_AUTH, MODEL_INPUT_SEQUENCE, \
@@ -33,7 +34,7 @@ def summarize(session, term):
     prompt = make_summary_prompt(session, term)
     json = {'prompt': prompt, 'max_length': 350}
     kobold_response = requests.post(SIDE_API_URL + '/api/v1/generate', json=json)
-    print(kobold_response)
+    summary_logger.debug(kobold_response)
 
 
 def orm_get_or_create(session, db_model, **kwargs):
@@ -48,7 +49,7 @@ def orm_get_or_create(session, db_model, **kwargs):
 
 
 def process_prompt(prompt):
-    print(prompt)
+    context_logger.debug(prompt)
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL']
     pattern = re.escape(MODEL_INPUT_SEQUENCE) + r'|' + re.escape(MODEL_OUTPUT_SEQUENCE)
     messages = re.split(pattern, prompt)
@@ -56,7 +57,7 @@ def process_prompt(prompt):
     docs = list(nlp.pipe(last_messages))
     with Session(db) as session:
         for doc in docs:
-            print(doc.text_with_ws)
+            context_logger.debug(doc.text_with_ws)
             db_message = orm_get_or_create(session, Message, message=doc.text)
             ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
             unique_ents = list(set(ent_list))
@@ -67,12 +68,12 @@ def process_prompt(prompt):
                 session.add(knowledge_entity)
                 session.commit()
             # for entity in doc.ents:
-            #     print(entity.text, entity.label_, spacy.explain(entity.label_))
+            #     context_logger.debug(entity.text, entity.label_, spacy.explain(entity.label_))
             #     summarize(session, entity.text)
 
 
 def count_context(text):
-    if MAIN_API_BACKEND == 'OpenAI':
+    if MAIN_API_BACKEND == 'Aphrodite':
         models_endpoint = MAIN_API_URL + '/v1/models'
         response = requests.get(models_endpoint, headers={'Authorization': f'Bearer {MAIN_API_AUTH}'})
         model_name = response.json()['data'][0]['id']
@@ -80,7 +81,8 @@ def count_context(text):
         try:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
         except OSError as s:
-            print(s)
+            general_logger.warning('Could not load model tokenizer, defaulting to llama-tokenizer')
+            general_logger.warning(s)
             tokenizer = AutoTokenizer.from_pretrained('oobabooga/llama-tokenizer')
         encoded = tokenizer(text)
         token_amount = len(encoded['input_ids'])
@@ -111,7 +113,7 @@ def fill_context(prompt, context_size):
     docs = list(nlp.pipe(messages))
     full_ent_list = []
     for doc in docs:
-        print(doc.text_with_ws)
+        general_logger.debug(doc.text_with_ws)
         ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
         full_ent_list += ent_list
     unique_ents = list(dict.fromkeys(full_ent_list[::-1]))  # unique ents ordered from bottom of context
@@ -153,7 +155,7 @@ def get_passthrough(endpoint: str, auth_token=None) -> dict:
 
 
 def get_model_name():
-    if MAIN_API_BACKEND == 'OpenAI':
+    if MAIN_API_BACKEND == 'Aphrodite':
         pass
     else:
         pass
@@ -206,7 +208,7 @@ async def get_models(request: Request):
 async def completions(oai_request: OAIGenerationInputSchema, request: Request):
     def streaming_messages(url, data_json):
         streaming_response = requests.post(url, stream=True,
-                                        headers={'Authorization': f'Bearer {MAIN_API_AUTH}'}, json=data_json)
+                                           headers={'Authorization': f'Bearer {MAIN_API_AUTH}'}, json=data_json)
         client = sseclient.SSEClient(streaming_response)
         for event in client.events():
             yield f'data: {event.data}\n\n'
