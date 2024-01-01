@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 
+from pydantic import UUID4
 from sqlalchemy import Table, Column, ForeignKey, DateTime
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -39,6 +40,8 @@ class Message(Base):
     __tablename__ = 'message'
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    chat_id: Mapped[UUID4]
+    message_index: Mapped[int]
     summary: Mapped[Optional[str]]
     message: Mapped[str]
     summary_tokens: Mapped[Optional[int]]

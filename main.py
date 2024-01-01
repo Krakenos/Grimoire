@@ -48,6 +48,24 @@ def orm_get_or_create(session, db_model, **kwargs):
         return instance
 
 
+def save_messages(messages, session):
+    # check if messages exist in db
+    # if all except latest exist grab the chat id
+    # if not make id and push messages
+    message_dict = {}
+    for temp_index, message in enumerate(messages):
+        db_query = session.query(Message).filter_by(message=message)
+        entity_count = db_query.count()
+        message_dict[temp_index] = {'message': message,
+                                    'chats_num': entity_count,
+                                    'chat_ids': []}
+        if entity_count == 0:
+            pass
+        elif entity_count == 1:
+            pass
+        elif entity_count > 1:
+            pass
+
 def process_prompt(prompt):
     context_logger.debug(prompt)
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL']
@@ -55,18 +73,18 @@ def process_prompt(prompt):
     messages = re.split(pattern, prompt)
     last_messages = messages[-3:-1]
     docs = list(nlp.pipe(last_messages))
-    with Session(db) as session:
-        for doc in docs:
-            context_logger.debug(doc.text_with_ws)
-            db_message = orm_get_or_create(session, Message, message=doc.text)
-            ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
-            unique_ents = list(set(ent_list))
-            for ent, ent_label in unique_ents:
-                knowledge_entity = orm_get_or_create(session, Knowledge, entity=ent, entity_type='NAMED ENTITY',
-                                                     entity_label=ent_label)
-                knowledge_entity.messages.append(db_message)
-                session.add(knowledge_entity)
-                session.commit()
+    # with Session(db) as session:
+    #     for doc in docs:
+    #         context_logger.debug(doc.text_with_ws)
+    #         db_message = orm_get_or_create(session, Message, message=doc.text)
+    #         ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
+    #         unique_ents = list(set(ent_list))
+    #         for ent, ent_label in unique_ents:
+    #             knowledge_entity = orm_get_or_create(session, Knowledge, entity=ent, entity_type='NAMED ENTITY',
+    #                                                  entity_label=ent_label)
+    #             knowledge_entity.messages.append(db_message)
+    #             session.add(knowledge_entity)
+    #             session.commit()
             # for entity in doc.ents:
             #     context_logger.debug(entity.text, entity.label_, spacy.explain(entity.label_))
             #     summarize(session, entity.text)
@@ -216,7 +234,7 @@ async def completions(oai_request: OAIGenerationInputSchema, request: Request):
     passthrough_json = oai_request.model_dump()
     passthrough_url = MAIN_API_URL + '/v1/completions'
     passthrough_json['api_server'] = MAIN_API_URL + '/'
-
+    process_prompt(oai_request.prompt)
     if oai_request.stream:
         return StreamingResponse(streaming_messages(passthrough_url, passthrough_json), media_type="text/event-stream")
 
