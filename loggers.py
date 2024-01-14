@@ -1,6 +1,7 @@
 import logging
 
 LOG_LEVEL = logging.DEBUG
+logging.basicConfig(format='[%(asctime)s] %(levelname)s [%(module)s:%(funcName)s:%(lineno)d]: %(message)s')
 
 GENERAL_LOG_FILE = 'general.log'
 SUMMARY_LOG_FILE = 'summary.log'
