@@ -66,7 +66,6 @@ def save_messages(messages, chat_id, session):
 
 def process_prompt(prompt, chat):
     context_logger.debug(prompt)
-    banned_labels = ['DATE', 'CARDINAL', 'ORDINAL']
     pattern = re.escape(MODEL_INPUT_SEQUENCE) + r'|' + re.escape(MODEL_OUTPUT_SEQUENCE)
     messages = re.split(pattern, prompt)[1:]  # first entry is always definitions
     messages = [message.strip() for message in messages]  # remove trailing newlines
@@ -74,20 +73,25 @@ def process_prompt(prompt, chat):
     docs = list(nlp.pipe(last_messages))
     with Session(db) as session:
         save_messages(last_messages, chat, session)
-    #     for doc in docs:
-    #         context_logger.debug(doc.text_with_ws)
-    #         db_message = orm_get_or_create(session, Message, message=doc.text)
-    #         ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
-    #         unique_ents = list(set(ent_list))
-    #         for ent, ent_label in unique_ents:
-    #             knowledge_entity = orm_get_or_create(session, Knowledge, entity=ent, entity_type='NAMED ENTITY',
-    #                                                  entity_label=ent_label)
-    #             knowledge_entity.messages.append(db_message)
-    #             session.add(knowledge_entity)
-    #             session.commit()
+        get_named_entities(chat, docs, session)
     # for entity in doc.ents:
     #     context_logger.debug(entity.text, entity.label_, spacy.explain(entity.label_))
     #     summarize(session, entity.text)
+
+
+def get_named_entities(chat, docs, session):
+    banned_labels = ['DATE', 'CARDINAL', 'ORDINAL']
+    for doc in docs:
+        context_logger.debug(doc.text_with_ws)
+        db_message = orm_get_or_create(session, Message, message=doc.text)
+        ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
+        unique_ents = list(set(ent_list))
+        for ent, ent_label in unique_ents:
+            knowledge_entity = orm_get_or_create(session, Knowledge, entity=ent, entity_type='NAMED ENTITY',
+                                                 entity_label=ent_label, chat_id=chat)
+            knowledge_entity.messages.append(db_message)
+            session.add(knowledge_entity)
+            session.commit()
 
 
 def count_context(text):
