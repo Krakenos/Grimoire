@@ -1,8 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 
-from pydantic import UUID4
-from sqlalchemy import Table, Column, ForeignKey, DateTime
+from sqlalchemy import Table, Column, ForeignKey
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
