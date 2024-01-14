@@ -6,7 +6,7 @@ import sseclient
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, desc
 from sqlalchemy.orm import Session
 from transformers import AutoTokenizer
 
@@ -48,23 +48,21 @@ def orm_get_or_create(session, db_model, **kwargs):
         return instance
 
 
-def save_messages(messages, session):
-    # check if messages exist in db
-    # if all except latest exist grab the chat id
-    # if not make id and push messages
-    message_dict = {}
-    for temp_index, message in enumerate(messages):
-        db_query = session.query(Message).filter_by(message=message)
-        entity_count = db_query.count()
-        message_dict[temp_index] = {'message': message,
-                                    'chats_num': entity_count,
-                                    'chat_ids': []}
-        if entity_count == 0:
-            pass
-        elif entity_count == 1:
-            pass
-        elif entity_count > 1:
-            pass
+def save_messages(messages, chat_id, session):
+    for message in messages:
+        message_exists = session.query(Message.id).filter_by(message=message, chat_id=chat_id).first() is not None
+        if not message_exists:
+            chat_exists = session.query(Message.id).filter_by(chat_id=chat_id).first() is not None
+            if chat_exists:
+                latest_index = session.query(Message.message_index).filter_by(chat_id=chat_id).order_by(
+                    desc(Message.message_index))
+                current_index = latest_index+1
+            else:
+                current_index = 1
+            new_message = Message(message=message, chat_id=chat_id, message_index=current_index)
+            session.add(new_message)
+            session.commit()
+
 
 def process_prompt(prompt):
     context_logger.debug(prompt)
@@ -85,9 +83,9 @@ def process_prompt(prompt):
     #             knowledge_entity.messages.append(db_message)
     #             session.add(knowledge_entity)
     #             session.commit()
-            # for entity in doc.ents:
-            #     context_logger.debug(entity.text, entity.label_, spacy.explain(entity.label_))
-            #     summarize(session, entity.text)
+    # for entity in doc.ents:
+    #     context_logger.debug(entity.text, entity.label_, spacy.explain(entity.label_))
+    #     summarize(session, entity.text)
 
 
 def count_context(text):

@@ -22,6 +22,7 @@ class Knowledge(Base):
     __tablename__ = 'knowledge'
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    chat_id: Mapped[str]
     entity: Mapped[str]
     entity_type: Mapped[Optional[str]]
     entity_label: Mapped[Optional[str]]
@@ -40,7 +41,7 @@ class Message(Base):
     __tablename__ = 'message'
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    chat_id: Mapped[UUID4]
+    chat_id: Mapped[str]
     message_index: Mapped[int]
     summary: Mapped[Optional[str]]
     message: Mapped[str]
