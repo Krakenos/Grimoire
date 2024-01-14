@@ -12,7 +12,7 @@ from transformers import AutoTokenizer
 
 from loggers import general_logger, summary_logger, context_logger
 from models import Knowledge, Message
-from request_schemas import KAITokenCountSchema, OAIGenerationInputSchema
+from request_schemas import KAITokenCountSchema, OAIGenerationInputSchema, KAIGenerationInputSchema
 from settings import SIDE_API_URL, MAIN_API_URL, CONTEXT_PERCENTAGE, DB_ENGINE, MAIN_API_AUTH, MODEL_INPUT_SEQUENCE, \
     MODEL_OUTPUT_SEQUENCE, MAIN_API_BACKEND
 
@@ -55,8 +55,8 @@ def save_messages(messages, chat_id, session):
             chat_exists = session.query(Message.id).filter_by(chat_id=chat_id).first() is not None
             if chat_exists:
                 latest_index = session.query(Message.message_index).filter_by(chat_id=chat_id).order_by(
-                    desc(Message.message_index))
-                current_index = latest_index+1
+                    desc(Message.message_index)).first()[0]
+                current_index = latest_index + 1
             else:
                 current_index = 1
             new_message = Message(message=message, chat_id=chat_id, message_index=current_index)
@@ -64,14 +64,15 @@ def save_messages(messages, chat_id, session):
             session.commit()
 
 
-def process_prompt(prompt):
+def process_prompt(prompt, chat):
     context_logger.debug(prompt)
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL']
     pattern = re.escape(MODEL_INPUT_SEQUENCE) + r'|' + re.escape(MODEL_OUTPUT_SEQUENCE)
-    messages = re.split(pattern, prompt)
-    last_messages = messages[-3:-1]
+    messages = re.split(pattern, prompt)[1:]  # first entry is always definitions
+    last_messages = messages[:-1]
     docs = list(nlp.pipe(last_messages))
-    # with Session(db) as session:
+    with Session(db) as session:
+        save_messages(last_messages, chat, session)
     #     for doc in docs:
     #         context_logger.debug(doc.text_with_ws)
     #         db_message = orm_get_or_create(session, Message, message=doc.text)
@@ -197,9 +198,9 @@ async def extra_version():
 
 # KAI Endpoint
 @app.post('/api/v1/generate')
-async def generate(k_request: Request):
-    passthrough_json = await k_request.json()
-    process_prompt(passthrough_json['prompt'])
+async def generate(k_request: KAIGenerationInputSchema):
+    passthrough_json = k_request.model_dump()
+    process_prompt(k_request.prompt, k_request.memoir.chat_id)
     passthrough_url = MAIN_API_URL + '/api/v1/generate'
     kobold_response = requests.post(passthrough_url, json=passthrough_json)
     return kobold_response.json()
@@ -232,7 +233,7 @@ async def completions(oai_request: OAIGenerationInputSchema, request: Request):
     passthrough_json = oai_request.model_dump()
     passthrough_url = MAIN_API_URL + '/v1/completions'
     passthrough_json['api_server'] = MAIN_API_URL + '/'
-    process_prompt(oai_request.prompt)
+    process_prompt(oai_request.prompt, oai_request.memoir.chat_id)
     if oai_request.stream:
         return StreamingResponse(streaming_messages(passthrough_url, passthrough_json), media_type="text/event-stream")
 
