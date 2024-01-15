@@ -3,6 +3,7 @@ from celery import Celery
 
 from models import Knowledge
 from settings import SIDE_API_URL
+from loggers import summary_logger
 
 celery_app = Celery('tasks', broker='amqp://guest@localhost//')
 
@@ -35,4 +36,4 @@ def summarize(session, term, chat_id):
         ]
     }
     kobold_response = requests.post(SIDE_API_URL + '/api/v1/generate', json=json)
-    print(kobold_response)
+    summary_logger.debug(kobold_response.json)

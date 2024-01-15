@@ -8,8 +8,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import create_engine, desc
 from sqlalchemy.orm import Session
-from transformers import AutoTokenizer
 
+from llm_utils import count_context
 from loggers import general_logger, summary_logger, context_logger
 from models import Knowledge, Message
 from request_schemas import KAITokenCountSchema, OAIGenerationInputSchema, KAIGenerationInputSchema
@@ -94,30 +94,6 @@ def get_named_entities(chat, docs, session):
             session.commit()
 
 
-def count_context(text):
-    if MAIN_API_BACKEND == 'Aphrodite':
-        models_endpoint = MAIN_API_URL + '/v1/models'
-        response = requests.get(models_endpoint, headers={'Authorization': f'Bearer {MAIN_API_AUTH}'})
-        model_name = response.json()['data'][0]['id']
-        # Default to llama tokenizer if model tokenizer is not on huggingface
-        try:
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-        except OSError as s:
-            general_logger.warning('Could not load model tokenizer, defaulting to llama-tokenizer')
-            general_logger.warning(s)
-            tokenizer = AutoTokenizer.from_pretrained('oobabooga/llama-tokenizer')
-        encoded = tokenizer(text)
-        token_amount = len(encoded['input_ids'])
-        return token_amount
-
-    else:
-        token_count_endpoint = MAIN_API_URL + '/api/extra/tokencount'
-        request_body = {'prompt': text}
-        kobold_response = requests.post(token_count_endpoint, json=request_body)
-        value = int(kobold_response.json()['value'])
-        return value
-
-
 def get_context_length(api_url: str) -> int:
     length_endpoint = api_url + '/v1/config/max_context_length'
     kobold_response = requests.get(length_endpoint)
@@ -156,16 +132,20 @@ def fill_context(prompt, context_size):
     memoir_text = ''
     for summary in summaries:
         memoir_text = memoir_text + summary[0] + '\n'
-    memoir_text_len = count_context(memoir_text)
-    definitions_context_len = count_context(prompt_definitions)
+    memoir_text_len = count_context(text=memoir_text, api_type=MAIN_API_BACKEND, api_url=MAIN_API_URL,
+                                    api_auth=MAIN_API_AUTH)
+    definitions_context_len = count_context(text=prompt_definitions, api_type=MAIN_API_BACKEND, api_url=MAIN_API_URL,
+                                            api_auth=MAIN_API_AUTH)
     max_chat_context = max_context - definitions_context_len - memoir_text_len
     starting_message = 1
     messages_text = '\n'.join(messages[starting_message:])
-    messages_len = count_context(messages_text)
+    messages_len = count_context(text=messages_text, api_type=MAIN_API_BACKEND, api_url=MAIN_API_URL,
+                                 api_auth=MAIN_API_AUTH)
     while messages_len > max_chat_context:
         starting_message += 1
         messages_text = '\n'.join(messages[starting_message:])
-        messages_len = count_context(messages_text)
+        messages_len = count_context(text=messages_text, api_type=MAIN_API_BACKEND, api_url=MAIN_API_URL,
+                                     api_auth=MAIN_API_AUTH)
     final_prompt = '\n'.join([prompt_definitions, memoir_text, messages_text])
     return final_prompt
 
