@@ -1,6 +1,7 @@
 import requests
 from celery import Celery
 
+from llm_utils import count_context
 from models import Knowledge
 from settings import SIDE_API_URL
 from loggers import summary_logger
@@ -8,23 +9,28 @@ from loggers import summary_logger
 celery_app = Celery('tasks', broker='amqp://guest@localhost//')
 
 
-def make_summary_prompt(session, term, chat_id):
+def make_summary_prompt(session, term, chat_id, max_context):
     prompt = f'<s>[INST] Based on following text describe {term}.\n\n'
     instance = session.query(Knowledge).filter_by(entity=term, chat_id=chat_id).scalar()
     for message in instance.messages:
-        prompt += message.message + '\n'
+        new_prompt = prompt + message.message + '\n'
+        new_tokens = count_context(new_prompt+'[/INST]', 'KoboldAI', SIDE_API_URL)
+        if new_tokens >= max_context:
+            break
+        else:
+            prompt = new_prompt
     prompt += '[/INST]'
     return prompt
 
 
 @celery_app.task
-def summarize(session, term, chat_id):
-    prompt = make_summary_prompt(session, term, chat_id)
-    json = {'prompt': prompt, 'max_length': 350}
-    params = {
+def summarize(session, term, chat_id, context_len=4096, response_len=300):
+    prompt = make_summary_prompt(session, term, chat_id, context_len)
+    json = {
+        'prompt': prompt,
+        'max_length': response_len,
         "temperature": 0.3,
-        "max_context_length": 4096,
-        "max_length": 350,
+        "max_context_length": context_len,
         "stop": [
             "</s>"
         ],
