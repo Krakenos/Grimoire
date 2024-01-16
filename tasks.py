@@ -12,6 +12,8 @@ celery_app = Celery('tasks', broker='amqp://guest@localhost//')
 def make_summary_prompt(session, term, chat_id, max_context):
     prompt = f'<s>[INST] Based on following text describe {term}.\n\n'
     instance = session.query(Knowledge).filter_by(entity=term, chat_id=chat_id).scalar()
+    if instance.summary is not None:
+        prompt += instance.summary + '\n'
     for message in instance.messages:
         new_prompt = prompt + message.message + '\n'
         new_tokens = count_context(new_prompt+'[/INST]', 'KoboldAI', SIDE_API_URL)
