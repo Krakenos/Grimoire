@@ -21,20 +21,6 @@ nlp = spacy.load("en_core_web_trf")
 db = create_engine(DB_ENGINE)
 
 
-def make_summary_prompt(session, term):
-    prompt = f'<|system|>Based on following text summarize what or who {term} is. Keep explanation short<|user|>'
-    instance = session.query(Knowledge).filter_by(entity=term).first()
-    for message in instance.messages:
-        prompt += message.message + '\n'
-    prompt += '<|model|>'
-    return prompt
-
-
-def summarize(session, term):
-    prompt = make_summary_prompt(session, term)
-    json = {'prompt': prompt, 'max_length': 350}
-    kobold_response = requests.post(SIDE_API_URL + '/api/v1/generate', json=json)
-    summary_logger.debug(kobold_response)
 
 
 def orm_get_or_create(session, db_model, **kwargs):
@@ -66,6 +52,7 @@ def save_messages(messages, chat_id, session):
 
 def process_prompt(prompt, chat):
     context_logger.debug(prompt)
+    banned_labels = ['DATE', 'CARDINAL', 'ORDINAL']
     pattern = re.escape(MODEL_INPUT_SEQUENCE) + r'|' + re.escape(MODEL_OUTPUT_SEQUENCE)
     messages = re.split(pattern, prompt)[1:]  # first entry is always definitions
     messages = [message.strip() for message in messages]  # remove trailing newlines
@@ -74,9 +61,11 @@ def process_prompt(prompt, chat):
     with Session(db) as session:
         save_messages(last_messages, chat, session)
         get_named_entities(chat, docs, session)
-    # for entity in doc.ents:
-    #     context_logger.debug(entity.text, entity.label_, spacy.explain(entity.label_))
-    #     summarize(session, entity.text)
+    # for doc in docs:
+    #     for entity in doc.ents:
+    #         if entity.label_ not in banned_labels:
+    #             context_logger.debug(f'{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}')
+    #             summarize(session, entity.text, entity.label_, chat)
 
 
 def get_named_entities(chat, docs, session):
@@ -92,6 +81,7 @@ def get_named_entities(chat, docs, session):
             knowledge_entity.messages.append(db_message)
             session.add(knowledge_entity)
             session.commit()
+
 
 
 def get_context_length(api_url: str) -> int:
