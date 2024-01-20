@@ -15,12 +15,11 @@ from models import Knowledge, Message
 from request_schemas import KAITokenCountSchema, OAIGenerationInputSchema, KAIGenerationInputSchema
 from settings import SIDE_API_URL, MAIN_API_URL, CONTEXT_PERCENTAGE, DB_ENGINE, MAIN_API_AUTH, MODEL_INPUT_SEQUENCE, \
     MODEL_OUTPUT_SEQUENCE, MAIN_API_BACKEND
+from tasks import summarize
 
 app = FastAPI()
 nlp = spacy.load("en_core_web_trf")
 db = create_engine(DB_ENGINE)
-
-
 
 
 def orm_get_or_create(session, db_model, **kwargs):
@@ -50,7 +49,7 @@ def save_messages(messages, chat_id, session):
             session.commit()
 
 
-def process_prompt(prompt, chat):
+def process_prompt(prompt, chat, context_length):
     context_logger.debug(prompt)
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL']
     pattern = re.escape(MODEL_INPUT_SEQUENCE) + r'|' + re.escape(MODEL_OUTPUT_SEQUENCE)
@@ -61,17 +60,17 @@ def process_prompt(prompt, chat):
     with Session(db) as session:
         save_messages(last_messages, chat, session)
         get_named_entities(chat, docs, session)
-    # for doc in docs:
-    #     for entity in doc.ents:
-    #         if entity.label_ not in banned_labels:
-    #             context_logger.debug(f'{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}')
-    #             summarize(session, entity.text, entity.label_, chat)
+    for doc in docs:
+        for entity in set(doc.ents):
+            if entity.label_ not in banned_labels:
+                general_logger.debug(f'{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}')
+                summarize(db, entity.text, entity.label_, chat)
 
 
 def get_named_entities(chat, docs, session):
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL']
     for doc in docs:
-        context_logger.debug(doc.text_with_ws)
+        general_logger.debug(doc.text_with_ws)
         db_message = orm_get_or_create(session, Message, message=doc.text)
         ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
         unique_ents = list(set(ent_list))
@@ -81,7 +80,6 @@ def get_named_entities(chat, docs, session):
             knowledge_entity.messages.append(db_message)
             session.add(knowledge_entity)
             session.commit()
-
 
 
 def get_context_length(api_url: str) -> int:
@@ -175,7 +173,7 @@ async def extra_version():
 @app.post('/api/v1/generate')
 async def generate(k_request: KAIGenerationInputSchema):
     passthrough_json = k_request.model_dump()
-    process_prompt(k_request.prompt, k_request.memoir.chat_id)
+    process_prompt(k_request.prompt, k_request.memoir.chat_id, k_request.max_context_length)
     passthrough_url = MAIN_API_URL + '/api/v1/generate'
     kobold_response = requests.post(passthrough_url, json=passthrough_json)
     return kobold_response.json()
@@ -208,7 +206,7 @@ async def completions(oai_request: OAIGenerationInputSchema, request: Request):
     passthrough_json = oai_request.model_dump()
     passthrough_url = MAIN_API_URL + '/v1/completions'
     passthrough_json['api_server'] = MAIN_API_URL + '/'
-    process_prompt(oai_request.prompt, oai_request.memoir.chat_id)
+    process_prompt(oai_request.prompt, oai_request.memoir.chat_id, oai_request.truncation_length)
     if oai_request.stream:
         return StreamingResponse(streaming_messages(passthrough_url, passthrough_json), media_type="text/event-stream")
 

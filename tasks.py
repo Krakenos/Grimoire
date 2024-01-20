@@ -1,5 +1,7 @@
 import requests
 from celery import Celery
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 from llm_utils import count_context
 from loggers import summary_logger
@@ -26,28 +28,30 @@ def make_summary_prompt(session, term, label, chat_id, max_context):
 
 
 @celery_app.task
-def summarize(session, term, label, chat_id, context_len=4096, response_len=300):
-    prompt = make_summary_prompt(session, term, label, chat_id, context_len)
-    json = {
-        'prompt': prompt,
-        'max_length': response_len,
-        "temperature": 0.3,
-        "max_context_length": context_len,
-        "stop": [
-            "</s>"
-        ],
-        "top_p": 0.95,
-        "top_k": 50,
-        "rep_pen": 1.2,
-        "stop_sequence": [
-            "</s>"
-        ]
-    }
-    kobold_response = requests.post(SIDE_API_URL + '/api/v1/generate', json=json)
-    response = kobold_response.json()
-    summary_text = response['results'][0]['text']
-    knowledge_entry = session.query(Knowledge).filter_by(entity=term, chat_id=chat_id, entity_label=label).scalar()
-    knowledge_entry.summary_text = summary_text
-    knowledge_entry.token_count = count_context(term, 'KoboldAI', SIDE_API_URL)
-    summary_logger.debug(f'({knowledge_entry.token_count} tokens){term} ({label}): {summary_text}\n{json}')
-    session.commit()
+def summarize(db_engine, term, label, chat_id, context_len=4096, response_len=300):
+    db = create_engine(db_engine)
+    with Session(db) as session:
+        prompt = make_summary_prompt(session, term, label, chat_id, context_len)
+        json = {
+            'prompt': prompt,
+            'max_length': response_len,
+            "temperature": 0.3,
+            "max_context_length": context_len,
+            "stop": [
+                "</s>"
+            ],
+            "top_p": 0.95,
+            "top_k": 50,
+            "rep_pen": 1.2,
+            "stop_sequence": [
+                "</s>"
+            ]
+        }
+        kobold_response = requests.post(SIDE_API_URL + '/api/v1/generate', json=json)
+        response = kobold_response.json()
+        summary_text = response['results'][0]['text']
+        knowledge_entry = session.query(Knowledge).filter_by(entity=term, chat_id=chat_id, entity_label=label).scalar()
+        knowledge_entry.summary_text = summary_text
+        knowledge_entry.token_count = count_context(term, 'KoboldAI', SIDE_API_URL)
+        summary_logger.debug(f'({knowledge_entry.token_count} tokens){term} ({label}): {summary_text}\n{json}')
+        session.commit()
