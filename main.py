@@ -10,10 +10,10 @@ from sqlalchemy import create_engine, desc
 from sqlalchemy.orm import Session
 
 from llm_utils import count_context
-from loggers import general_logger, summary_logger, context_logger
+from loggers import general_logger, context_logger
 from models import Knowledge, Message
 from request_schemas import KAITokenCountSchema, OAIGenerationInputSchema, KAIGenerationInputSchema
-from settings import SIDE_API_URL, MAIN_API_URL, CONTEXT_PERCENTAGE, DB_ENGINE, MAIN_API_AUTH, MODEL_INPUT_SEQUENCE, \
+from settings import MAIN_API_URL, CONTEXT_PERCENTAGE, DB_ENGINE, MAIN_API_AUTH, MODEL_INPUT_SEQUENCE, \
     MODEL_OUTPUT_SEQUENCE, MAIN_API_BACKEND
 from tasks import summarize
 
@@ -65,6 +65,7 @@ def process_prompt(prompt, chat, context_length):
             if entity.label_ not in banned_labels:
                 general_logger.debug(f'{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}')
                 summarize(db, entity.text, entity.label_, chat)
+    fill_context(prompt, chat, context_length)
 
 
 def get_named_entities(chat, docs, session):
@@ -75,8 +76,17 @@ def get_named_entities(chat, docs, session):
         ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
         unique_ents = list(set(ent_list))
         for ent, ent_label in unique_ents:
-            knowledge_entity = orm_get_or_create(session, Knowledge, entity=ent, entity_type='NAMED ENTITY',
-                                                 entity_label=ent_label, chat_id=chat)
+            knowledge_entity = session.query(Knowledge).filter(Knowledge.entity.ilike(ent),
+                                                               Knowledge.entity_type == 'NAMED ENTITY',
+                                                               Knowledge.entity_label == ent_label,
+                                                               Knowledge.chat_id == chat).first()
+            if not knowledge_entity:
+                knowledge_entity = Knowledge(entity=ent,
+                                             entity_label=ent_label,
+                                             entity_type='NAMED ENTITY',
+                                             chat_id=chat)
+                session.add(knowledge_entity)
+                session.commit()
             knowledge_entity.messages.append(db_message)
             session.add(knowledge_entity)
             session.commit()
@@ -89,7 +99,7 @@ def get_context_length(api_url: str) -> int:
     return value
 
 
-def fill_context(prompt, context_size):
+def fill_context(prompt, chat, context_size):
     max_context = context_size
     max_memoir_context = max_context * CONTEXT_PERCENTAGE
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL']
@@ -106,12 +116,13 @@ def fill_context(prompt, context_size):
     summaries = []
     with Session(db) as session:
         for ent in unique_ents:
-            instances = session.query(Knowledge).filter(Knowledge.entity == ent[0],
-                                                        Knowledge.entity_type == 'NAMED ENTITY',
-                                                        Knowledge.entity_label == ent[1], Knowledge.summary.isnot(None),
-                                                        Knowledge.summary.isnot(''), Knowledge.token_count.isnot(None),
-                                                        Knowledge.token_count.isnot(0))
-            instance = instances.first()
+            query = session.query(Knowledge).filter(Knowledge.entity.ilike(ent[0]),
+                                                    Knowledge.entity_type == 'NAMED ENTITY',
+                                                    Knowledge.chat_id == chat,
+                                                    Knowledge.entity_label == ent[1], Knowledge.summary.isnot(None),
+                                                    Knowledge.summary.isnot(''), Knowledge.token_count.isnot(None),
+                                                    Knowledge.token_count.isnot(0))
+            instance = query.scalar()
             summaries.append((instance.summary, instance.token_count))
     memoir_token_sum = sum([summary_tuple[1] for summary_tuple in summaries])
     while memoir_token_sum > max_memoir_context:
