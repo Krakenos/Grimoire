@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from llm_utils import count_context
 from loggers import summary_logger
 from models import Knowledge
-from settings import SIDE_API_URL
+from settings import SIDE_API_URL, DB_ENGINE
 
 celery_app = Celery('tasks', broker='amqp://guest@localhost//')
 
@@ -28,9 +28,9 @@ def make_summary_prompt(session: Session, term: str, label: str, chat_id: str, m
 
 
 @celery_app.task
-def summarize(db_engine: str, term: str, label: str, chat_id: str, context_len: int = 4096,
+def summarize(term: str, label: str, chat_id: str, context_len: int = 4096,
               response_len: int = 300) -> None:
-    db = create_engine(db_engine)
+    db = create_engine(DB_ENGINE)
     with Session(db) as session:
         prompt = make_summary_prompt(session, term, label, chat_id, context_len)
         json = {

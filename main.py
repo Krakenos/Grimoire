@@ -1,4 +1,5 @@
 import re
+import timeit
 
 import requests
 import spacy
@@ -50,7 +51,7 @@ def save_messages(messages, chat_id, session):
 
 
 def process_prompt(prompt, chat, context_length):
-    context_logger.debug(prompt)
+    start_time = timeit.default_timer()
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL']
     pattern = re.escape(MODEL_INPUT_SEQUENCE) + r'|' + re.escape(MODEL_OUTPUT_SEQUENCE)
     messages = re.split(pattern, prompt)[1:]  # first entry is always definitions
@@ -64,8 +65,11 @@ def process_prompt(prompt, chat, context_length):
         for entity in set(doc.ents):
             if entity.label_ not in banned_labels:
                 general_logger.debug(f'{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}')
-                summarize(DB_ENGINE, entity.text, entity.label_, chat)
-    fill_context(prompt, chat, context_length)
+                summarize.delay(entity.text, entity.label_, chat)
+    new_prompt = fill_context(prompt, chat, context_length)
+    end_time = timeit.default_timer()
+    general_logger.info(f'Prompt processing time: {end_time - start_time}s')
+    context_logger.debug(f'Old prompt: \n{prompt}\n\nNew prompt: \n{new_prompt}')
 
 
 def get_named_entities(chat, docs, session):
