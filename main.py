@@ -70,6 +70,7 @@ def process_prompt(prompt, chat, context_length):
     end_time = timeit.default_timer()
     general_logger.info(f'Prompt processing time: {end_time - start_time}s')
     context_logger.debug(f'Old prompt: \n{prompt}\n\nNew prompt: \n{new_prompt}')
+    return new_prompt
 
 
 def get_named_entities(chat, docs, session):
@@ -191,8 +192,9 @@ async def extra_version():
 @app.post('/api/v1/generate')
 async def generate(k_request: KAIGenerationInputSchema):
     passthrough_json = k_request.model_dump()
-    process_prompt(k_request.prompt, k_request.memoir.chat_id, k_request.max_context_length)
+    new_prompt = process_prompt(k_request.prompt, k_request.memoir.chat_id, k_request.max_context_length)
     passthrough_url = MAIN_API_URL + '/api/v1/generate'
+    passthrough_json['prompt'] = new_prompt
     kobold_response = requests.post(passthrough_url, json=passthrough_json)
     return kobold_response.json()
 
@@ -224,7 +226,8 @@ async def completions(oai_request: OAIGenerationInputSchema, request: Request):
     passthrough_json = oai_request.model_dump()
     passthrough_url = MAIN_API_URL + '/v1/completions'
     passthrough_json['api_server'] = MAIN_API_URL + '/'
-    process_prompt(oai_request.prompt, oai_request.memoir.chat_id, oai_request.truncation_length)
+    new_prompt = process_prompt(oai_request.prompt, oai_request.memoir.chat_id, oai_request.truncation_length)
+    passthrough_json['prompt'] = new_prompt
     if oai_request.stream:
         return StreamingResponse(streaming_messages(passthrough_url, passthrough_json), media_type="text/event-stream")
 
