@@ -108,7 +108,9 @@ def fill_context(prompt, chat, context_size):
     max_memoir_context = max_context * CONTEXT_PERCENTAGE
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL']
     pattern = re.escape(MODEL_INPUT_SEQUENCE) + r'|' + re.escape(MODEL_OUTPUT_SEQUENCE)
+    pattern_with_delimiters = f'({pattern})'
     messages = re.split(pattern, prompt)
+    messages_with_delimiters = re.split(pattern_with_delimiters, prompt)
     prompt_definitions = messages[0]  # first portion should always be instruction and char definitions
     docs = list(nlp.pipe(messages))
     full_ent_list = []
@@ -142,15 +144,15 @@ def fill_context(prompt, chat, context_size):
                                             api_auth=MAIN_API_AUTH)
     max_chat_context = max_context - definitions_context_len - memoir_text_len
     starting_message = 1
-    messages_text = '\n'.join(messages[starting_message:])
+    messages_text = ''.join(messages_with_delimiters[starting_message:])
     messages_len = count_context(text=messages_text, api_type=MAIN_API_BACKEND, api_url=MAIN_API_URL,
                                  api_auth=MAIN_API_AUTH)
     while messages_len > max_chat_context:
-        starting_message += 1
-        messages_text = '\n'.join(messages[starting_message:])
+        starting_message += 2
+        messages_text = ''.join(messages_with_delimiters[starting_message:])
         messages_len = count_context(text=messages_text, api_type=MAIN_API_BACKEND, api_url=MAIN_API_URL,
                                      api_auth=MAIN_API_AUTH)
-    final_prompt = '\n'.join([prompt_definitions, memoir_text, messages_text])
+    final_prompt = ''.join([prompt_definitions, memoir_text, messages_text])
     return final_prompt
 
 
