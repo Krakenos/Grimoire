@@ -4,7 +4,15 @@ from transformers import AutoTokenizer
 from loggers import general_logger
 
 
-def count_context(text, api_type, api_url, api_auth=None):
+def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
+    """
+    Counts the token length of the text either through endpoint or with local tokenizer
+    :param text:
+    :param api_type:
+    :param api_url:
+    :param api_auth:
+    :return:
+    """
     if api_type == 'Aphrodite':
         models_endpoint = api_url + '/v1/models'
         response = requests.get(models_endpoint, headers={'Authorization': f'Bearer {api_auth}'})

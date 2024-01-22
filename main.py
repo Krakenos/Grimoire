@@ -64,7 +64,7 @@ def process_prompt(prompt, chat, context_length):
         for entity in set(doc.ents):
             if entity.label_ not in banned_labels:
                 general_logger.debug(f'{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}')
-                summarize(db, entity.text, entity.label_, chat)
+                summarize(DB_ENGINE, entity.text, entity.label_, chat)
     fill_context(prompt, chat, context_length)
 
 
@@ -123,7 +123,8 @@ def fill_context(prompt, chat, context_size):
                                                     Knowledge.summary.isnot(''), Knowledge.token_count.isnot(None),
                                                     Knowledge.token_count.isnot(0))
             instance = query.scalar()
-            summaries.append((instance.summary, instance.token_count))
+            if instance is not None:
+                summaries.append((instance.summary, instance.token_count))
     memoir_token_sum = sum([summary_tuple[1] for summary_tuple in summaries])
     while memoir_token_sum > max_memoir_context:
         summaries.pop()
