@@ -1,7 +1,7 @@
 import requests
 from transformers import AutoTokenizer
 
-from loggers import general_logger
+from memoir.common.loggers import general_logger
 
 
 def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:

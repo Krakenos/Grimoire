@@ -4,9 +4,9 @@ LOG_LEVEL = logging.DEBUG
 logging.basicConfig(format='[%(asctime)s] %(levelname)s [%(module)s:%(funcName)s:%(lineno)d]: %(message)s')
 formatter = logging.Formatter('[%(asctime)s] %(levelname)s [%(module)s:%(funcName)s:%(lineno)d]: %(message)s')
 
-GENERAL_LOG_FILE = '../general.log'
-SUMMARY_LOG_FILE = '../summary.log'
-CONTEXT_LOG_FILE = '../context.log'
+GENERAL_LOG_FILE = '../../general.log'
+SUMMARY_LOG_FILE = '../../summary.log'
+CONTEXT_LOG_FILE = '../../context.log'
 
 general_logger = logging.getLogger('general')
 summary_logger = logging.getLogger('summary')

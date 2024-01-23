@@ -4,13 +4,13 @@ import timeit
 from sqlalchemy import desc, create_engine
 from sqlalchemy.orm import Session
 
-from memoir.llm_helpers import count_context
-from memoir.loggers import general_logger, context_logger
-from memoir.models import Message, Knowledge
-from memoir.settings import MODEL_INPUT_SEQUENCE, MODEL_OUTPUT_SEQUENCE, DB_ENGINE, CONTEXT_PERCENTAGE, \
+from memoir.common.llm_helpers import count_context
+from memoir.common.loggers import general_logger, context_logger
+from memoir.db.models import Message, Knowledge
+from memoir.core.settings import MODEL_INPUT_SEQUENCE, MODEL_OUTPUT_SEQUENCE, DB_ENGINE, CONTEXT_PERCENTAGE, \
     MAIN_API_BACKEND, MAIN_API_URL, MAIN_API_AUTH
-from memoir.tasks import summarize
-from memoir.utils import orm_get_or_create
+from memoir.core.tasks import summarize
+from memoir.common.utils import orm_get_or_create
 
 nlp = spacy.load("en_core_web_trf")
 db = create_engine(DB_ENGINE)

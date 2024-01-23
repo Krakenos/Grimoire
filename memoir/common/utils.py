@@ -1,6 +1,6 @@
 import requests
 
-from memoir.settings import MAIN_API_URL
+from memoir.core.settings import MAIN_API_URL
 
 
 def get_passthrough(endpoint: str, auth_token=None) -> dict:

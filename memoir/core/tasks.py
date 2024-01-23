@@ -3,10 +3,10 @@ from celery import Celery
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from llm_helpers import count_context
-from loggers import summary_logger
-from models import Knowledge
-from settings import SIDE_API_URL, DB_ENGINE
+from memoir.common.llm_helpers import count_context
+from memoir.common.loggers import summary_logger
+from memoir.core.settings import SIDE_API_URL, DB_ENGINE
+from memoir.db.models import Knowledge
 
 celery_app = Celery('tasks', broker='amqp://guest@localhost//')
 
