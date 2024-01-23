@@ -1,7 +1,7 @@
 import uvicorn
 from dotenv import load_dotenv
 
-from memoir.api import app
+from memoir.api.client import app
 
 if __name__ == '__main__':
     load_dotenv()
