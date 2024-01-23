@@ -10,13 +10,13 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import create_engine, desc
 from sqlalchemy.orm import Session
 
-from llm_utils import count_context
-from loggers import general_logger, context_logger
-from models import Knowledge, Message
-from request_schemas import KAITokenCountSchema, OAIGenerationInputSchema, KAIGenerationInputSchema
-from settings import MAIN_API_URL, CONTEXT_PERCENTAGE, DB_ENGINE, MAIN_API_AUTH, MODEL_INPUT_SEQUENCE, \
+from memoir.llm_helpers import count_context
+from memoir.loggers import general_logger, context_logger
+from memoir.models import Knowledge, Message
+from memoir.api.request_schemas import KAITokenCountSchema, OAIGenerationInputSchema, KAIGenerationInputSchema
+from memoir.settings import MAIN_API_URL, CONTEXT_PERCENTAGE, DB_ENGINE, MAIN_API_AUTH, MODEL_INPUT_SEQUENCE, \
     MODEL_OUTPUT_SEQUENCE, MAIN_API_BACKEND
-from tasks import summarize
+from memoir.tasks import summarize
 
 app = FastAPI()
 nlp = spacy.load("en_core_web_trf")

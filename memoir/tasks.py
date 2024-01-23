@@ -3,7 +3,7 @@ from celery import Celery
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from llm_utils import count_context
+from llm_helpers import count_context
 from loggers import summary_logger
 from models import Knowledge
 from settings import SIDE_API_URL, DB_ENGINE
