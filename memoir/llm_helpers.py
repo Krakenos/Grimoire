@@ -34,3 +34,10 @@ def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
         kobold_response = requests.post(token_count_endpoint, json=request_body)
         value = int(kobold_response.json()['value'])
         return value
+
+
+def get_context_length(api_url: str) -> int:
+    length_endpoint = api_url + '/v1/config/max_context_length'
+    kobold_response = requests.get(length_endpoint)
+    value = int(kobold_response.json()['value'])
+    return value
