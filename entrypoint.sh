@@ -2,7 +2,7 @@
 
 python -m spacy download en_core_web_trf
 
-alembic upgrade HEAD
+alembic upgrade head
 
 celery -A memoir.core.tasks worker -l info -c 1 &
 

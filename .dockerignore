@@ -33,3 +33,6 @@
 LICENSE
 README.md
 .idea
+*.log
+db.sqlite3
+db.sqlite3-journal
