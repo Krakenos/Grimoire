@@ -1,0 +1,27 @@
+services:
+  memoir:
+    build:
+      context: .
+    container_name: memoir
+    environment:
+      - MAIN_API_URL='http://127.0.0.1:5001'
+      - MAIN_API_AUTH=''
+      - SIDE_API_URL='http://127.0.0.1:5002'
+      - CONTEXT_PERCENTAGE=0.25
+      - DB_ENGINE='sqlite:///db.sqlite3'
+    ports:
+      - 5005:5005
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: 'rabbitmq'
+    ports:
+      - 5672:5672
+      - 15672:15672
+    healthcheck:
+      test: [ "CMD", "rabbitmqctl", "status" ]
+      interval: 5s
+      timeout: 20s
