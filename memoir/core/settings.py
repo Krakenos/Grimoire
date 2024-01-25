@@ -8,3 +8,4 @@ DB_ENGINE = os.getenv('DB_ENGINE')
 MODEL_INPUT_SEQUENCE = '### Instruction:'
 MODEL_OUTPUT_SEQUENCE = '### Response:'
 MAIN_API_BACKEND = 'Aphrodite'
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL')

@@ -5,10 +5,10 @@ from sqlalchemy.orm import Session
 
 from memoir.common.llm_helpers import count_context
 from memoir.common.loggers import summary_logger
-from memoir.core.settings import SIDE_API_URL, DB_ENGINE
+from memoir.core.settings import SIDE_API_URL, DB_ENGINE, CELERY_BROKER_URL
 from memoir.db.models import Knowledge
 
-celery_app = Celery('tasks', broker='amqp://guest@localhost//')
+celery_app = Celery('tasks', broker=CELERY_BROKER_URL)
 
 
 def make_summary_prompt(session: Session, term: str, label: str, chat_id: str, max_context: int) -> str:

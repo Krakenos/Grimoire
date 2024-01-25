@@ -9,6 +9,7 @@ services:
       - SIDE_API_URL=http://127.0.0.1:5002
       - CONTEXT_PERCENTAGE=0.25
       - DB_ENGINE=sqlite:///db.sqlite3
+      - CELERY_BROKER_URL=amqp://guest@rabbitmq//
     ports:
       - 5005:5005
     depends_on:
