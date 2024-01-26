@@ -29,3 +29,7 @@ class OAIGenerationInputSchema(BaseModel):
     truncation_length: PositiveInt
     stream: bool = False
     memoir: MemoirSchema
+
+
+class OAITokenizeSchema(BaseModel):
+    prompt: str

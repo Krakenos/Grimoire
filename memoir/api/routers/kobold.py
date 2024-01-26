@@ -6,7 +6,7 @@ from memoir.common.utils import get_passthrough
 from memoir.core.memoir import process_prompt
 from memoir.core.settings import MAIN_API_URL
 
-router = APIRouter()
+router = APIRouter(tags=["Kobold passthrough"])
 
 
 @router.get('/api/v1/model')

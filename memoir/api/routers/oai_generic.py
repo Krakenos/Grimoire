@@ -3,12 +3,12 @@ import sseclient
 from fastapi import APIRouter, Request
 from starlette.responses import StreamingResponse
 
-from memoir.api.request_schemas import OAIGenerationInputSchema
+from memoir.api.request_schemas import OAIGenerationInputSchema, OAITokenizeSchema
 from memoir.common.utils import get_passthrough
 from memoir.core.memoir import process_prompt
 from memoir.core.settings import MAIN_API_AUTH, MAIN_API_URL
 
-router = APIRouter()
+router = APIRouter(tags=["Aphrodite passthrough"])
 
 
 @router.get('/v1/models')
@@ -37,3 +37,12 @@ async def completions(oai_request: OAIGenerationInputSchema, request: Request):
         engine_response = requests.post(passthrough_url, headers={'Authorization': f'Bearer {MAIN_API_AUTH}'},
                                         json=passthrough_json)
         return engine_response.json()
+
+
+@router.post('/v1/tokenize')
+async def tokenize(tokenize_req: OAITokenizeSchema):
+    passthrough_url = MAIN_API_URL + '/v1/tokenize'
+    passthrough_json = tokenize_req.model_dump()
+    engine_response = requests.post(passthrough_url, headers={'Authorization': f'Bearer {MAIN_API_AUTH}'},
+                                    json=passthrough_json)
+    return engine_response.json()
