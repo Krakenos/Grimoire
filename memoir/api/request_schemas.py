@@ -5,6 +5,10 @@ class KAITokenCountSchema(BaseModel):
     prompt: str
 
 
+class KAIAbortSchema(BaseModel):
+    genkey: str
+
+
 class MemoirSchema(BaseModel):
     chat_id: str
 

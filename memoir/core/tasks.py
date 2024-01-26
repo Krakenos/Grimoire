@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from memoir.common.llm_helpers import count_context
 from memoir.common.loggers import summary_logger
-from memoir.core.settings import SIDE_API_URL, DB_ENGINE, CELERY_BROKER_URL
+from memoir.core.settings import SIDE_API_URL, DB_ENGINE, CELERY_BROKER_URL, SIDE_API_BACKEND
 from memoir.db.models import Knowledge
 
 celery_app = Celery('tasks', broker=CELERY_BROKER_URL)
@@ -53,6 +53,6 @@ def summarize(term: str, label: str, chat_id: str, context_len: int = 4096,
         summary_text = response['results'][0]['text']
         knowledge_entry = session.query(Knowledge).filter_by(entity=term, chat_id=chat_id, entity_label=label).scalar()
         knowledge_entry.summary = summary_text
-        knowledge_entry.token_count = count_context(summary_text, 'KoboldAI', SIDE_API_URL)
+        knowledge_entry.token_count = count_context(summary_text, SIDE_API_BACKEND, SIDE_API_URL)
         summary_logger.debug(f'({knowledge_entry.token_count} tokens){term} ({label}): {summary_text}\n{json}')
         session.commit()

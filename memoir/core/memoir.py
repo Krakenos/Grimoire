@@ -38,7 +38,7 @@ def process_prompt(prompt, chat, context_length):
     pattern = re.escape(MODEL_INPUT_SEQUENCE) + r'|' + re.escape(MODEL_OUTPUT_SEQUENCE)
     messages = re.split(pattern, prompt)[1:]  # first entry is always definitions
     messages = [message.strip() for message in messages]  # remove trailing newlines
-    last_messages = messages[:-1]
+    last_messages = messages[:-2]
     docs = list(nlp.pipe(last_messages))
     with Session(db) as session:
         save_messages(last_messages, chat, session)

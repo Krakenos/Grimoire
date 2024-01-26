@@ -1,7 +1,7 @@
 import requests
 from fastapi import APIRouter
 
-from memoir.api.request_schemas import KAIGenerationInputSchema, KAITokenCountSchema
+from memoir.api.request_schemas import KAIGenerationInputSchema, KAITokenCountSchema, KAIAbortSchema
 from memoir.common.utils import get_passthrough
 from memoir.core.memoir import process_prompt
 from memoir.core.settings import MAIN_API_URL
@@ -38,5 +38,13 @@ async def generate(k_request: KAIGenerationInputSchema):
 async def token_count(k_request: KAITokenCountSchema):
     passthrough_json = k_request.model_dump(exclude_defaults=True)
     passthrough_url = MAIN_API_URL + '/api/extra/tokencount'
+    kobold_response = requests.post(passthrough_url, json=passthrough_json)
+    return kobold_response.json()
+
+
+@router.post('/api/extra/abort')
+async def token_count(k_request: KAIAbortSchema):
+    passthrough_json = k_request.model_dump(exclude_defaults=True)
+    passthrough_url = MAIN_API_URL + '/api/extra/abort'
     kobold_response = requests.post(passthrough_url, json=passthrough_json)
     return kobold_response.json()
