@@ -26,6 +26,7 @@ class OAIGenerationInputSchema(BaseModel):
     model_config = ConfigDict(extra='allow')
 
     prompt: str
+    max_tokens: PositiveInt
     truncation_length: PositiveInt
     stream: bool = False
     memoir: MemoirSchema
