@@ -106,14 +106,14 @@ def fill_context(prompt, chat, context_size):
                                                     Knowledge.token_count.isnot(0))
             instance = query.scalar()
             if instance is not None:
-                summaries.append((instance.summary, instance.token_count))
+                summaries.append((instance.summary, instance.token_count, instance.entity))
     memoir_token_sum = sum([summary_tuple[1] for summary_tuple in summaries])
     while memoir_token_sum > max_memoir_context:
         summaries.pop()
         memoir_token_sum = sum([summary_tuple[1] for summary_tuple in summaries])
     memoir_text = ''
     for summary in summaries:
-        memoir_text = memoir_text + summary[0] + '\n'
+        memoir_text = memoir_text + f'[ {summary[2]}: {summary[0]} ]\n'
     memoir_text_len = count_context(text=memoir_text, api_type=MAIN_API_BACKEND, api_url=MAIN_API_URL,
                                     api_auth=MAIN_API_AUTH)
     definitions_context_len = count_context(text=prompt_definitions, api_type=MAIN_API_BACKEND, api_url=MAIN_API_URL,
