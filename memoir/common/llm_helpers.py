@@ -14,18 +14,30 @@ def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
     :return:
     """
     if api_type == 'Aphrodite':
-        models_endpoint = api_url + '/v1/models'
-        response = requests.get(models_endpoint, headers={'Authorization': f'Bearer {api_auth}'})
-        model_name = response.json()['data'][0]['id']
-        # Default to llama tokenizer if model tokenizer is not on huggingface
-        try:
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-        except OSError as s:
-            general_logger.warning('Could not load model tokenizer, defaulting to llama-tokenizer')
-            general_logger.warning(s)
-            tokenizer = AutoTokenizer.from_pretrained('oobabooga/llama-tokenizer')
-        encoded = tokenizer(text)
-        token_amount = len(encoded['input_ids'])
+        tokenize_endpoint = f'{api_url}/v1/tokenize'
+        tokenize_json = {
+            'prompt': text
+        }
+        tokenize_response = requests.post(tokenize_endpoint,
+                                          json=tokenize_json,
+                                          headers={'Authorization': f'Bearer {api_auth}'})
+        if tokenize_response.status_code == 200:
+            token_amount = tokenize_response.json()['results'][0]['value']
+        else:
+            general_logger.warning(
+                f'Tokenize endpoint not found for {api_type}, proceeding to count based on tokenizer')
+            models_endpoint = api_url + '/v1/models'
+            response = requests.get(models_endpoint, headers={'Authorization': f'Bearer {api_auth}'})
+            model_name = response.json()['data'][0]['id']
+            # Default to llama tokenizer if model tokenizer is not on huggingface
+            try:
+                tokenizer = AutoTokenizer.from_pretrained(model_name)
+            except OSError as s:
+                general_logger.warning('Could not load model tokenizer, defaulting to llama-tokenizer')
+                general_logger.warning(s)
+                tokenizer = AutoTokenizer.from_pretrained('oobabooga/llama-tokenizer')
+            encoded = tokenizer(text)
+            token_amount = len(encoded['input_ids'])
         return token_amount
 
     else:
