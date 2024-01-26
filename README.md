@@ -3,7 +3,7 @@
 Memoir is a server that implements long term memory for AI chatbots through processing prompts and generating description of concepts such as locations, people, items. It's main purpose is for conversational AI chatbots. The server is meant to be slotted between frontend that interacts with LLM(such as SillyTavern) and backend that host the LLM(Aphrodite, KoboldAI etc).
 
 ### How it works
-Memoir collects the prompts that are meant to be sent to LLM and analyzes them with Natural Language Processing (NLP), it sends collected prompts to generate descriptions of concepts found in messages, and in the end, it inserts them into current context. It essentially Retrieval Augmented Generation (RAG) system that collects and generates it's database throughout the conversation with AI. It requires 2 language models to run. One for the actual chatbot, and other for summarization tasks.
+Memoir collects the prompts that are meant to be sent to LLM and analyzes them with Natural Language Processing (NLP), it sends collected prompts to generate descriptions of concepts found in messages, and in the end, it inserts them into current context. It's essentially Retrieval Augmented Generation (RAG) system that collects and generates it's database throughout the conversation with AI. It requires 2 language models to run. One for the actual chatbot, and other for summarization tasks.
 
 ### IMPORTANT NOTE
 Memoir is still VERY EARLY in development. There is bound to be a lot of bugs, there will be breaking changes in codebase and it's not stable. You will most likely lose the data that Memoir has collected along the way. It's a prototype that's not production ready.
@@ -80,7 +80,7 @@ And to run Memoir API use:
 python run.py
 ```
 
-Memoir API starts by default on port 5005, and you interact with it pretty much the same way as you would with your main api (using the same endpoints). The only change that is required is including additional field in json called `memoir` that includes id of the current chat, example json for Aphrodite:
+Memoir API starts by default on port 5005, and you interact with it pretty much the same way as you would with your main api (using the same endpoints, you can also view available endpoints at `http://127.0.0.1/docs`). The only change that is required is including additional field in json called `memoir` that includes id of the current chat, example json for Aphrodite:
 
 ```json
 {
