@@ -12,11 +12,11 @@ Memoir is still VERY EARLY in development. There is bound to be a lot of bugs, t
 
 To run from source following is required:
 - Python >3.10
-- RabbitMQ Server (Either installed natively or in docker)
+- Redis (Either installed natively or in docker)
 
-To install RabbitMQ Server through docker use the following command:
+To install Redis through docker use the following command:
 ```bash
-docker run -d -p 15672:15672 -p 5672:5672 --hostname my-rabbitmq --name my-rabbitmq-container rabbitmq:3-management
+docker run -d --name redis -p 6379:6379 redis
 ```
 
 Installing Memoir requirements:
@@ -36,7 +36,7 @@ MAIN_API_AUTH = 'MyApiKey'                      # API key to main api, remove en
 SIDE_API_URL = 'http://127.0.0.1:5002'          # Url of side api used to generate descriptions of items etc
 CONTEXT_PERCENTAGE = 0.25                       # Maximum amount of tokens that Memoir database entries will take, when filling the context
 DB_ENGINE = 'sqlite:///db.sqlite3'              # Database url, defaults to sqlite file
-CELERY_BROKER_URL = 'amqp://guest@localhost//'  # Url to message broker, in our case RabbitMQ server, leave it as it is if you installed through docker
+CELERY_BROKER_URL = 'redis://localhost:6379/0'  # Url to message broker, in our case Redis, leave it as it is if you installed through docker
 DEBUG = True                                    # Enables debug logs
 LOG_PROMPTS = True                              # Enables prompt logging
 ```

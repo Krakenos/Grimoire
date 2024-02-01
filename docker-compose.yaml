@@ -11,22 +11,14 @@ services:
       - SIDE_API_URL=http://127.0.0.1:5002
       - CONTEXT_PERCENTAGE=0.25
       - DB_ENGINE=sqlite:///db.sqlite3
-      - CELERY_BROKER_URL=amqp://guest@rabbitmq//
+      - CELERY_BROKER_URL=redis://redis:6379/0
       - DEBUG = True
       - LOG_PROMPTS = True
     ports:
       - 5005:5005
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
 
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: 'rabbitmq'
+  redis:
+    image: redis
+    container_name: 'redis'
     ports:
-      - 5672:5672
-      - 15672:15672
-    healthcheck:
-      test: [ "CMD", "rabbitmqctl", "status" ]
-      interval: 5s
-      timeout: 20s
+      - 6379:6379

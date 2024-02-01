@@ -1,10 +1,11 @@
 import requests
 from celery import Celery
+from celery_singleton import Singleton
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from memoir.common.llm_helpers import count_context
-from memoir.common.loggers import summary_logger
+from memoir.common.loggers import summary_logger, general_logger
 from memoir.core.settings import SIDE_API_URL, DB_ENGINE, CELERY_BROKER_URL, SIDE_API_BACKEND
 from memoir.db.models import Knowledge
 
@@ -27,12 +28,16 @@ def make_summary_prompt(session: Session, term: str, label: str, chat_id: str, m
     return prompt
 
 
-@celery_app.task
+@celery_app.task(base=Singleton)
 def summarize(term: str, label: str, chat_id: str, context_len: int = 4096,
               response_len: int = 300) -> None:
     db = create_engine(DB_ENGINE)
     with Session(db) as session:
-        prompt = make_summary_prompt(session, term, label, chat_id, context_len)
+        knowledge_entry = session.query(Knowledge).filter(Knowledge.entity.ilike(term),
+                                                          Knowledge.entity_type == 'NAMED ENTITY',
+                                                          Knowledge.entity_label == label,
+                                                          Knowledge.chat_id == chat_id).scalar()
+        prompt = make_summary_prompt(session, knowledge_entry.entity, label, chat_id, context_len)
         json = {
             'prompt': prompt,
             'max_length': response_len,
@@ -51,7 +56,6 @@ def summarize(term: str, label: str, chat_id: str, context_len: int = 4096,
         kobold_response = requests.post(SIDE_API_URL + '/api/v1/generate', json=json)
         response = kobold_response.json()
         summary_text = response['results'][0]['text']
-        knowledge_entry = session.query(Knowledge).filter_by(entity=term, chat_id=chat_id, entity_label=label).scalar()
         knowledge_entry.summary = summary_text
         knowledge_entry.token_count = count_context(summary_text, SIDE_API_BACKEND, SIDE_API_URL)
         summary_logger.debug(f'({knowledge_entry.token_count} tokens){term} ({label}): {summary_text}\n{json}')

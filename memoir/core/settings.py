@@ -18,5 +18,5 @@ DB_ENGINE = os.getenv('DB_ENGINE')
 MODEL_INPUT_SEQUENCE = '### Instruction:'
 MODEL_OUTPUT_SEQUENCE = '### Response:'
 
-DEBUG = os.getenv('DEBUG')
-LOG_PROMPTS = os.getenv('LOG_PROMPTS')
+DEBUG = bool(os.getenv('DEBUG', False))
+LOG_PROMPTS = bool(os.getenv('LOG_PROMPTS', False))

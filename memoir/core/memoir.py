@@ -47,7 +47,7 @@ def process_prompt(prompt, chat, context_length):
         for entity in set(doc.ents):
             if entity.label_ not in banned_labels:
                 general_logger.debug(f'{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}')
-                summarize.delay(entity.text, entity.label_, chat)
+                summarize.delay(entity.text.lower(), entity.label_, chat)
     new_prompt = fill_context(prompt, chat, context_length)
     end_time = timeit.default_timer()
     general_logger.info(f'Prompt processing time: {end_time - start_time}s')
