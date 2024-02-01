@@ -15,8 +15,8 @@ CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL')
 DB_ENGINE = os.getenv('DB_ENGINE')
 
 
-MODEL_INPUT_SEQUENCE = '### Instruction:'
-MODEL_OUTPUT_SEQUENCE = '### Response:'
+MODEL_INPUT_SEQUENCE = '[INST]'
+MODEL_OUTPUT_SEQUENCE = '[/INST]'
 
 DEBUG = bool(os.getenv('DEBUG', False))
 LOG_PROMPTS = bool(os.getenv('LOG_PROMPTS', False))

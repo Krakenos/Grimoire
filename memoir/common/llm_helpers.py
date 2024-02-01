@@ -22,7 +22,8 @@ def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
                                           json=tokenize_json,
                                           headers={'Authorization': f'Bearer {api_auth}'})
         if tokenize_response.status_code == 200:
-            token_amount = tokenize_response.json()['results'][0]['value']
+            tokenized = tokenize_response.json()
+            return tokenized['value']
         else:
             general_logger.warning(
                 f'Tokenize endpoint not found for {api_type}, proceeding to count based on tokenizer')
