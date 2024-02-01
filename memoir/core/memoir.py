@@ -34,7 +34,7 @@ def save_messages(messages, chat_id, session):
 
 def process_prompt(prompt, chat, context_length):
     start_time = timeit.default_timer()
-    banned_labels = ['DATE', 'CARDINAL', 'ORDINAL']
+    banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     pattern = re.escape(MODEL_INPUT_SEQUENCE) + r'|' + re.escape(MODEL_OUTPUT_SEQUENCE)
     messages = re.split(pattern, prompt)[1:]  # first entry is always definitions
     messages = [message.strip() for message in messages]  # remove trailing newlines
@@ -56,7 +56,7 @@ def process_prompt(prompt, chat, context_length):
 
 
 def get_named_entities(chat, docs, session):
-    banned_labels = ['DATE', 'CARDINAL', 'ORDINAL']
+    banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     for doc in docs:
         general_logger.debug(doc.text_with_ws)
         db_message = orm_get_or_create(session, Message, message=doc.text)
@@ -82,7 +82,7 @@ def get_named_entities(chat, docs, session):
 def fill_context(prompt, chat, context_size):
     max_context = context_size
     max_memoir_context = max_context * CONTEXT_PERCENTAGE
-    banned_labels = ['DATE', 'CARDINAL', 'ORDINAL']
+    banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     pattern = re.escape(MODEL_INPUT_SEQUENCE) + r'|' + re.escape(MODEL_OUTPUT_SEQUENCE)
     pattern_with_delimiters = f'({pattern})'
     messages = re.split(pattern, prompt)
