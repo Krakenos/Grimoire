@@ -12,6 +12,8 @@ services:
       - CONTEXT_PERCENTAGE=0.25
       - DB_ENGINE=sqlite:///db.sqlite3
       - CELERY_BROKER_URL=amqp://guest@rabbitmq//
+      - DEBUG = True
+      - LOG_PROMPTS = True
     ports:
       - 5005:5005
     depends_on:

@@ -19,3 +19,4 @@ MODEL_INPUT_SEQUENCE = '### Instruction:'
 MODEL_OUTPUT_SEQUENCE = '### Response:'
 
 DEBUG = os.getenv('DEBUG')
+LOG_PROMPTS = os.getenv('LOG_PROMPTS')

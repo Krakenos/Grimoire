@@ -1,6 +1,17 @@
 import logging
 
-LOG_LEVEL = logging.DEBUG
+from memoir.core.settings import DEBUG, LOG_PROMPTS
+
+if DEBUG:
+    LOG_LEVEL = logging.DEBUG
+else:
+    LOG_LEVEL = logging.INFO
+
+if LOG_PROMPTS:
+    PROMPT_LEVEL = logging.DEBUG
+else:
+    PROMPT_LEVEL = logging.INFO
+
 logging.basicConfig(format='[%(asctime)s] %(levelname)s [%(module)s:%(funcName)s:%(lineno)d]: %(message)s')
 formatter = logging.Formatter('[%(asctime)s] %(levelname)s [%(module)s:%(funcName)s:%(lineno)d]: %(message)s')
 
@@ -13,8 +24,8 @@ summary_logger = logging.getLogger('summary')
 context_logger = logging.getLogger('context')
 
 general_logger.setLevel(LOG_LEVEL)
-summary_logger.setLevel(LOG_LEVEL)
-context_logger.setLevel(LOG_LEVEL)
+summary_logger.setLevel(PROMPT_LEVEL)
+context_logger.setLevel(PROMPT_LEVEL)
 
 general_file_handler = logging.FileHandler(GENERAL_LOG_FILE)
 summary_file_handler = logging.FileHandler(SUMMARY_LOG_FILE)
