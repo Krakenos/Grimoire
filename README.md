@@ -37,6 +37,8 @@ SIDE_API_URL = 'http://127.0.0.1:5002'          # Url of side api used to genera
 CONTEXT_PERCENTAGE = 0.25                       # Maximum amount of tokens that Memoir database entries will take, when filling the context
 DB_ENGINE = 'sqlite:///db.sqlite3'              # Database url, defaults to sqlite file
 CELERY_BROKER_URL = 'amqp://guest@localhost//'  # Url to message broker, in our case RabbitMQ server, leave it as it is if you installed through docker
+DEBUG = True                                    # Enables debug logs
+LOG_PROMPTS = True                              # Enables prompt logging
 ```
 
 Setup database:
