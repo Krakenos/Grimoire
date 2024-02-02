@@ -40,8 +40,7 @@ def summarize(term: str, label: str, chat_id: str, context_len: int = 4096,
     with Session(db) as session:
         knowledge_entry = session.query(Knowledge).filter(Knowledge.entity.ilike(term),
                                                           Knowledge.entity_type == 'NAMED ENTITY',
-                                                          Knowledge.entity_label == label,
-                                                          Knowledge.chat_id == chat_id).scalar()
+                                                          Knowledge.chat_id == chat_id).first()
         prompt = make_summary_prompt(session, knowledge_entry.entity, label, chat_id, context_len)
         json = {
             'prompt': prompt,
