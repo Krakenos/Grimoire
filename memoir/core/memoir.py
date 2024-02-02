@@ -16,8 +16,16 @@ nlp = spacy.load("en_core_web_trf")
 db = create_engine(DB_ENGINE)
 
 
-def save_messages(messages, chat_id, session):
-    for message in messages:
+def save_messages(messages: list, chat_id: str, session) -> list:
+    """
+    Saves messages to and returns indices of new messages
+    :param messages:
+    :param chat_id:
+    :param session:
+    :return: indices of new messages
+    """
+    new_messages_indices = []
+    for message_index, message in enumerate(messages):
         message_exists = session.query(Message.id).filter_by(message=message, chat_id=chat_id).first() is not None
         if not message_exists:
             chat_exists = session.query(Message.id).filter_by(chat_id=chat_id).first() is not None
@@ -28,27 +36,34 @@ def save_messages(messages, chat_id, session):
             else:
                 current_index = 1
             new_message = Message(message=message, chat_id=chat_id, message_index=current_index)
+            new_messages_indices.append(message_index)
             session.add(new_message)
             session.commit()
+    return new_messages_indices
 
 
 def process_prompt(prompt, chat, context_length):
     start_time = timeit.default_timer()
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     pattern = re.escape(MODEL_INPUT_SEQUENCE) + r'|' + re.escape(MODEL_OUTPUT_SEQUENCE)
-    messages = re.split(pattern, prompt)[1:]  # first entry is always definitions
+    messages = re.split(pattern, prompt)
     messages = [message.strip() for message in messages]  # remove trailing newlines
-    last_messages = messages[:-2]
-    docs = list(nlp.pipe(last_messages))
+    doc_time = timeit.default_timer()
+    docs = list(nlp.pipe(messages))
+    doc_end_time = timeit.default_timer()
+    general_logger.debug(f'Creating spacy docs {doc_end_time-doc_time} seconds')
+    last_messages = messages[1:-2]
+    last_docs = docs[1:-2]
     with Session(db) as session:
-        save_messages(last_messages, chat, session)
-        get_named_entities(chat, docs, session)
-    for doc in docs:
+        new_message_indices = save_messages(last_messages, chat, session)
+        get_named_entities(chat, last_docs, session)
+    docs_to_summarize = [last_docs[index] for index in new_message_indices]
+    for doc in docs_to_summarize:
         for entity in set(doc.ents):
             if entity.label_ not in banned_labels:
                 general_logger.debug(f'{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}')
                 summarize.delay(entity.text.lower(), entity.label_, chat)
-    new_prompt = fill_context(prompt, chat, context_length)
+    new_prompt = fill_context(prompt, chat, docs, context_length)
     end_time = timeit.default_timer()
     general_logger.info(f'Prompt processing time: {end_time - start_time}s')
     context_logger.debug(f'Old prompt: \n{prompt}\n\nNew prompt: \n{new_prompt}')
@@ -58,7 +73,6 @@ def process_prompt(prompt, chat, context_length):
 def get_named_entities(chat, docs, session):
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     for doc in docs:
-        general_logger.debug(doc.text_with_ws)
         db_message = orm_get_or_create(session, Message, message=doc.text)
         ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
         unique_ents = list(set(ent_list))
@@ -79,7 +93,7 @@ def get_named_entities(chat, docs, session):
             session.commit()
 
 
-def fill_context(prompt, chat, context_size):
+def fill_context(prompt, chat, docs, context_size):
     max_context = context_size
     max_memoir_context = max_context * CONTEXT_PERCENTAGE
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
@@ -88,7 +102,6 @@ def fill_context(prompt, chat, context_size):
     messages = re.split(pattern, prompt)
     messages_with_delimiters = re.split(pattern_with_delimiters, prompt)
     prompt_definitions = messages[0]  # first portion should always be instruction and char definitions
-    docs = list(nlp.pipe(messages))
     full_ent_list = []
     for doc in docs:
         general_logger.debug(doc.text_with_ws)
@@ -107,10 +120,10 @@ def fill_context(prompt, chat, context_size):
             instance = query.scalar()
             if instance is not None:
                 summaries.append((instance.summary, instance.token_count, instance.entity))
-    memoir_token_sum = sum([summary_tuple[1] for summary_tuple in summaries])
-    while memoir_token_sum > max_memoir_context:
+    memoir_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
+    while memoir_estimated_tokens > max_memoir_context:
         summaries.pop()
-        memoir_token_sum = sum([summary_tuple[1] for summary_tuple in summaries])
+        memoir_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
     memoir_text = ''
     for summary in summaries:
         memoir_text = memoir_text + f'[ {summary[2]}: {summary[0]} ]\n'
