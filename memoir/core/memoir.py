@@ -79,7 +79,6 @@ def get_named_entities(chat, docs, session):
         for ent, ent_label in unique_ents:
             knowledge_entity = session.query(Knowledge).filter(Knowledge.entity.ilike(ent),
                                                                Knowledge.entity_type == 'NAMED ENTITY',
-                                                               Knowledge.entity_label == ent_label,
                                                                Knowledge.chat_id == chat).first()
             if not knowledge_entity:
                 knowledge_entity = Knowledge(entity=ent,
