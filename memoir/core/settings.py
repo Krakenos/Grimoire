@@ -1,19 +1,21 @@
 import os
+
 from dotenv import load_dotenv
 
 from memoir.common.loggers import general_logger
 
 load_dotenv()
 
-SINGLE_API_MODE = os.getenv('SINGLE_API_MODE', False)
+SINGLE_API_MODE = bool(os.getenv('SINGLE_API_MODE', False))
+CONTEXT_PERCENTAGE = float(os.getenv('CONTEXT_PERCENTAGE'))
 
-MAIN_API_BACKEND = 'Aphrodite'
+MAIN_API_BACKEND = os.getenv('MAIN_API_BACKEND', 'GenericOAI')
 MAIN_API_URL = os.getenv('MAIN_API_URL')
 MAIN_API_AUTH = os.getenv('MAIN_API_AUTH')
 
-SIDE_API_BACKEND = 'KoboldCpp'
+SIDE_API_BACKEND = os.getenv('SIDE_API_BACKEND', 'GenericOAI')
 SIDE_API_URL = os.getenv('SIDE_API_URL')
-CONTEXT_PERCENTAGE = float(os.getenv('CONTEXT_PERCENTAGE'))
+SIDE_API_AUTH = os.getenv('SIDE_API_AUTH')
 
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL')
 DB_ENGINE = os.getenv('DB_ENGINE')

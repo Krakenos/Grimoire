@@ -13,7 +13,14 @@ def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
     :param api_auth:
     :return:
     """
-    if api_type == 'Aphrodite':
+    if api_type.lower() in ('koboldai', 'koboldcpp'):
+        token_count_endpoint = api_url + '/api/extra/tokencount'
+        request_body = {'prompt': text}
+        kobold_response = requests.post(token_count_endpoint, json=request_body)
+        value = int(kobold_response.json()['value'])
+        return value
+
+    else:
         tokenize_endpoint = f'{api_url}/v1/tokenize'
         tokenize_json = {
             'prompt': text
@@ -41,13 +48,6 @@ def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
             token_amount = len(encoded['input_ids'])
         return token_amount
 
-    else:
-        token_count_endpoint = api_url + '/api/extra/tokencount'
-        request_body = {'prompt': text}
-        kobold_response = requests.post(token_count_endpoint, json=request_body)
-        value = int(kobold_response.json()['value'])
-        return value
-
 
 def get_context_length(api_url: str) -> int:
     length_endpoint = api_url + '/v1/config/max_context_length'
@@ -63,18 +63,19 @@ def get_model_name(api_url: str, api_key):
     return model_name
 
 
-def generate_text(text: str, params: dict, api_type: str, api_url: str, api_key: str = None):
-    if api_type == 'KoboldAI':
-        request_body = {'prompt': text}
+def generate_text(prompt: str, params: dict, api_type: str, api_url: str, api_key: str = None):
+    if api_type.lower() in ('koboldai', 'koboldcpp'):
+        request_body = {'prompt': prompt}
         request_body.update(params)
-        response = requests.post(api_url + '/api/v1/generate', json=request_body)
+        endpoint = api_url + '/api/v1/generate'
+        response = requests.post(endpoint, json=request_body)
         generated_text = response.json()['results'][0]['text']
     else:
-        request_body = {'prompt': text}
+        request_body = {'prompt': prompt}
         model_name = get_model_name(api_url, api_key)
         request_body['model'] = model_name
         request_body.update(params)
         endpoint = api_url + '/v1/completions'
         response = requests.post(endpoint, json=request_body, headers={'Authorization': f'Bearer {api_key}'})
         generated_text = response.json()['choices'][0]['text']
-    return generated_text
+    return generated_text, request_body

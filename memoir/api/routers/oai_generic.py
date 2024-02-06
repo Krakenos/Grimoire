@@ -1,14 +1,14 @@
 import requests
 import sseclient
 from fastapi import APIRouter, Request
-from starlette.responses import StreamingResponse
+from fastapi.responses import StreamingResponse
 
 from memoir.api.request_schemas import OAIGenerationInputSchema, OAITokenizeSchema
 from memoir.common.utils import get_passthrough
 from memoir.core.memoir import process_prompt
 from memoir.core.settings import MAIN_API_AUTH, MAIN_API_URL
 
-router = APIRouter(tags=["Aphrodite passthrough"])
+router = APIRouter(tags=["Generic OAI passthrough"])
 
 
 @router.get('/v1/models')
