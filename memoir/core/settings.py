@@ -26,14 +26,13 @@ LOG_PROMPTS = bool(os.getenv('LOG_PROMPTS', False))
 MODEL_INPUT_SEQUENCE = '### Instruction:\n'
 MODEL_OUTPUT_SEQUENCE = '\n### Response:\n'
 
-SUMMARIZATION_PROMPT = 'Based on following text describe {term}.'
-SUMMARIZATION_INPUT_SEQ = '[INST] '
-SUMMARIZATION_OUTPUT_SEQ = ' [/INST]'
+SUMMARIZATION_PROMPT = 'Describe {term}.'
+SUMMARIZATION_INPUT_SEQ = '### Instruction:\n'
+SUMMARIZATION_OUTPUT_SEQ = '\n### Response:\n'
 SUMMARIZATION_START_TOKEN = '<s>'
 SUMMARIZATION_PARAMS = {
-    "top_p": 0.95,
-    "top_k": 50,
-    "rep_pen": 1.2,
+    "min_p": 0.1,
+    "rep_pen": 1.0,
     "temperature": 0.6,
     "stop": [
         "</s>"
