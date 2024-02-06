@@ -2,8 +2,6 @@ import os
 
 from dotenv import load_dotenv
 
-from memoir.common.loggers import general_logger
-
 load_dotenv()
 
 SINGLE_API_MODE = bool(os.getenv('SINGLE_API_MODE', False))
@@ -26,7 +24,7 @@ LOG_PROMPTS = bool(os.getenv('LOG_PROMPTS', False))
 MODEL_INPUT_SEQUENCE = '### Instruction:\n'
 MODEL_OUTPUT_SEQUENCE = '\n### Response:\n'
 
-SUMMARIZATION_PROMPT = 'Describe {term}.'
+SUMMARIZATION_PROMPT = '{start_token}{previous_summary}\n{messages}\n{input_sequence}Describe {term}.{output_sequence}'
 SUMMARIZATION_INPUT_SEQ = '### Instruction:\n'
 SUMMARIZATION_OUTPUT_SEQ = '\n### Response:\n'
 SUMMARIZATION_START_TOKEN = '<s>'
@@ -43,5 +41,4 @@ SUMMARIZATION_PARAMS = {
 }
 
 if SIDE_API_URL == '' or SIDE_API_URL is None:
-    general_logger.warning('SIDE_API_URL is not set, changing to single API mode')
     SINGLE_API_MODE = True
