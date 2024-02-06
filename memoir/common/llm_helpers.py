@@ -54,3 +54,27 @@ def get_context_length(api_url: str) -> int:
     kobold_response = requests.get(length_endpoint)
     value = int(kobold_response.json()['value'])
     return value
+
+
+def get_model_name(api_url: str, api_key):
+    model_endpoint = api_url + '/v1/models'
+    response = requests.get(model_endpoint, headers={'Authorization': f'Bearer {api_key}'})
+    model_name = response.json()['data'][0]['root']
+    return model_name
+
+
+def generate_text(text: str, params: dict, api_type: str, api_url: str, api_key: str = None):
+    if api_type == 'KoboldAI':
+        request_body = {'prompt': text}
+        request_body.update(params)
+        response = requests.post(api_url + '/api/v1/generate', json=request_body)
+        generated_text = response.json()['results'][0]['text']
+    else:
+        request_body = {'prompt': text}
+        model_name = get_model_name(api_url, api_key)
+        request_body['model'] = model_name
+        request_body.update(params)
+        endpoint = api_url + '/v1/completions'
+        response = requests.post(endpoint, json=request_body, headers={'Authorization': f'Bearer {api_key}'})
+        generated_text = response.json()['choices'][0]['text']
+    return generated_text
