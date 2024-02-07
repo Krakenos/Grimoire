@@ -1,6 +1,6 @@
 from celery import Celery
 from celery_singleton import Singleton
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from memoir.common.llm_helpers import count_context, generate_text
@@ -9,12 +9,12 @@ from memoir.core.settings import SIDE_API_URL, DB_ENGINE, CELERY_BROKER_URL, SUM
     SUMMARIZATION_PROMPT, SUMMARIZATION_START_TOKEN, SUMMARIZATION_INPUT_SEQ, SUMMARIZATION_OUTPUT_SEQ, \
     SINGLE_API_MODE, MAIN_API_URL, MAIN_API_BACKEND, MAIN_API_AUTH, MODEL_INPUT_SEQUENCE, MODEL_OUTPUT_SEQUENCE, \
     SIDE_API_AUTH, SIDE_API_BACKEND
-from memoir.db.models import Knowledge
+from memoir.db.models import Knowledge, Message
 
 celery_app = Celery('tasks', broker=CELERY_BROKER_URL)
 
 
-def make_summary_prompt(knowledge_entry, max_context: int) -> str:
+def make_summary_prompt(session, knowledge_entry, max_context: int) -> str:
     if SINGLE_API_MODE:
         summarization_url = MAIN_API_URL
         summarization_backend = MAIN_API_BACKEND
@@ -27,25 +27,37 @@ def make_summary_prompt(knowledge_entry, max_context: int) -> str:
         summarization_auth = SIDE_API_AUTH
         input_sequence = SUMMARIZATION_INPUT_SEQ
         output_sequence = SUMMARIZATION_OUTPUT_SEQ
-    instruction_prompt = SUMMARIZATION_PROMPT.format(term=knowledge_entry.entity)
-    instruction_prompt = f'{input_sequence}{instruction_prompt}{output_sequence}'
-    prompt = f'{SUMMARIZATION_START_TOKEN}'
+    chat_id = knowledge_entry.chat_id
     if knowledge_entry.summary:
-        summary = knowledge_entry.summary + '\n'
+        summary = knowledge_entry.summary
     else:
         summary = ''
-    prompt = prompt + summary + '\n'
-    for message in knowledge_entry.messages[::-1]:  # reverse order to start from latest message
-        new_prompt = prompt + message.message + '\n'
-        new_tokens = count_context(new_prompt + instruction_prompt,
-                                   summarization_backend,
-                                   summarization_url,
-                                   summarization_auth)
-        if new_tokens >= max_context:
+    message_indices = [message.message_id for message in knowledge_entry.messages]
+    chunk_indices = set()
+    for message_index in message_indices:
+        chunk_indices.update([message_index - 1, message_index, message_index + 1])
+    chunk_indices -= {-1, 0}
+    final_indices = sorted(list(chunk_indices))
+    query = select(Message.message).where(Message.message_index.in_(final_indices),
+                                          Message.chat_id == chat_id).order_by(Message.message_index)
+    query_results = session.execute(query).all()
+    messages = [row[0] for row in query_results]
+    prompt = ''
+    reversed_messages = []
+    for message in messages[::-1]:
+        reversed_messages.append(message)
+        messages_text = '\n'.join(reversed_messages[::-1])
+        new_prompt = SUMMARIZATION_PROMPT.format(term=knowledge_entry.entity,
+                                                 previous_summary=summary,
+                                                 messages=messages_text,
+                                                 start_token=SUMMARIZATION_START_TOKEN,
+                                                 input_sequence=input_sequence,
+                                                 output_sequence=output_sequence)
+        new_tokens = count_context(new_prompt, summarization_backend, summarization_url, summarization_auth)
+        if new_tokens > max_context:
             break
         else:
             prompt = new_prompt
-    prompt += instruction_prompt
     return prompt
 
 
