@@ -47,3 +47,4 @@ class Message(Base):
     summary_tokens: Mapped[Optional[int]]
     message_tokens: Mapped[Optional[int]]
     created_date: Mapped[datetime] = mapped_column(default=datetime.now)
+    spacy_doc: Mapped[Optional[bytes]]

@@ -1,16 +1,18 @@
 import re
-import spacy
 import timeit
+
+import spacy
+from spacy.tokens import DocBin
 from sqlalchemy import desc, create_engine
 from sqlalchemy.orm import Session
 
 from memoir.common.llm_helpers import count_context
 from memoir.common.loggers import general_logger, context_logger
-from memoir.db.models import Message, Knowledge
+from memoir.common.utils import orm_get_or_create
 from memoir.core.settings import MODEL_INPUT_SEQUENCE, MODEL_OUTPUT_SEQUENCE, DB_ENGINE, CONTEXT_PERCENTAGE, \
     MAIN_API_BACKEND, MAIN_API_URL, MAIN_API_AUTH
 from memoir.core.tasks import summarize
-from memoir.common.utils import orm_get_or_create
+from memoir.db.models import Message, Knowledge
 
 nlp = spacy.load("en_core_web_trf")
 db = create_engine(DB_ENGINE)
@@ -42,6 +44,33 @@ def save_messages(messages: list, chat_id: str, session) -> list:
     return new_messages_indices
 
 
+def get_docs(messages, chat_id, session):
+    docs = []
+    processing_indices = []
+    to_process = []
+    messages_to_update = []
+    for index, message in enumerate(messages):
+        db_message = session.query(Message).filter_by(chat_id=chat_id, message=message).first()
+        if db_message is not None:
+            if db_message.spacy_doc is not None:
+                doc_bin = DocBin().from_bytes(db_message.spacy_doc)
+                spacy_doc = list(doc_bin.get_docs(nlp.vocab))[0]
+                docs.append((index, spacy_doc))
+            else:  # if something went wrong and message doesn't have doc
+                messages_to_update.append(db_message)
+                processing_indices.append(index)
+                to_process.append(message)
+        else:
+            processing_indices.append(index)
+            to_process.append(message)
+    new_docs = list(nlp.pipe(to_process))
+    new_docs = [(message_index, new_docs[index]) for index, message_index in enumerate(processing_indices)]
+    docs.extend(new_docs)
+    docs = sorted(docs, key=lambda x: x[0])
+    docs = [doc[1] for doc in docs]  # removing indices
+    return docs
+
+
 def process_prompt(prompt, chat, context_length):
     start_time = timeit.default_timer()
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
@@ -51,7 +80,7 @@ def process_prompt(prompt, chat, context_length):
     doc_time = timeit.default_timer()
     docs = list(nlp.pipe(messages))
     doc_end_time = timeit.default_timer()
-    general_logger.debug(f'Creating spacy docs {doc_end_time-doc_time} seconds')
+    general_logger.debug(f'Creating spacy docs {doc_end_time - doc_time} seconds')
     last_messages = messages[1:-2]
     last_docs = docs[1:-2]
     with Session(db) as session:
