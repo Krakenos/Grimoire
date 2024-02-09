@@ -18,10 +18,11 @@ nlp = spacy.load("en_core_web_trf")
 db = create_engine(DB_ENGINE)
 
 
-def save_messages(messages: list, chat_id: str, session) -> list:
+def save_messages(messages: list, docs: list, chat_id: str, session) -> list:
     """
     Saves messages to and returns indices of new messages
     :param messages:
+    :param docs:
     :param chat_id:
     :param session:
     :return: indices of new messages
@@ -37,7 +38,11 @@ def save_messages(messages: list, chat_id: str, session) -> list:
                 current_index = latest_index + 1
             else:
                 current_index = 1
-            new_message = Message(message=message, chat_id=chat_id, message_index=current_index)
+            spacy_doc = docs[message_index]
+            doc_bin = DocBin()
+            doc_bin.add(spacy_doc)
+            bytes_data = doc_bin.to_bytes()
+            new_message = Message(message=message, chat_id=chat_id, message_index=current_index, spacy_doc=bytes_data)
             new_messages_indices.append(message_index)
             session.add(new_message)
             session.commit()
@@ -89,14 +94,14 @@ def process_prompt(prompt, chat, context_length):
     pattern = re.escape(MODEL_INPUT_SEQUENCE) + r'|' + re.escape(MODEL_OUTPUT_SEQUENCE)
     messages = re.split(pattern, prompt)
     messages = [message.strip() for message in messages]  # remove trailing newlines
-    doc_time = timeit.default_timer()
-    docs = list(nlp.pipe(messages))
-    doc_end_time = timeit.default_timer()
-    general_logger.debug(f'Creating spacy docs {doc_end_time - doc_time} seconds')
-    last_messages = messages[1:-2]
-    last_docs = docs[1:-2]
     with Session(db) as session:
-        new_message_indices = save_messages(last_messages, chat, session)
+        doc_time = timeit.default_timer()
+        docs = get_docs(messages, chat, session)
+        doc_end_time = timeit.default_timer()
+        general_logger.debug(f'Creating spacy docs {doc_end_time - doc_time} seconds')
+        last_messages = messages[1:-2]
+        last_docs = docs[1:-2]
+        new_message_indices = save_messages(last_messages, last_docs, chat, session)
         get_named_entities(chat, last_docs, session)
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
     for doc in docs_to_summarize:
