@@ -44,6 +44,17 @@ def save_messages(messages: list, chat_id: str, session) -> list:
     return new_messages_indices
 
 
+def add_missing_docs(messages, docs, session):
+    for index, message in messages:
+        spacy_doc = docs[index]
+        doc_bin = DocBin()
+        doc_bin.add(spacy_doc)
+        bytes_data = doc_bin.to_bytes()
+        message.spacy_doc = bytes_data
+        session.add(message)
+    session.commit()
+
+
 def get_docs(messages, chat_id, session):
     docs = []
     processing_indices = []
@@ -57,7 +68,7 @@ def get_docs(messages, chat_id, session):
                 spacy_doc = list(doc_bin.get_docs(nlp.vocab))[0]
                 docs.append((index, spacy_doc))
             else:  # if something went wrong and message doesn't have doc
-                messages_to_update.append(db_message)
+                messages_to_update.append((index, db_message))
                 processing_indices.append(index)
                 to_process.append(message)
         else:
@@ -68,6 +79,7 @@ def get_docs(messages, chat_id, session):
     docs.extend(new_docs)
     docs = sorted(docs, key=lambda x: x[0])
     docs = [doc[1] for doc in docs]  # removing indices
+    add_missing_docs(messages_to_update, docs, session)
     return docs
 
 
