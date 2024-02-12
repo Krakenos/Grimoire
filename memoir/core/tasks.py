@@ -32,7 +32,7 @@ def make_summary_prompt(session, knowledge_entry, max_context: int) -> str:
         summary = knowledge_entry.summary
     else:
         summary = ''
-    message_indices = [message.message_id for message in knowledge_entry.messages]
+    message_indices = [message.message_index for message in knowledge_entry.messages]
     chunk_indices = set()
     for message_index in message_indices:
         chunk_indices.update([message_index - 1, message_index, message_index + 1])
@@ -77,7 +77,7 @@ def summarize(term: str, label: str, chat_id: str, context_len: int = 4096,
         knowledge_entry = session.query(Knowledge).filter(Knowledge.entity.ilike(term),
                                                           Knowledge.entity_type == 'NAMED ENTITY',
                                                           Knowledge.chat_id == chat_id).first()
-        prompt = make_summary_prompt(knowledge_entry, context_len)
+        prompt = make_summary_prompt(session, knowledge_entry, context_len)
         generation_params = {
             'max_length': response_len,
             'max_tokens': response_len,
