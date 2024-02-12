@@ -14,7 +14,7 @@ from memoir.db.models import Knowledge, Message
 celery_app = Celery('tasks', broker=CELERY_BROKER_URL)
 
 
-def make_summary_prompt(session, knowledge_entry, max_context: int) -> str:
+def make_summary_prompt(session, knowledge_entry, max_context: int) -> str | None:
     if SINGLE_API_MODE:
         summarization_url = MAIN_API_URL
         summarization_backend = MAIN_API_BACKEND
@@ -37,6 +37,8 @@ def make_summary_prompt(session, knowledge_entry, max_context: int) -> str:
     for message_index in message_indices:
         chunk_indices.update([message_index - 1, message_index, message_index + 1])
     chunk_indices -= {-1, 0}
+    if len(chunk_indices) < 2:
+        return None
     final_indices = sorted(list(chunk_indices))
     query = select(Message.message).where(Message.message_index.in_(final_indices),
                                           Message.chat_id == chat_id).order_by(Message.message_index)
@@ -78,6 +80,8 @@ def summarize(term: str, label: str, chat_id: str, context_len: int = 4096,
                                                           Knowledge.entity_type == 'NAMED ENTITY',
                                                           Knowledge.chat_id == chat_id).first()
         prompt = make_summary_prompt(session, knowledge_entry, context_len)
+        if prompt is None:  # Edge case of having 1 message for summary, only may happen at start of chat
+            return None
         generation_params = {
             'max_length': response_len,
             'max_tokens': response_len,
