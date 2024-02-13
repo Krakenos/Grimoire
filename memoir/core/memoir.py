@@ -9,13 +9,12 @@ from sqlalchemy.orm import Session
 from memoir.common.llm_helpers import count_context
 from memoir.common.loggers import general_logger, context_logger
 from memoir.common.utils import orm_get_or_create
-from memoir.core.settings import MODEL_INPUT_SEQUENCE, MODEL_OUTPUT_SEQUENCE, DB_ENGINE, CONTEXT_PERCENTAGE, \
-    MAIN_API_BACKEND, MAIN_API_URL, MAIN_API_AUTH
+from memoir.core.settings import settings
 from memoir.core.tasks import summarize
 from memoir.db.models import Message, Knowledge
 
 nlp = spacy.load("en_core_web_trf")
-db = create_engine(DB_ENGINE)
+db = create_engine(settings['DB_ENGINE'])
 
 
 def save_messages(messages: list, docs: list, chat_id: str, session) -> list:
@@ -91,7 +90,8 @@ def get_docs(messages, chat_id, session):
 def process_prompt(prompt, chat, context_length):
     start_time = timeit.default_timer()
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
-    pattern = re.escape(MODEL_INPUT_SEQUENCE) + r'|' + re.escape(MODEL_OUTPUT_SEQUENCE)
+    pattern = re.escape(settings['main_api']['input_sequence']) + r'|' + re.escape(
+        settings['main_api']['output_sequence'])
     messages = re.split(pattern, prompt)
     messages = [message.strip() for message in messages]  # remove trailing newlines
     with Session(db) as session:
@@ -140,9 +140,10 @@ def get_named_entities(chat, docs, session):
 
 def fill_context(prompt, chat, docs, context_size):
     max_context = context_size
-    max_memoir_context = max_context * CONTEXT_PERCENTAGE
+    max_memoir_context = max_context * settings['context_percentage']
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
-    pattern = re.escape(MODEL_INPUT_SEQUENCE) + r'|' + re.escape(MODEL_OUTPUT_SEQUENCE)
+    pattern = re.escape(settings['main_api']['input_sequence']) + r'|' + re.escape(
+        settings['main_api']['output_sequence'])
     pattern_with_delimiters = f'({pattern})'
     messages = re.split(pattern, prompt)
     messages_with_delimiters = re.split(pattern_with_delimiters, prompt)
@@ -172,19 +173,23 @@ def fill_context(prompt, chat, docs, context_size):
     memoir_text = ''
     for summary in summaries:
         memoir_text = memoir_text + f'[ {summary[2]}: {summary[0]} ]\n'
-    memoir_text_len = count_context(text=memoir_text, api_type=MAIN_API_BACKEND, api_url=MAIN_API_URL,
-                                    api_auth=MAIN_API_AUTH)
-    definitions_context_len = count_context(text=prompt_definitions, api_type=MAIN_API_BACKEND, api_url=MAIN_API_URL,
-                                            api_auth=MAIN_API_AUTH)
+    memoir_text_len = count_context(text=memoir_text, api_type=settings['main_api']['backend'],
+                                    api_url=settings['main_api']['url'],
+                                    api_auth=settings['main_api']['auth_key'])
+    definitions_context_len = count_context(text=prompt_definitions, api_type=settings['main_api']['backend'],
+                                            api_url=settings['main_api']['url'],
+                                            api_auth=settings['main_api']['auth_key'])
     max_chat_context = max_context - definitions_context_len - memoir_text_len
     starting_message = 1
     messages_text = ''.join(messages_with_delimiters[starting_message:])
-    messages_len = count_context(text=messages_text, api_type=MAIN_API_BACKEND, api_url=MAIN_API_URL,
-                                 api_auth=MAIN_API_AUTH)
+    messages_len = count_context(text=messages_text, api_type=settings['main_api']['backend'],
+                                 api_url=settings['main_api']['url'],
+                                 api_auth=settings['main_api']['auth_key'])
     while messages_len > max_chat_context:
         starting_message += 2
         messages_text = ''.join(messages_with_delimiters[starting_message:])
-        messages_len = count_context(text=messages_text, api_type=MAIN_API_BACKEND, api_url=MAIN_API_URL,
-                                     api_auth=MAIN_API_AUTH)
+        messages_len = count_context(text=messages_text, api_type=settings['main_api']['backend'],
+                                     api_url=settings['main_api']['url'],
+                                     api_auth=settings['main_api']['auth_key'])
     final_prompt = ''.join([prompt_definitions, memoir_text, messages_text])
     return final_prompt

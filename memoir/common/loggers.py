@@ -1,13 +1,13 @@
 import logging
 
-from memoir.core.settings import DEBUG, LOG_PROMPTS
+from memoir.core.settings import settings
 
-if DEBUG:
+if settings['DEBUG']:
     LOG_LEVEL = logging.DEBUG
 else:
     LOG_LEVEL = logging.INFO
 
-if LOG_PROMPTS:
+if settings['LOG_PROMPTS']:
     PROMPT_LEVEL = logging.DEBUG
 else:
     PROMPT_LEVEL = logging.INFO

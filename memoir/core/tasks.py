@@ -5,28 +5,25 @@ from sqlalchemy.orm import Session
 
 from memoir.common.llm_helpers import count_context, generate_text
 from memoir.common.loggers import summary_logger
-from memoir.core.settings import SIDE_API_URL, DB_ENGINE, CELERY_BROKER_URL, SUMMARIZATION_PARAMS, \
-    SUMMARIZATION_PROMPT, SUMMARIZATION_START_TOKEN, SUMMARIZATION_INPUT_SEQ, SUMMARIZATION_OUTPUT_SEQ, \
-    SINGLE_API_MODE, MAIN_API_URL, MAIN_API_BACKEND, MAIN_API_AUTH, MODEL_INPUT_SEQUENCE, MODEL_OUTPUT_SEQUENCE, \
-    SIDE_API_AUTH, SIDE_API_BACKEND
+from memoir.core.settings import settings
 from memoir.db.models import Knowledge, Message
 
-celery_app = Celery('tasks', broker=CELERY_BROKER_URL)
+celery_app = Celery('tasks', broker=settings['CELERY_BROKER_URL'])
 
 
 def make_summary_prompt(session, knowledge_entry, max_context: int) -> str | None:
-    if SINGLE_API_MODE:
-        summarization_url = MAIN_API_URL
-        summarization_backend = MAIN_API_BACKEND
-        summarization_auth = MAIN_API_AUTH
-        input_sequence = MODEL_INPUT_SEQUENCE
-        output_sequence = MODEL_OUTPUT_SEQUENCE
+    if settings['single_api_mode']:
+        summarization_url = settings['main_api']['url']
+        summarization_backend = settings['main_api']['backend']
+        summarization_auth = settings['main_api']['auth_key']
+        input_sequence = settings['main_api']['input_sequence']
+        output_sequence = settings['main_api']['output_sequence']
     else:
-        summarization_url = SIDE_API_URL
-        summarization_backend = SIDE_API_BACKEND
-        summarization_auth = SIDE_API_AUTH
-        input_sequence = SUMMARIZATION_INPUT_SEQ
-        output_sequence = SUMMARIZATION_OUTPUT_SEQ
+        summarization_url = settings['side_api']['url']
+        summarization_backend = settings['side_api']['backend']
+        summarization_auth = settings['side_api']['auth_key']
+        input_sequence = settings['side_api']['input_sequence']
+        output_sequence = settings['side_api']['output_sequence']
     chat_id = knowledge_entry.chat_id
     if knowledge_entry.summary:
         summary = knowledge_entry.summary
@@ -49,12 +46,12 @@ def make_summary_prompt(session, knowledge_entry, max_context: int) -> str | Non
     for message in messages[::-1]:
         reversed_messages.append(message)
         messages_text = '\n'.join(reversed_messages[::-1])
-        new_prompt = SUMMARIZATION_PROMPT.format(term=knowledge_entry.entity,
-                                                 previous_summary=summary,
-                                                 messages=messages_text,
-                                                 start_token=SUMMARIZATION_START_TOKEN,
-                                                 input_sequence=input_sequence,
-                                                 output_sequence=output_sequence)
+        new_prompt = settings['summarization']['prompt'].format(term=knowledge_entry.entity,
+                                                                previous_summary=summary,
+                                                                messages=messages_text,
+                                                                bos_token=settings['summarization']['bos_token'],
+                                                                input_sequence=input_sequence,
+                                                                output_sequence=output_sequence)
         new_tokens = count_context(new_prompt, summarization_backend, summarization_url, summarization_auth)
         if new_tokens > max_context:
             break
@@ -66,15 +63,15 @@ def make_summary_prompt(session, knowledge_entry, max_context: int) -> str | Non
 @celery_app.task(base=Singleton)
 def summarize(term: str, label: str, chat_id: str, context_len: int = 4096,
               response_len: int = 300) -> None:
-    db = create_engine(DB_ENGINE)
-    if SINGLE_API_MODE:
-        summarization_url = MAIN_API_URL
-        summarization_backend = MAIN_API_BACKEND
-        summarization_auth = MAIN_API_AUTH
+    db = create_engine(settings['DB_ENGINE'])
+    if settings['single_api_mode']:
+        summarization_url = settings['main_api']['url']
+        summarization_backend = settings['main_api']['backend']
+        summarization_auth = settings['main_api']['auth_key']
     else:
-        summarization_url = SIDE_API_URL
-        summarization_backend = SIDE_API_BACKEND
-        summarization_auth = SIDE_API_AUTH
+        summarization_url = settings['side_api']['url']
+        summarization_backend = settings['side_api']['backend']
+        summarization_auth = settings['side_api']['auth_key']
     with Session(db) as session:
         knowledge_entry = session.query(Knowledge).filter(Knowledge.entity.ilike(term),
                                                           Knowledge.entity_type == 'NAMED ENTITY',
@@ -88,7 +85,7 @@ def summarize(term: str, label: str, chat_id: str, context_len: int = 4096,
             'truncation_length': context_len,
             "max_context_length": context_len,
         }
-        generation_params.update(SUMMARIZATION_PARAMS)
+        generation_params.update(settings['summarization']['params'])
         summary_text, request_json = generate_text(prompt,
                                                    generation_params,
                                                    summarization_backend,

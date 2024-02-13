@@ -1,10 +1,10 @@
 import requests
 
-from memoir.core.settings import MAIN_API_URL
+from memoir.core.settings import settings
 
 
 def get_passthrough(endpoint: str, auth_token=None) -> dict:
-    passthrough_url = MAIN_API_URL + endpoint
+    passthrough_url = settings['main_api']['url'] + endpoint
     kobold_response = requests.get(passthrough_url, headers={'Authorization': f'Bearer {auth_token}'})
     return kobold_response.json()
 
