@@ -43,7 +43,7 @@ async def token_count(k_request: KAITokenCountSchema):
 
 
 @router.post('/api/extra/abort')
-async def token_count(k_request: KAIAbortSchema):
+async def abort(k_request: KAIAbortSchema):
     passthrough_json = k_request.model_dump(exclude_defaults=True)
     passthrough_url = MAIN_API_URL + '/api/extra/abort'
     kobold_response = requests.post(passthrough_url, json=passthrough_json)
