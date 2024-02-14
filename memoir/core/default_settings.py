@@ -10,7 +10,13 @@ defaults = {
         'url': '',
         'auth_key': '',
         'input_sequence': '### Instruction:\n',
-        'output_sequence': '\n### Response:\n'
+        'output_sequence': '\n### Response:\n',
+        'first_output_sequence': '',
+        'last_output_sequence': '',
+        'separator_sequence': '',
+        'wrap': '',
+        'system_sequence_prefix': '',
+        'system_sequence_suffix': ''
     },
     'side_api': {
         'backend': 'GenericOAI',

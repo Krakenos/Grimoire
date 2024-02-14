@@ -6,6 +6,7 @@ from spacy.tokens import DocBin
 from sqlalchemy import desc, create_engine
 from sqlalchemy.orm import Session
 
+from memoir.api.request_models import Instruct
 from memoir.common.llm_helpers import count_context
 from memoir.common.loggers import general_logger, context_logger
 from memoir.common.utils import orm_get_or_create
@@ -198,3 +199,17 @@ def fill_context(prompt, chat, docs, context_size):
                                      api_auth=settings['main_api']['auth_key'])
     final_prompt = ''.join([prompt_definitions, memoir_text, messages_text])
     return final_prompt
+
+
+def update_instruct(instruct_info: Instruct):
+    if instruct_info.wrap:
+        input_seq = f'{instruct_info.input_sequence}\n'
+        output_seq = f'\n{instruct_info.output_sequence}\n'
+    else:
+        input_seq = instruct_info.input_sequence
+        output_seq = instruct_info.output_sequence
+    settings['main_api']['input_sequence'] = input_seq
+    settings['main_api']['output_sequence'] = output_seq
+    settings['main_api']['first_output_sequence'] = instruct_info.first_output_sequence
+    settings['main_api']['last_output_sequence'] = instruct_info.last_output_sequence
+    settings['main_api']['separator_sequence'] = instruct_info.separator_sequence

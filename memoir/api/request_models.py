@@ -3,15 +3,15 @@ from typing import Optional
 from pydantic import BaseModel, PositiveInt, ConfigDict
 
 
-class KAITokenCountSchema(BaseModel):
+class KAITokenCount(BaseModel):
     prompt: str
 
 
-class KAIAbortSchema(BaseModel):
+class KAIAbort(BaseModel):
     genkey: str
 
 
-class InstructSchema(BaseModel):
+class Instruct(BaseModel):
     enabled: bool
     system_prompt: str
     input_sequence: str
@@ -26,29 +26,29 @@ class InstructSchema(BaseModel):
     names: bool
 
 
-class MemoirSchema(BaseModel):
+class Memoir(BaseModel):
     chat_id: str
-    instruct: Optional[InstructSchema] = None
+    instruct: Optional[Instruct] = None
 
 
-class KAIGenerationInputSchema(BaseModel):
+class KAIGeneration(BaseModel):
     model_config = ConfigDict(extra='allow')
 
     prompt: str
     max_context_length: PositiveInt
     max_length: PositiveInt
-    memoir: MemoirSchema
+    memoir: Memoir
 
 
-class OAIGenerationInputSchema(BaseModel):
+class OAIGeneration(BaseModel):
     model_config = ConfigDict(extra='allow')
 
     prompt: str
     max_tokens: PositiveInt
     truncation_length: PositiveInt
     stream: bool = False
-    memoir: MemoirSchema
+    memoir: Memoir
 
 
-class OAITokenizeSchema(BaseModel):
+class OAITokenize(BaseModel):
     prompt: str
