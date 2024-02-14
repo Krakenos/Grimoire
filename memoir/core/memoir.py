@@ -90,6 +90,10 @@ def get_docs(messages, chat_id, session):
 def process_prompt(prompt, chat, context_length):
     start_time = timeit.default_timer()
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
+    if settings['single_api_mode']:
+        summarization_api = settings['main_api'].copy()
+    else:
+        summarization_api = settings['side_api'].copy()
     pattern = re.escape(settings['main_api']['input_sequence']) + r'|' + re.escape(
         settings['main_api']['output_sequence'])
     messages = re.split(pattern, prompt)
@@ -108,7 +112,8 @@ def process_prompt(prompt, chat, context_length):
         for entity in set(doc.ents):
             if entity.label_ not in banned_labels:
                 general_logger.debug(f'{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}')
-                summarize.delay(entity.text.lower(), entity.label_, chat)
+                summarize.delay(entity.text.lower(), entity.label_, chat, summarization_api, settings['summarization'],
+                                settings['DB_ENGINE'])
     new_prompt = fill_context(prompt, chat, docs, context_length)
     end_time = timeit.default_timer()
     general_logger.info(f'Prompt processing time: {end_time - start_time}s')
