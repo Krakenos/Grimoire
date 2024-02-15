@@ -3,7 +3,7 @@ import timeit
 
 import spacy
 from spacy.tokens import DocBin
-from sqlalchemy import desc, create_engine
+from sqlalchemy import desc, create_engine, select
 from sqlalchemy.orm import Session
 
 from memoir.api.request_models import Instruct
@@ -95,8 +95,7 @@ def process_prompt(prompt, chat, context_length):
         summarization_api = settings['main_api'].copy()
     else:
         summarization_api = settings['side_api'].copy()
-    pattern = re.escape(settings['main_api']['input_sequence']) + r'|' + re.escape(
-        settings['main_api']['output_sequence'])
+    pattern = instruct_regex()
     messages = re.split(pattern, prompt)
     messages = [message.strip() for message in messages]  # remove trailing newlines
     with Session(db) as session:
@@ -109,13 +108,13 @@ def process_prompt(prompt, chat, context_length):
         new_message_indices = save_messages(last_messages, last_docs, chat, session)
         get_named_entities(chat, last_docs, session)
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
+    new_prompt = fill_context(prompt, chat, docs, context_length)
     for doc in docs_to_summarize:
         for entity in set(doc.ents):
             if entity.label_ not in banned_labels:
                 general_logger.debug(f'{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}')
                 summarize.delay(entity.text.lower(), entity.label_, chat, summarization_api, settings['summarization'],
                                 settings['DB_ENGINE'])
-    new_prompt = fill_context(prompt, chat, docs, context_length)
     end_time = timeit.default_timer()
     general_logger.info(f'Prompt processing time: {end_time - start_time}s')
     context_logger.debug(f'Old prompt: \n{prompt}\n\nNew prompt: \n{new_prompt}')
@@ -144,12 +143,12 @@ def get_named_entities(chat, docs, session):
             session.commit()
 
 
+# TODO this needs a heavy rewrite
 def fill_context(prompt, chat, docs, context_size):
     max_context = context_size
     max_memoir_context = max_context * settings['context_percentage']
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
-    pattern = re.escape(settings['main_api']['input_sequence']) + r'|' + re.escape(
-        settings['main_api']['output_sequence'])
+    pattern = instruct_regex()
     pattern_with_delimiters = f'({pattern})'
     messages = re.split(pattern, prompt)
     messages_with_delimiters = re.split(pattern_with_delimiters, prompt)
@@ -163,13 +162,13 @@ def fill_context(prompt, chat, docs, context_size):
     summaries = []
     with Session(db) as session:
         for ent in unique_ents:
-            query = session.query(Knowledge).filter(Knowledge.entity.ilike(ent[0]),
-                                                    Knowledge.entity_type == 'NAMED ENTITY',
-                                                    Knowledge.chat_id == chat,
-                                                    Knowledge.entity_label == ent[1], Knowledge.summary.isnot(None),
-                                                    Knowledge.summary.isnot(''), Knowledge.token_count.isnot(None),
-                                                    Knowledge.token_count.isnot(0))
-            instance = query.scalar()
+            query = select(Knowledge).where(Knowledge.entity.ilike(ent[0]),
+                                            Knowledge.entity_type == 'NAMED ENTITY',
+                                            Knowledge.chat_id == chat,
+                                            Knowledge.summary.isnot(None),
+                                            Knowledge.summary.isnot(''), Knowledge.token_count.isnot(None),
+                                            Knowledge.token_count.isnot(0))
+            instance = session.scalars(query).first()
             if instance is not None:
                 summaries.append((instance.summary, instance.token_count, instance.entity))
     memoir_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
@@ -193,6 +192,14 @@ def fill_context(prompt, chat, docs, context_size):
                                  api_auth=settings['main_api']['auth_key'])
     while messages_len > max_chat_context:
         starting_message += 2
+        first_instruct = messages_with_delimiters[starting_message]
+        first_output_seq = settings['main_api']['first_output_sequence']
+        output_seq = settings['main_api']['output_sequence']
+        separator_seq = settings['main_api']['separator_sequence']
+        if first_instruct == output_seq and first_output_seq:
+            messages_with_delimiters[starting_message] = first_output_seq
+        elif separator_seq in first_instruct:
+            messages_with_delimiters[starting_message] = first_instruct.replace(separator_seq, '')
         messages_text = ''.join(messages_with_delimiters[starting_message:])
         messages_len = count_context(text=messages_text, api_type=settings['main_api']['backend'],
                                      api_url=settings['main_api']['url'],
@@ -213,3 +220,19 @@ def update_instruct(instruct_info: Instruct):
     settings['main_api']['first_output_sequence'] = instruct_info.first_output_sequence
     settings['main_api']['last_output_sequence'] = instruct_info.last_output_sequence
     settings['main_api']['separator_sequence'] = instruct_info.separator_sequence
+
+
+def instruct_regex():
+    input_seq = re.escape(settings['main_api']['input_sequence'])
+    output_seq = re.escape(settings['main_api']['output_sequence'])
+    first_output_seq = re.escape(settings['main_api']['first_output_sequence'])
+    last_output_seq = re.escape(settings['main_api']['last_output_sequence'])
+    separator_seq = re.escape(settings['main_api']['separator_sequence'])
+    pattern = input_seq + r'|' + output_seq
+    if last_output_seq:
+        pattern += f'|{last_output_seq}'
+    if first_output_seq:
+        pattern += f'|{first_output_seq}'
+    if separator_seq:
+        pattern += f'|{separator_seq}{input_seq}'
+    return pattern

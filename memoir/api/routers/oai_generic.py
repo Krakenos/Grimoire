@@ -20,7 +20,7 @@ async def get_models(request: Request):
 async def completions(oai_request: OAIGeneration, request: Request):
     def streaming_messages(url, data_json):
         streaming_response = requests.post(url, stream=True,
-                                           headers={'Authorization': f'Bearer {settings['main_api']['auth_key']}'},
+                                           headers={'Authorization': f"Bearer {settings['main_api']['auth_key']}"},
                                            json=data_json)
         client = sseclient.SSEClient(streaming_response)
         for event in client.events():
@@ -38,7 +38,7 @@ async def completions(oai_request: OAIGeneration, request: Request):
 
     else:
         engine_response = requests.post(passthrough_url,
-                                        headers={'Authorization': f'Bearer {settings['main_api']['auth_key']}'},
+                                        headers={'Authorization': f"Bearer {settings['main_api']['auth_key']}"},
                                         json=passthrough_json)
         return engine_response.json()
 
@@ -48,6 +48,6 @@ async def tokenize(tokenize_req: OAITokenize):
     passthrough_url = settings['main_api']['url'] + '/v1/tokenize'
     passthrough_json = tokenize_req.model_dump()
     engine_response = requests.post(passthrough_url,
-                                    headers={'Authorization': f'Bearer {settings['main_api']['auth_key']}'},
+                                    headers={'Authorization': f"Bearer {settings['main_api']['auth_key']}"},
                                     json=passthrough_json)
     return engine_response.json()

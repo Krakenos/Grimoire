@@ -74,11 +74,20 @@ def summarize(term: str, label: str, chat_id: str, api_settings: dict = None, su
             "max_context_length": context_len,
         }
         generation_params.update(summarization_settings['params'])
+        additional_stops = [api_settings['input_sequence'].strip(),
+                            api_settings['output_sequence'].strip(),
+                            api_settings['first_output_sequence'].strip(),
+                            api_settings['last_output_sequence'].strip(),
+                            api_settings['separator_sequence'].strip()]
+        additional_stops = [stop for stop in additional_stops if stop]
+        generation_params['stop'].extend(additional_stops)
+        generation_params['stop_sequence'].extend(additional_stops)
         summary_text, request_json = generate_text(prompt,
                                                    generation_params,
                                                    summarization_backend,
                                                    summarization_url,
                                                    summarization_auth)
+        summary_text = summary_text.replace('\n\n', '\n')
         knowledge_entry.summary = summary_text
         knowledge_entry.token_count = count_context(summary_text, summarization_backend, summarization_url)
         summary_logger.debug(f'({knowledge_entry.token_count} tokens){term} ({label}): {summary_text}\n{request_json}')
