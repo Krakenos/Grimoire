@@ -52,3 +52,8 @@ class OAIGeneration(BaseModel):
 
 class OAITokenize(BaseModel):
     prompt: str
+
+
+# Tabby endpoint
+class OAITokenEncode(BaseModel):
+    text: str

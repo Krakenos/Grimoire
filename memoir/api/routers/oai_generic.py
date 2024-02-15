@@ -3,7 +3,7 @@ import sseclient
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
-from memoir.api.request_models import OAIGeneration, OAITokenize
+from memoir.api.request_models import OAIGeneration, OAITokenize, OAITokenEncode
 from memoir.common.utils import get_passthrough
 from memoir.core.memoir import process_prompt, update_instruct
 from memoir.core.settings import settings
@@ -12,8 +12,14 @@ router = APIRouter(tags=["Generic OAI passthrough"])
 
 
 @router.get('/v1/models')
+@router.get('/v1/model/list')
 async def get_models(request: Request):
     return get_passthrough('/v1/models', settings['main_api']['auth_key'])
+
+
+@router.get('/v1/model')
+async def model():
+    return get_passthrough('/v1/model', settings['main_api']['auth_key'])
 
 
 @router.post('/v1/completions')
@@ -46,6 +52,16 @@ async def completions(oai_request: OAIGeneration, request: Request):
 @router.post('/v1/tokenize')
 async def tokenize(tokenize_req: OAITokenize):
     passthrough_url = settings['main_api']['url'] + '/v1/tokenize'
+    passthrough_json = tokenize_req.model_dump()
+    engine_response = requests.post(passthrough_url,
+                                    headers={'Authorization': f"Bearer {settings['main_api']['auth_key']}"},
+                                    json=passthrough_json)
+    return engine_response.json()
+
+
+@router.post('/v1/token/encode')
+async def token_encode(tokenize_req: OAITokenEncode):
+    passthrough_url = settings['main_api']['url'] + '/v1/token_encode'
     passthrough_json = tokenize_req.model_dump()
     engine_response = requests.post(passthrough_url,
                                     headers={'Authorization': f"Bearer {settings['main_api']['auth_key']}"},
