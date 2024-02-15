@@ -1,3 +1,5 @@
+from urllib.parse import urljoin
+
 import requests
 from fastapi import APIRouter
 
@@ -30,7 +32,7 @@ async def generate(k_request: KAIGeneration):
     if k_request.memoir.instruct is not None:
         update_instruct(k_request.memoir.instruct)
     new_prompt = process_prompt(k_request.prompt, k_request.memoir.chat_id, k_request.max_context_length)
-    passthrough_url = settings['main_api']['url'] + '/api/v1/generate'
+    passthrough_url = urljoin(settings['main_api']['url'], '/api/v1/generate')
     passthrough_json['prompt'] = new_prompt
     kobold_response = requests.post(passthrough_url, json=passthrough_json)
     return kobold_response.json()
@@ -39,7 +41,7 @@ async def generate(k_request: KAIGeneration):
 @router.post('/api/extra/tokencount')
 async def token_count(k_request: KAITokenCount):
     passthrough_json = k_request.model_dump(exclude_defaults=True)
-    passthrough_url = settings['main_api']['url'] + '/api/extra/tokencount'
+    passthrough_url = urljoin(settings['main_api']['url'], '/api/extra/tokencount')
     kobold_response = requests.post(passthrough_url, json=passthrough_json)
     return kobold_response.json()
 
@@ -47,6 +49,6 @@ async def token_count(k_request: KAITokenCount):
 @router.post('/api/extra/abort')
 async def abort(k_request: KAIAbort):
     passthrough_json = k_request.model_dump(exclude_defaults=True)
-    passthrough_url = settings['main_api']['url'] + '/api/extra/abort'
+    passthrough_url = urljoin(settings['main_api']['url'], '/api/extra/abort')
     kobold_response = requests.post(passthrough_url, json=passthrough_json)
     return kobold_response.json()

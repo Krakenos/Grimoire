@@ -1,10 +1,13 @@
+from urllib.parse import urljoin
+
 import requests
 
 from memoir.core.settings import settings
 
 
 def get_passthrough(endpoint: str, auth_token=None) -> dict:
-    passthrough_url = settings['main_api']['url'] + endpoint
+
+    passthrough_url = urljoin(settings['main_api']['url'], endpoint)
     kobold_response = requests.get(passthrough_url, headers={'Authorization': f'Bearer {auth_token}'})
     return kobold_response.json()
 

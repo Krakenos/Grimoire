@@ -1,3 +1,5 @@
+from urllib.parse import urljoin
+
 import requests
 import sseclient
 from fastapi import APIRouter, Request
@@ -35,8 +37,8 @@ async def completions(oai_request: OAIGeneration, request: Request):
     passthrough_json = oai_request.model_dump()
     if oai_request.memoir.instruct is not None:
         update_instruct(oai_request.memoir.instruct)
-    passthrough_url = settings['main_api']['url'] + '/v1/completions'
-    passthrough_json['api_server'] = settings['main_api']['url'] + '/'
+    passthrough_url = urljoin(settings['main_api']['url'], '/v1/completions')
+    passthrough_json['api_server'] = settings['main_api']['url']
     new_prompt = process_prompt(oai_request.prompt, oai_request.memoir.chat_id, oai_request.truncation_length)
     passthrough_json['prompt'] = new_prompt
     if oai_request.stream:
@@ -51,7 +53,7 @@ async def completions(oai_request: OAIGeneration, request: Request):
 
 @router.post('/v1/tokenize')
 async def tokenize(tokenize_req: OAITokenize):
-    passthrough_url = settings['main_api']['url'] + '/v1/tokenize'
+    passthrough_url = urljoin(settings['main_api']['url'], '/v1/tokenize')
     passthrough_json = tokenize_req.model_dump()
     engine_response = requests.post(passthrough_url,
                                     headers={'Authorization': f"Bearer {settings['main_api']['auth_key']}"},
@@ -61,7 +63,7 @@ async def tokenize(tokenize_req: OAITokenize):
 
 @router.post('/v1/token/encode')
 async def token_encode(tokenize_req: OAITokenEncode):
-    passthrough_url = settings['main_api']['url'] + '/v1/token_encode'
+    passthrough_url = urljoin(settings['main_api']['url'], '/v1/token_encode')
     passthrough_json = tokenize_req.model_dump()
     engine_response = requests.post(passthrough_url,
                                     headers={'Authorization': f"Bearer {settings['main_api']['auth_key']}"},
