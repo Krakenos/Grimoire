@@ -53,7 +53,7 @@ def make_summary_prompt(session, knowledge_entry, max_context: int, api_settings
     return prompt
 
 
-@celery_app.task(base=Singleton)
+@celery_app.task(base=Singleton, lock_expiry=60)
 def summarize(term: str, label: str, chat_id: str, api_settings: dict = None, summarization_settings: dict = None,
               db_engine: str = None, context_len: int = 4096, response_len: int = 300) -> None:
     db = create_engine(db_engine)
@@ -89,6 +89,7 @@ def summarize(term: str, label: str, chat_id: str, api_settings: dict = None, su
                                                    summarization_auth)
         summary_text = summary_text.replace('\n\n', '\n')
         knowledge_entry.summary = summary_text
-        knowledge_entry.token_count = count_context(summary_text, summarization_backend, summarization_url)
+        knowledge_entry.token_count = count_context(summary_text, summarization_backend, summarization_url,
+                                                    summarization_auth)
         summary_logger.debug(f'({knowledge_entry.token_count} tokens){term} ({label}): {summary_text}\n{request_json}')
         session.commit()

@@ -47,6 +47,7 @@ class OAIGeneration(BaseModel):
     max_tokens: PositiveInt
     truncation_length: PositiveInt
     stream: bool = False
+    api_type: str = 'GenericOAI'
     memoir: Memoir
 
 

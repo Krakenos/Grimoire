@@ -88,11 +88,15 @@ def get_docs(messages, chat_id, session):
     return docs
 
 
-def process_prompt(prompt, chat, context_length):
+def process_prompt(prompt, chat, context_length, api_type=None):
+    if api_type is None:
+        api_type = settings['main_api']['backend']
     start_time = timeit.default_timer()
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     if settings['single_api_mode']:
         summarization_api = settings['main_api'].copy()
+        if api_type is not None:
+            summarization_api['backend'] = api_type
     else:
         summarization_api = settings['side_api'].copy()
     pattern = instruct_regex()
@@ -108,7 +112,7 @@ def process_prompt(prompt, chat, context_length):
         new_message_indices = save_messages(last_messages, last_docs, chat, session)
         get_named_entities(chat, last_docs, session)
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
-    new_prompt = fill_context(prompt, chat, docs, context_length)
+    new_prompt = fill_context(prompt, chat, docs, context_length, api_type)
     for doc in docs_to_summarize:
         for entity in set(doc.ents):
             if entity.label_ not in banned_labels:
@@ -144,7 +148,7 @@ def get_named_entities(chat, docs, session):
 
 
 # TODO this needs a heavy rewrite
-def fill_context(prompt, chat, docs, context_size):
+def fill_context(prompt, chat, docs, context_size, api_type):
     max_context = context_size
     max_memoir_context = max_context * settings['context_percentage']
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
@@ -178,16 +182,16 @@ def fill_context(prompt, chat, docs, context_size):
     memoir_text = ''
     for summary in summaries:
         memoir_text = memoir_text + f'[ {summary[2]}: {summary[0]} ]\n'
-    memoir_text_len = count_context(text=memoir_text, api_type=settings['main_api']['backend'],
+    memoir_text_len = count_context(text=memoir_text, api_type=api_type,
                                     api_url=settings['main_api']['url'],
                                     api_auth=settings['main_api']['auth_key'])
-    definitions_context_len = count_context(text=prompt_definitions, api_type=settings['main_api']['backend'],
+    definitions_context_len = count_context(text=prompt_definitions, api_type=api_type,
                                             api_url=settings['main_api']['url'],
                                             api_auth=settings['main_api']['auth_key'])
     max_chat_context = max_context - definitions_context_len - memoir_text_len
     starting_message = 1
     messages_text = ''.join(messages_with_delimiters[starting_message:])
-    messages_len = count_context(text=messages_text, api_type=settings['main_api']['backend'],
+    messages_len = count_context(text=messages_text, api_type=api_type,
                                  api_url=settings['main_api']['url'],
                                  api_auth=settings['main_api']['auth_key'])
     while messages_len > max_chat_context:
@@ -201,7 +205,7 @@ def fill_context(prompt, chat, docs, context_size):
         elif separator_seq in first_instruct:
             messages_with_delimiters[starting_message] = first_instruct.replace(separator_seq, '')
         messages_text = ''.join(messages_with_delimiters[starting_message:])
-        messages_len = count_context(text=messages_text, api_type=settings['main_api']['backend'],
+        messages_len = count_context(text=messages_text, api_type=api_type,
                                      api_url=settings['main_api']['url'],
                                      api_auth=settings['main_api']['auth_key'])
     final_prompt = ''.join([prompt_definitions, memoir_text, messages_text])

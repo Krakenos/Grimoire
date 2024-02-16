@@ -6,7 +6,7 @@ from transformers import AutoTokenizer
 from memoir.common.loggers import general_logger
 
 
-# TODO refactor this too
+# TODO refactor this
 def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
     """
     Counts the token length of the text either through endpoint or with local tokenizer
@@ -23,6 +23,17 @@ def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
         value = int(kobold_response.json()['value'])
         return value
 
+    elif api_type.lower() == 'tabby':
+        tokenize_endpoint = urljoin(api_url, '/v1/token/encode')
+        tokenize_json = {
+            'text': text
+        }
+        tokenize_response = requests.post(tokenize_endpoint,
+                                          json=tokenize_json,
+                                          headers={'Authorization': f'Bearer {api_auth}'})
+        if tokenize_response.status_code == 200:
+            tokenized = tokenize_response.json()
+            return tokenized['length']
     else:
         tokenize_endpoint = urljoin(api_url, '/v1/tokenize')
         tokenize_json = {
@@ -34,46 +45,36 @@ def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
         if tokenize_response.status_code == 200:
             tokenized = tokenize_response.json()
             return tokenized['value']
-        else:
-            tokenize_endpoint = urljoin(api_url, '/v1/token/encode')
-            tokenize_json = {
-                'text': text
-            }
-            tokenize_response = requests.post(tokenize_endpoint,
-                                              json=tokenize_json,
-                                              headers={'Authorization': f'Bearer {api_auth}'})
-            if tokenize_response.status_code == 200:
-                tokenized = tokenize_response.json()
-                return tokenized['length']
-            else:
-                general_logger.warning(
-                    f'Tokenize endpoint not found for {api_type}, proceeding to count based on tokenizer')
-                models_endpoint = api_url + '/v1/models'
-                response = requests.get(models_endpoint, headers={'Authorization': f'Bearer {api_auth}'})
-                model_name = response.json()['data'][0]['id']
-                # Default to llama tokenizer if model tokenizer is not on huggingface
-                try:
-                    tokenizer = AutoTokenizer.from_pretrained(model_name)
-                except OSError as s:
-                    general_logger.warning('Could not load model tokenizer, defaulting to llama-tokenizer')
-                    general_logger.warning(s)
-                    tokenizer = AutoTokenizer.from_pretrained('oobabooga/llama-tokenizer')
-                encoded = tokenizer(text)
-                token_amount = len(encoded['input_ids'])
+        general_logger.warning(f'Tokenize endpoint not found for {api_type}, proceeding to count based on tokenizer')
+        model_name = get_model_name(api_url, api_auth, api_type)
+        # Default to llama tokenizer if model tokenizer is not on huggingface
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+        except OSError as s:
+            general_logger.warning('Could not load model tokenizer, defaulting to llama-tokenizer')
+            general_logger.warning(s)
+            tokenizer = AutoTokenizer.from_pretrained('oobabooga/llama-tokenizer')
+        encoded = tokenizer(text)
+        token_amount = len(encoded['input_ids'])
         return token_amount
 
 
 def get_context_length(api_url: str) -> int:
-    length_endpoint = api_url + '/v1/config/max_context_length'
+    length_endpoint = urljoin(api_url, '/v1/config/max_context_length')
     kobold_response = requests.get(length_endpoint)
     value = int(kobold_response.json()['value'])
     return value
 
 
-def get_model_name(api_url: str, api_key):
-    model_endpoint = api_url + '/v1/models'
-    response = requests.get(model_endpoint, headers={'Authorization': f'Bearer {api_key}'})
-    model_name = response.json()['data'][0]['root']
+def get_model_name(api_url: str, api_key, api_type):
+    if api_type == 'tabby':
+        model_endpoint = urljoin(api_url, '/v1/model')
+        response = requests.get(model_endpoint, headers={'Authorization': f'Bearer {api_key}'})
+        model_name = response.json()['id']
+    else:
+        model_endpoint = urljoin(api_url, '/v1/models')
+        response = requests.get(model_endpoint, headers={'Authorization': f'Bearer {api_key}'})
+        model_name = response.json()['data'][0]['id']
     return model_name
 
 
@@ -81,15 +82,16 @@ def generate_text(prompt: str, params: dict, api_type: str, api_url: str, api_ke
     if api_type.lower() in ('koboldai', 'koboldcpp'):
         request_body = {'prompt': prompt}
         request_body.update(params)
-        endpoint = api_url + '/api/v1/generate'
+        endpoint = urljoin(api_url, '/api/v1/generate')
         response = requests.post(endpoint, json=request_body)
         generated_text = response.json()['results'][0]['text']
     else:
         request_body = {'prompt': prompt}
-        model_name = get_model_name(api_url, api_key)
+        model_name = get_model_name(api_url, api_key, api_type)
         request_body['model'] = model_name
         request_body.update(params)
-        endpoint = api_url + '/v1/completions'
+        endpoint = urljoin(api_url, '/v1/completions')
         response = requests.post(endpoint, json=request_body, headers={'Authorization': f'Bearer {api_key}'})
-        generated_text = response.json()['choices'][0]['text']
+        response_json = response.json()
+        generated_text = response_json['choices'][0]['text']
     return generated_text, request_body
