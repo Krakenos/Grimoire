@@ -6,13 +6,13 @@ from spacy.tokens import DocBin
 from sqlalchemy import desc, create_engine, select
 from sqlalchemy.orm import Session
 
-from memoir.api.request_models import Instruct
-from memoir.common.llm_helpers import count_context
-from memoir.common.loggers import general_logger, context_logger
-from memoir.common.utils import orm_get_or_create
-from memoir.core.settings import settings
-from memoir.core.tasks import summarize
-from memoir.db.models import Message, Knowledge
+from grimoire.api.request_models import Instruct
+from grimoire.common.llm_helpers import count_context
+from grimoire.common.loggers import general_logger, context_logger
+from grimoire.common.utils import orm_get_or_create
+from grimoire.core.settings import settings
+from grimoire.core.tasks import summarize
+from grimoire.db.models import Message, Knowledge
 
 nlp = spacy.load("en_core_web_trf")
 db = create_engine(settings['DB_ENGINE'])
@@ -150,7 +150,7 @@ def get_named_entities(chat, docs, session):
 # TODO this needs a heavy rewrite
 def fill_context(prompt, chat, docs, context_size, api_type):
     max_context = context_size
-    max_memoir_context = max_context * settings['context_percentage']
+    max_grimoire_context = max_context * settings['context_percentage']
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     pattern = instruct_regex()
     pattern_with_delimiters = f'({pattern})'
@@ -175,20 +175,20 @@ def fill_context(prompt, chat, docs, context_size, api_type):
             instance = session.scalars(query).first()
             if instance is not None:
                 summaries.append((instance.summary, instance.token_count, instance.entity))
-    memoir_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
-    while memoir_estimated_tokens > max_memoir_context:
+    grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
+    while grimoire_estimated_tokens > max_grimoire_context:
         summaries.pop()
-        memoir_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
-    memoir_text = ''
+        grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
+    grimoire_text = ''
     for summary in summaries:
-        memoir_text = memoir_text + f'[ {summary[2]}: {summary[0]} ]\n'
-    memoir_text_len = count_context(text=memoir_text, api_type=api_type,
+        grimoire_text = grimoire_text + f'[ {summary[2]}: {summary[0]} ]\n'
+    grimoire_text_len = count_context(text=grimoire_text, api_type=api_type,
                                     api_url=settings['main_api']['url'],
                                     api_auth=settings['main_api']['auth_key'])
     definitions_context_len = count_context(text=prompt_definitions, api_type=api_type,
                                             api_url=settings['main_api']['url'],
                                             api_auth=settings['main_api']['auth_key'])
-    max_chat_context = max_context - definitions_context_len - memoir_text_len
+    max_chat_context = max_context - definitions_context_len - grimoire_text_len
     starting_message = 1
     messages_text = ''.join(messages_with_delimiters[starting_message:])
     messages_len = count_context(text=messages_text, api_type=api_type,
@@ -208,7 +208,7 @@ def fill_context(prompt, chat, docs, context_size, api_type):
         messages_len = count_context(text=messages_text, api_type=api_type,
                                      api_url=settings['main_api']['url'],
                                      api_auth=settings['main_api']['auth_key'])
-    final_prompt = ''.join([prompt_definitions, memoir_text, messages_text])
+    final_prompt = ''.join([prompt_definitions, grimoire_text, messages_text])
     return final_prompt
 
 

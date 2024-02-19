@@ -3,7 +3,7 @@ from urllib.parse import urljoin
 import requests
 from transformers import AutoTokenizer
 
-from memoir.common.loggers import general_logger
+from grimoire.common.loggers import general_logger
 
 
 # TODO refactor this

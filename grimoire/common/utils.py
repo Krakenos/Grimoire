@@ -2,7 +2,7 @@ from urllib.parse import urljoin
 
 import requests
 
-from memoir.core.settings import settings
+from grimoire.core.settings import settings
 
 
 def get_passthrough(endpoint: str, auth_token=None) -> dict:

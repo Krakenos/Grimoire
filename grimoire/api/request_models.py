@@ -26,7 +26,7 @@ class Instruct(BaseModel):
     names: bool
 
 
-class Memoir(BaseModel):
+class Grimoire(BaseModel):
     chat_id: str
     instruct: Optional[Instruct] = None
 
@@ -37,7 +37,7 @@ class KAIGeneration(BaseModel):
     prompt: str
     max_context_length: PositiveInt
     max_length: PositiveInt
-    memoir: Memoir
+    grimoire: Grimoire
 
 
 class OAIGeneration(BaseModel):
@@ -48,7 +48,7 @@ class OAIGeneration(BaseModel):
     truncation_length: PositiveInt
     stream: bool = False
     api_type: str = 'GenericOAI'
-    memoir: Memoir
+    grimoire: Grimoire
 
 
 class OAITokenize(BaseModel):

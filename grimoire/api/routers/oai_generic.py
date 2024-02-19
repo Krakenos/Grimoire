@@ -5,10 +5,10 @@ import sseclient
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
-from memoir.api.request_models import OAIGeneration, OAITokenize, OAITokenEncode
-from memoir.common.utils import get_passthrough
-from memoir.core.memoir import process_prompt, update_instruct
-from memoir.core.settings import settings
+from grimoire.api.request_models import OAIGeneration, OAITokenize, OAITokenEncode
+from grimoire.common.utils import get_passthrough
+from grimoire.core.grimoire import process_prompt, update_instruct
+from grimoire.core.settings import settings
 
 router = APIRouter(tags=["Generic OAI passthrough"])
 
@@ -35,11 +35,11 @@ async def completions(oai_request: OAIGeneration, request: Request):
             yield f'data: {event.data}\n\n'
 
     passthrough_json = oai_request.model_dump()
-    if oai_request.memoir.instruct is not None:
-        update_instruct(oai_request.memoir.instruct)
+    if oai_request.grimoire.instruct is not None:
+        update_instruct(oai_request.grimoire.instruct)
     passthrough_url = urljoin(settings['main_api']['url'], '/v1/completions')
     passthrough_json['api_server'] = settings['main_api']['url']
-    new_prompt = process_prompt(oai_request.prompt, oai_request.memoir.chat_id, oai_request.truncation_length,
+    new_prompt = process_prompt(oai_request.prompt, oai_request.grimoire.chat_id, oai_request.truncation_length,
                                 oai_request.api_type)
     passthrough_json['prompt'] = new_prompt
     if oai_request.stream:

@@ -3,7 +3,7 @@ import os
 import yaml
 from dotenv import load_dotenv
 
-from memoir.core.default_settings import defaults
+from grimoire.core.default_settings import defaults
 
 load_dotenv()
 

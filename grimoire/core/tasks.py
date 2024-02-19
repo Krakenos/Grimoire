@@ -3,10 +3,10 @@ from celery_singleton import Singleton
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from memoir.common.llm_helpers import count_context, generate_text
-from memoir.common.loggers import summary_logger
-from memoir.core.settings import settings
-from memoir.db.models import Knowledge, Message
+from grimoire.common.llm_helpers import count_context, generate_text
+from grimoire.common.loggers import summary_logger
+from grimoire.core.settings import settings
+from grimoire.db.models import Knowledge, Message
 
 celery_app = Celery('tasks', broker=settings['CELERY_BROKER_URL'])
 

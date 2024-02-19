@@ -1,10 +1,10 @@
 services:
-  memoir:
+  grimoire:
     build:
       context: .
       dockerfile: Dockerfile
       target: project
-    container_name: memoir
+    container_name: grimoire
     environment:
       - MAIN_API_URL=http://127.0.0.1:5001
       - MAIN_API_AUTH=AuthKey

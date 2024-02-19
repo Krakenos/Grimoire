@@ -1,6 +1,6 @@
 import logging
 
-from memoir.core.settings import settings
+from grimoire.core.settings import settings
 
 if settings['DEBUG']:
     LOG_LEVEL = logging.DEBUG
