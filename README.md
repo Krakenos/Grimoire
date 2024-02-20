@@ -3,7 +3,7 @@
 Grimoire is a server that implements long term memory for AI chatbots through processing prompts and generating description of concepts such as locations, people, items. It's main purpose is for conversational AI chatbots. The server is meant to be slotted between frontend that interacts with LLM(such as SillyTavern) and backend that host the LLM(Aphrodite, KoboldAI etc).
 
 ### How it works
-Grimoire collects the prompts that are meant to be sent to LLM and analyzes them with Natural Language Processing (NLP), it sends collected prompts to generate descriptions of concepts found in messages, and in the end, it inserts them into current context. It's essentially Retrieval Augmented Generation (RAG) system that collects and generates it's database throughout the conversation with AI. It requires 2 language models to run. One for the actual chatbot, and other for summarization tasks.
+Grimoire collects the prompts that are meant to be sent to LLM and analyzes them with Natural Language Processing (NLP), it sends collected prompts to generate descriptions of concepts found in messages, and in the end, it inserts them into current context. It's essentially Retrieval Augmented Generation (RAG) system that collects and generates it's database throughout the conversation with AI. It can run with 2 language models. One for the actual chatbot, and other for summarization tasks, or with one that does both of those things.
 
 ### IMPORTANT NOTE
 Grimoire is still VERY EARLY in development. There is bound to be a lot of bugs, there will be breaking changes in codebase and it's not stable. You will most likely lose the data that Grimoire has collected along the way. It's a prototype that's not production ready.
@@ -29,18 +29,24 @@ For Windows, you also have to install:
 pip install eventlet
 ```
 
-Copy .env_template file and name it .env. Fill the following variables
-```
-MAIN_API_URL = 'http://127.0.0.1:5001'          # Url of main api used to generate bot responses
-MAIN_API_AUTH = 'MyApiKey'                      # API key to main api, remove entry if there is none
-SIDE_API_URL = 'http://127.0.0.1:5002'          # Url of side api used to generate descriptions of items etc
-CONTEXT_PERCENTAGE = 0.25                       # Maximum amount of tokens that Grimoire database entries will take, when filling the context
-DB_ENGINE = 'sqlite:///db.sqlite3'              # Database url, defaults to sqlite file
-CELERY_BROKER_URL = 'redis://localhost:6379/0'  # Url to message broker, in our case Redis, leave it as it is if you installed through docker
-DEBUG = True                                    # Enables debug logs
-LOG_PROMPTS = True                              # Enables prompt logging
-```
+Edit settings.yaml file with your values:
+```yaml
+DEBUG: True # Enables debug logs
+LOG_PROMPTS: True # Enables prompt logging
+single_api_mode: False # Single API mode, change to True if you want to use main api for summarization.
+context_percentage: 0.25 # How much of prompt context Grimoire entries will take
+main_api:
+  backend: GenericOAI # Accepted values: GenericOAI, Kobold, KoboldCPP, Aphrodite, Tabby
+  url: http://127.0.0.1:5001 # url to your main api that will generate responses
+  auth_key: 'your-api-authkey' # api key to your main api, leave empty or delete entry if there is none
+side_api: # The whole section below is ignored if single api mode is set to True
+  backend: GenericOAI # Accepted values: GenericOAI, Kobold, KoboldCPP, Aphrodite, Tabby
+  url: http://127.0.0.1:5002 # Url to side api that will summarize entries
+  auth_key: 'your-api-authkey' # Api key to side api, leave empty or delete entry if there is none
+  input_sequence: '### Instruction:\n' # Instruct sequence for side api
+  output_sequence: '\n### Response:\n' # Instruct sequence for side api
 
+```
 Setup database:
 
 ```bash
@@ -50,22 +56,12 @@ alembic upgrade head
 ### Usage
 Following backends are supported:
 
-Main API:
 - Aphrodite
+- Tabby
 - KoboldCPP
 
-Side API:
-- KoboldCPP
 
-Following instruct presets for LLM's are supported:
-
-Main API:
-- Alpaca
-
-Side API:
-- Mistral
-
-To start a process that will direct summarization prompts to side api use the following command:
+To start a process that will make summarization prompts use the following command:
 
 Linux
 ```bash
@@ -82,7 +78,7 @@ And to run Grimoire API use:
 python run.py
 ```
 
-Grimoire API starts by default on port 5005, and you interact with it pretty much the same way as you would with your main api (using the same endpoints, you can also view available endpoints at `http://127.0.0.1/docs`). The only change that is required is including additional field in json called `Grimoire` that includes id of the current chat, example json for Aphrodite:
+Grimoire API starts by default on port 5005, and you interact with it pretty much the same way as you would with your main api (using the same endpoints, you can also view available endpoints at http://127.0.0.1:5005/docs). The only change that is required is including additional field in json called `Grimoire` that includes id of the current chat, example json for generic OAI endpoints:
 
 ```json
 {
@@ -94,3 +90,7 @@ Grimoire API starts by default on port 5005, and you interact with it pretty muc
   }
 }
 ```
+
+Currently, the only frontend that works with Grimoire is my [forked version of SillyTavern](https://github.com/Krakenos/SillyTavern) that has hardcoded the required fields. To use Grimoire with it. Set the settings to whatever your main api is (so for example: Text completion Aphrodite), and then set api url to `http://127.0.0.1:5005/`
+
+Note: Lorebooks/world info and author's note break Grimoire, so it's not compatible with these features as of now.
