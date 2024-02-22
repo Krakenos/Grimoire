@@ -8,27 +8,12 @@ Grimoire collects the prompts that are meant to be sent to LLM and analyzes them
 ### IMPORTANT NOTE
 Grimoire is still VERY EARLY in development. There is bound to be a lot of bugs, there will be breaking changes in codebase and it's not stable. You will most likely lose the data that Grimoire has collected along the way. It's a prototype that's not production ready.
 ### Setup
-#### Running from source
+#### Prerequisites
+To run Grimoire you need to have installed:
+- Python 3.10 or above
+- Docker
 
-To run from source following is required:
-- Python >3.10
-- Redis (Either installed natively or in docker)
-
-To install Redis through docker use the following command:
-```bash
-docker run -d --name redis -p 6379:6379 redis
-```
-
-Installing Grimoire requirements:
-```bash
-pip install -r requirements.txt
-python -m spacy download en_core_web_trf
-```
-For Windows, you also have to install:
-```bash
-pip install eventlet
-```
-
+#### Quick start
 Edit settings.yaml file with your values:
 ```yaml
 DEBUG: True # Enables debug logs
@@ -47,11 +32,14 @@ side_api: # The whole section below is ignored if single api mode is set to True
   output_sequence: '\n### Response:\n' # Instruct sequence for side api
 
 ```
-Setup database:
 
-```bash
-alembic upgrade head
-```
+Depending on your system, run `Start.bat` for windows, or `Start.sh` on linux. These scripts will automatically:
+- download and run docker image for redis
+- create and enter python virtual environment
+- install required dependencies
+- run Grimoire
+
+In the end script will open 2 terminal windows, both of them are required for Grimoire to run properly
 
 ### Usage
 Following backends are supported:
@@ -60,6 +48,45 @@ Following backends are supported:
 - Tabby
 - KoboldCPP
 
+Grimoire API starts by default on port 5005, and you interact with it pretty much the same way as you would with your main api (using the same endpoints, you can also view available endpoints at http://127.0.0.1:5005/docs. The only change that is required is including additional field in json called `Grimoire` that includes id of the current chat, example json for generic OAI endpoints:
+
+```json
+{
+  "prompt": "Example prompt",
+  "max_tokens": 300,
+  "truncation_length": 4096,
+  "grimoire": {
+    "chat_id": "id-of-current-chat"
+  }
+}
+```
+
+Currently, the only frontend that works with Grimoire is my [forked version of SillyTavern](https://github.com/Krakenos/SillyTavern) that has hardcoded the required fields. To use Grimoire with it. Set the settings to whatever your main api is (so for example: Text completion Aphrodite), and then set api url to `http://127.0.0.1:5005/`
+
+Note: Lorebooks/world info and author's note break Grimoire, so it's not compatible with these features as of now.
+### Running from source
+If instead of using `Start` scripts you want to run Grimoire manually, here is how you do it.
+
+To install Redis through docker use the following command:
+```bash
+docker run -d --name redis -p 6379:6379 redis
+```
+
+Installing Grimoire requirements:
+```bash
+pip install -r requirements.txt
+python -m spacy download en_core_web_trf
+```
+For Windows, you also have to install:
+```bash
+pip install eventlet
+```
+
+Setup database:
+
+```bash
+alembic upgrade head
+```
 
 To start a process that will make summarization prompts use the following command:
 
@@ -77,20 +104,3 @@ And to run Grimoire API use:
 ```bash
 python run.py
 ```
-
-Grimoire API starts by default on port 5005, and you interact with it pretty much the same way as you would with your main api (using the same endpoints, you can also view available endpoints at http://127.0.0.1:5005/docs). The only change that is required is including additional field in json called `Grimoire` that includes id of the current chat, example json for generic OAI endpoints:
-
-```json
-{
-  "prompt": "Example prompt",
-  "max_tokens": 300,
-  "truncation_length": 4096,
-  "grimoire": {
-    "chat_id": "id-of-current-chat"
-  }
-}
-```
-
-Currently, the only frontend that works with Grimoire is my [forked version of SillyTavern](https://github.com/Krakenos/SillyTavern) that has hardcoded the required fields. To use Grimoire with it. Set the settings to whatever your main api is (so for example: Text completion Aphrodite), and then set api url to `http://127.0.0.1:5005/`
-
-Note: Lorebooks/world info and author's note break Grimoire, so it's not compatible with these features as of now.
