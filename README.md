@@ -48,7 +48,10 @@ Following backends are supported:
 - Tabby
 - KoboldCPP
 
-Grimoire API starts by default on port 5005, and you interact with it pretty much the same way as you would with your main api (using the same endpoints, you can also view available endpoints at http://127.0.0.1:5005/docs. The only change that is required is including additional field in json called `Grimoire` that includes id of the current chat, example json for generic OAI endpoints:
+Currently, the only frontend that works with Grimoire is SillyTavern, however you have to install  [Grimoire extension](https://github.com/Krakenos/Grimoire-ST-Extension/) in order to make it work. To use Grimoire, set the settings to whatever your main api is (so for example: Text completion Aphrodite), and then set api url to `http://127.0.0.1:5005/`
+
+
+Grimoire API starts by default on port 5005, and you interact with it pretty much the same way as you would with your main api(using the same endpoints, you can also view available endpoints at http://127.0.0.1:5005/docs. The only change that is required is including additional field in json called `grimoire` that includes id of the current chat, example json for generic OAI endpoints:
 
 ```json
 {
@@ -60,8 +63,6 @@ Grimoire API starts by default on port 5005, and you interact with it pretty muc
   }
 }
 ```
-
-Currently, the only frontend that works with Grimoire is my [forked version of SillyTavern](https://github.com/Krakenos/SillyTavern) that has hardcoded the required fields. To use Grimoire with it. Set the settings to whatever your main api is (so for example: Text completion Aphrodite), and then set api url to `http://127.0.0.1:5005/`
 
 Note: Lorebooks/world info and author's note break Grimoire, so it's not compatible with these features as of now.
 ### Running from source
