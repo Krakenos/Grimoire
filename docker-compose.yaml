@@ -3,17 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: project
+      target: run
     container_name: grimoire
-    environment:
-      - MAIN_API_URL=http://127.0.0.1:5001
-      - MAIN_API_AUTH=AuthKey
-      - SIDE_API_URL=http://127.0.0.1:5002
-      - CONTEXT_PERCENTAGE=0.25
-      - DB_ENGINE=sqlite:///db.sqlite3
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - DEBUG = True
-      - LOG_PROMPTS = True
+    env_file: .env_template
     ports:
       - 5005:5005
 
