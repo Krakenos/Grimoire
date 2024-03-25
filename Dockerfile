@@ -1,4 +1,5 @@
 ARG PYTHON_VERSION=3.10.12
+
 FROM python:${PYTHON_VERSION}-slim as base
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -11,5 +12,7 @@ RUN python -m spacy download en_core_web_trf
 
 FROM deps as project
 COPY . .
+
+FROM project as run
 EXPOSE 5005
 ENTRYPOINT ["./entrypoint.sh"]
