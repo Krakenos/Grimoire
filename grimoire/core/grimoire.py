@@ -88,20 +88,35 @@ def get_docs(messages, chat_id, session):
     return docs
 
 
-def process_prompt(prompt, chat, context_length, api_type=None):
+def get_extra_info(prompt, generation_data):
+    floating_prompts = []
+    for message in generation_data.finalMesSend:
+        floating_prompts.append((message.message, message.extensionPrompts))
+    return floating_prompts
+
+
+def process_prompt(prompt, chat, context_length, api_type=None, generation_data=None):
+    start_time = timeit.default_timer()
+
     if api_type is None:
         api_type = settings['main_api']['backend']
-    start_time = timeit.default_timer()
+
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
+
     if settings['single_api_mode']:
         summarization_api = settings['main_api'].copy()
         if api_type is not None:
             summarization_api['backend'] = api_type
     else:
         summarization_api = settings['side_api'].copy()
+
+    if generation_data:
+        floating_prompts = get_extra_info(prompt, generation_data)
+
     pattern = instruct_regex()
     messages = re.split(pattern, prompt)
     messages = [message.strip() for message in messages]  # remove trailing newlines
+
     with Session(db) as session:
         doc_time = timeit.default_timer()
         docs = get_docs(messages, chat, session)
@@ -183,8 +198,8 @@ def fill_context(prompt, chat, docs, context_size, api_type):
     for summary in summaries:
         grimoire_text = grimoire_text + f'[ {summary[2]}: {summary[0]} ]\n'
     grimoire_text_len = count_context(text=grimoire_text, api_type=api_type,
-                                    api_url=settings['main_api']['url'],
-                                    api_auth=settings['main_api']['auth_key'])
+                                      api_url=settings['main_api']['url'],
+                                      api_auth=settings['main_api']['auth_key'])
     definitions_context_len = count_context(text=prompt_definitions, api_type=api_type,
                                             api_url=settings['main_api']['url'],
                                             api_auth=settings['main_api']['auth_key'])

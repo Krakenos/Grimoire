@@ -43,10 +43,7 @@ class GenerationData(BaseModel):
     beforeScenarioAnchor: str
     afterScenarioAnchor: str
     storyString: str
-    mesExmString: str
-    mesSendString: str
     finalMesSend: list[Messages]
-    generationPromptCache: str
     main: str
     jailbreak: str
     naiPreamble: str

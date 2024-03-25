@@ -31,7 +31,8 @@ async def generate(k_request: KAIGeneration):
     passthrough_json = k_request.model_dump()
     if k_request.grimoire.instruct is not None:
         update_instruct(k_request.grimoire.instruct)
-    new_prompt = process_prompt(k_request.prompt, k_request.grimoire.chat_id, k_request.max_context_length)
+    new_prompt = process_prompt(k_request.prompt, k_request.grimoire.chat_id, k_request.max_context_length, 'kobold',
+                                k_request.grimoire.generation_data)
     passthrough_url = urljoin(settings['main_api']['url'], '/api/v1/generate')
     passthrough_json['prompt'] = new_prompt
     kobold_response = requests.post(passthrough_url, json=passthrough_json)
