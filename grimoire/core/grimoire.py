@@ -117,7 +117,7 @@ def process_prompt(prompt, chat, context_length, api_type=None, generation_data=
     pattern = instruct_regex()
     split_prompt = re.split(pattern, prompt)
     split_prompt = [message.strip() for message in split_prompt]  # remove trailing newlines
-    all_messages = split_prompt[1:-1]
+    all_messages = split_prompt[1:-1]  # includes injected entries at depth like WI and AN
     chat_messages = []
 
     if floating_prompts:
@@ -127,28 +127,31 @@ def process_prompt(prompt, chat, context_length, api_type=None, generation_data=
 
     with Session(db) as session:
         doc_time = timeit.default_timer()
-        docs = get_docs(split_prompt, chat, session)
+        docs = get_docs(chat_messages, chat, session)
         doc_end_time = timeit.default_timer()
         general_logger.debug(f'Creating spacy docs {doc_end_time - doc_time} seconds')
-        last_messages = split_prompt[1:-2]
-        last_docs = docs[1:-2]
+        last_messages = chat_messages[:-1]  # exclude user prompt
+        last_docs = docs[:-1]
         new_message_indices = save_messages(last_messages, last_docs, chat, session)
-        get_named_entities(chat, last_docs, session)
+        save_named_entities(chat, last_docs, session)
+
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
     new_prompt = fill_context(prompt, chat, docs, context_length, api_type)
+
     for doc in docs_to_summarize:
         for entity in set(doc.ents):
             if entity.label_ not in banned_labels:
                 general_logger.debug(f'{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}')
                 summarize.delay(entity.text.lower(), entity.label_, chat, summarization_api, settings['summarization'],
                                 settings['DB_ENGINE'])
+
     end_time = timeit.default_timer()
     general_logger.info(f'Prompt processing time: {end_time - start_time}s')
     context_logger.debug(f'Old prompt: \n{prompt}\n\nNew prompt: \n{new_prompt}')
     return new_prompt
 
 
-def get_named_entities(chat, docs, session):
+def save_named_entities(chat, docs, session):
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     for doc in docs:
         db_message = orm_get_or_create(session, Message, message=doc.text)
