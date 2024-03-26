@@ -26,7 +26,7 @@ class Instruct(BaseModel):
     names: bool
 
 
-class Messages(BaseModel):
+class Message(BaseModel):
     message: str
     extensionPrompts: list[str]
     injected: bool
@@ -44,7 +44,7 @@ class GenerationData(BaseModel):
     beforeScenarioAnchor: str
     afterScenarioAnchor: str
     storyString: str
-    finalMesSend: list[Messages]
+    finalMesSend: list[Message]
     main: str
     jailbreak: str
     naiPreamble: str

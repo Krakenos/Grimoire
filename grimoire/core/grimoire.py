@@ -136,7 +136,7 @@ def process_prompt(prompt, chat, context_length, api_type=None, generation_data=
         save_named_entities(chat, last_docs, session)
 
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
-    new_prompt = fill_context(prompt, chat, docs, context_length, api_type)
+    new_prompt = fill_context(prompt, floating_prompts, chat, docs, context_length, api_type)
 
     for doc in docs_to_summarize:
         for entity in set(doc.ents):
@@ -174,7 +174,7 @@ def save_named_entities(chat, docs, session):
 
 
 # TODO this needs a heavy rewrite
-def fill_context(prompt, chat, docs, context_size, api_type):
+def fill_context(prompt, floating_prompts, chat, docs, context_size, api_type):
     max_context = context_size
     max_grimoire_context = max_context * settings['context_percentage']
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
@@ -184,12 +184,21 @@ def fill_context(prompt, chat, docs, context_size, api_type):
     messages_with_delimiters = re.split(pattern_with_delimiters, prompt)
     prompt_definitions = messages[0]  # first portion should always be instruction and char definitions
     full_ent_list = []
+    injected_prompt_indices = []
+
+    for mes_index, message in enumerate(floating_prompts):
+        if message.injected:
+            corresponding_index = (mes_index + 1) * 2
+            injected_prompt_indices.append(corresponding_index)
+
     for doc in docs:
         general_logger.debug(doc.text_with_ws)
         ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
         full_ent_list += ent_list
+
     unique_ents = list(dict.fromkeys(full_ent_list[::-1]))  # unique ents ordered from bottom of context
     summaries = []
+
     with Session(db) as session:
         for ent in unique_ents:
             query = select(Knowledge).where(Knowledge.entity.ilike(ent[0]),
@@ -201,13 +210,18 @@ def fill_context(prompt, chat, docs, context_size, api_type):
             instance = session.scalars(query).first()
             if instance is not None:
                 summaries.append((instance.summary, instance.token_count, instance.entity))
+
     grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
+
     while grimoire_estimated_tokens > max_grimoire_context:
         summaries.pop()
         grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
+
     grimoire_text = ''
+
     for summary in summaries:
         grimoire_text = grimoire_text + f'[ {summary[2]}: {summary[0]} ]\n'
+
     grimoire_text_len = count_context(text=grimoire_text, api_type=api_type,
                                       api_url=settings['main_api']['url'],
                                       api_auth=settings['main_api']['auth_key'])
@@ -220,20 +234,37 @@ def fill_context(prompt, chat, docs, context_size, api_type):
     messages_len = count_context(text=messages_text, api_type=api_type,
                                  api_url=settings['main_api']['url'],
                                  api_auth=settings['main_api']['auth_key'])
+    messages_to_merge = {original_index: text for original_index, text in enumerate(messages_with_delimiters)}
+    messages_to_merge.pop(0)
+
+    # TODO edge case where we can't remove more messages, but still end up above context limit
+    #  (WI+grimoire overflow)
     while messages_len > max_chat_context:
+        first_message_index = starting_message + 1
         starting_message += 2
-        first_instruct = messages_with_delimiters[starting_message]
+
+        if first_message_index in injected_prompt_indices:
+            continue
+
+        messages_to_merge.pop(starting_message)  # pop the instruct part
+        messages_to_merge.pop(first_message_index)  # pop actual message content
+
+        messages_list = [messages_to_merge[index] for index in sorted(messages_to_merge.keys())]
+        first_instruct = messages_list[0]
         first_output_seq = settings['main_api']['first_output_sequence']
         output_seq = settings['main_api']['output_sequence']
         separator_seq = settings['main_api']['separator_sequence']
+
         if first_instruct == output_seq and first_output_seq:
-            messages_with_delimiters[starting_message] = first_output_seq
+            messages_list[0] = first_output_seq
         elif separator_seq in first_instruct:
-            messages_with_delimiters[starting_message] = first_instruct.replace(separator_seq, '')
-        messages_text = ''.join(messages_with_delimiters[starting_message:])
+            messages_list[0] = first_instruct.replace(separator_seq, '')
+
+        messages_text = ''.join(messages_list)
         messages_len = count_context(text=messages_text, api_type=api_type,
                                      api_url=settings['main_api']['url'],
                                      api_auth=settings['main_api']['auth_key'])
+
     final_prompt = ''.join([prompt_definitions, grimoire_text, messages_text])
     return final_prompt
 
