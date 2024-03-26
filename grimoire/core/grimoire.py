@@ -6,7 +6,7 @@ from spacy.tokens import DocBin
 from sqlalchemy import desc, create_engine, select
 from sqlalchemy.orm import Session
 
-from grimoire.api.request_models import Instruct
+from grimoire.api.request_models import Instruct, GenerationData
 from grimoire.common.llm_helpers import count_context
 from grimoire.common.loggers import general_logger, context_logger
 from grimoire.common.utils import orm_get_or_create
@@ -88,10 +88,10 @@ def get_docs(messages, chat_id, session):
     return docs
 
 
-def get_extra_info(prompt, generation_data):
+def get_extra_info(prompt, generation_data: GenerationData):
     floating_prompts = []
     for message in generation_data.finalMesSend:
-        floating_prompts.append((message.message, message.extensionPrompts))
+        floating_prompts.append(message)
     return floating_prompts
 
 
@@ -102,6 +102,7 @@ def process_prompt(prompt, chat, context_length, api_type=None, generation_data=
         api_type = settings['main_api']['backend']
 
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
+    floating_prompts = None
 
     if settings['single_api_mode']:
         summarization_api = settings['main_api'].copy()
@@ -114,15 +115,22 @@ def process_prompt(prompt, chat, context_length, api_type=None, generation_data=
         floating_prompts = get_extra_info(prompt, generation_data)
 
     pattern = instruct_regex()
-    messages = re.split(pattern, prompt)
-    messages = [message.strip() for message in messages]  # remove trailing newlines
+    split_prompt = re.split(pattern, prompt)
+    split_prompt = [message.strip() for message in split_prompt]  # remove trailing newlines
+    all_messages = split_prompt[1:-1]
+    chat_messages = []
+
+    if floating_prompts:
+        for mes_index, message in enumerate(all_messages):
+            if not floating_prompts[mes_index].injected:
+                chat_messages.append(message)
 
     with Session(db) as session:
         doc_time = timeit.default_timer()
-        docs = get_docs(messages, chat, session)
+        docs = get_docs(split_prompt, chat, session)
         doc_end_time = timeit.default_timer()
         general_logger.debug(f'Creating spacy docs {doc_end_time - doc_time} seconds')
-        last_messages = messages[1:-2]
+        last_messages = split_prompt[1:-2]
         last_docs = docs[1:-2]
         new_message_indices = save_messages(last_messages, last_docs, chat, session)
         get_named_entities(chat, last_docs, session)

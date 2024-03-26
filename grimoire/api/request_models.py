@@ -29,6 +29,7 @@ class Instruct(BaseModel):
 class Messages(BaseModel):
     message: str
     extensionPrompts: list[str]
+    injected: bool
 
 
 class GenerationData(BaseModel):
