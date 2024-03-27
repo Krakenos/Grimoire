@@ -173,7 +173,6 @@ def save_named_entities(chat, docs, session):
             session.commit()
 
 
-# TODO this needs a heavy rewrite
 def fill_context(prompt, floating_prompts, chat, docs, context_size, api_type):
     max_context = context_size
     max_grimoire_context = max_context * settings['context_percentage']
@@ -183,77 +182,84 @@ def fill_context(prompt, floating_prompts, chat, docs, context_size, api_type):
     messages = re.split(pattern, prompt)
     messages_with_delimiters = re.split(pattern_with_delimiters, prompt)
     prompt_definitions = messages[0]  # first portion should always be instruction and char definitions
-    full_ent_list = []
-    injected_prompt_indices = []
+    injected_prompt_indices = get_injected_indices(floating_prompts)
+    unique_ents = get_ordered_entities(banned_labels, docs)
+    summaries = get_summaries(chat, unique_ents)
 
-    for mes_index, message in enumerate(floating_prompts):
-        if message.injected:
-            corresponding_index = (mes_index + 1) * 2
-            injected_prompt_indices.append(corresponding_index)
+    grimoire_text, grimoire_text_len = generate_grimoire_text(api_type, max_grimoire_context,
+                                                              summaries)
 
-    for doc in docs:
-        general_logger.debug(doc.text_with_ws)
-        ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
-        full_ent_list += ent_list
-
-    unique_ents = list(dict.fromkeys(full_ent_list[::-1]))  # unique ents ordered from bottom of context
-    summaries = []
-
-    with Session(db) as session:
-        for ent in unique_ents:
-            query = select(Knowledge).where(Knowledge.entity.ilike(ent[0]),
-                                            Knowledge.entity_type == 'NAMED ENTITY',
-                                            Knowledge.chat_id == chat,
-                                            Knowledge.summary.isnot(None),
-                                            Knowledge.summary.isnot(''), Knowledge.token_count.isnot(None),
-                                            Knowledge.token_count.isnot(0))
-            instance = session.scalars(query).first()
-            if instance is not None:
-                summaries.append((instance.summary, instance.token_count, instance.entity))
-
-    grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
-
-    while grimoire_estimated_tokens > max_grimoire_context:
-        summaries.pop()
-        grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
-
-    grimoire_text = ''
-
-    for summary in summaries:
-        grimoire_text = grimoire_text + f'[ {summary[2]}: {summary[0]} ]\n'
-
-    grimoire_text_len = count_context(text=grimoire_text, api_type=api_type,
-                                      api_url=settings['main_api']['url'],
-                                      api_auth=settings['main_api']['auth_key'])
     definitions_context_len = count_context(text=prompt_definitions, api_type=api_type,
                                             api_url=settings['main_api']['url'],
                                             api_auth=settings['main_api']['auth_key'])
+
     max_chat_context = max_context - definitions_context_len - grimoire_text_len
-    starting_message = 1
-    messages_text = ''.join(messages_with_delimiters[starting_message:])
+
+    context_overflow, messages_text, min_message_context = chat_messages_culling(api_type, injected_prompt_indices,
+                                                                                 max_chat_context,
+                                                                                 messages_with_delimiters)
+
+    # Grimoire + WI context overflow
+    if context_overflow:
+        general_logger.warning(f'Context overflow after culling messages. Trimming grimoire entries')
+        grimoire_text = grimoire_entries_culling(api_type, definitions_context_len, grimoire_text, grimoire_text_len,
+                                                 max_context, min_message_context)
+
+    if grimoire_text is None:
+        general_logger.warning(f'No Grimoire entries. Passing the original prompt.')
+        return prompt
+
+    final_prompt = ''.join([prompt_definitions, grimoire_text, messages_text])
+    return final_prompt
+
+
+def grimoire_entries_culling(api_type, definitions_context_len, grimoire_text, grimoire_text_len, max_context,
+                             min_message_context):
+    starting_grimoire_index = 0
+    max_grimoire_context = max_context - definitions_context_len - min_message_context
+    grimoire_entry_list = grimoire_text.splitlines()
+    max_grimoire_index = len(grimoire_entry_list) - 1
+
+    # This should never happen unless there is some bug in frontend, and it sent prompt that's above context window
+    if max_grimoire_context < 0:
+        general_logger.error(f'Prompt is above declared max context.')
+        return None
+
+    while max_grimoire_context < grimoire_text_len and starting_grimoire_index < max_grimoire_index:
+        starting_grimoire_index += 1
+        grimoire_text = '\n'.join(grimoire_entry_list[starting_grimoire_index:])
+        grimoire_text_len = count_context(text=grimoire_text, api_type=api_type,
+                                          api_url=settings['main_api']['url'],
+                                          api_auth=settings['main_api']['auth_key'])
+
+    return grimoire_text
+
+
+def chat_messages_culling(api_type, injected_prompt_indices, max_chat_context, messages_with_delimiters):
+    first_instruct_index = 1
+    messages_text = ''.join(messages_with_delimiters[first_instruct_index:])
     messages_len = count_context(text=messages_text, api_type=api_type,
                                  api_url=settings['main_api']['url'],
                                  api_auth=settings['main_api']['auth_key'])
     messages_to_merge = {original_index: text for original_index, text in enumerate(messages_with_delimiters)}
     messages_to_merge.pop(0)
-
     context_overflow = False
     max_index = max(messages_to_merge.keys())
     min_message_context = 0
 
     while messages_len > max_chat_context:
-        first_message_index = starting_message + 1
-        starting_message += 2
+        first_message_index = first_instruct_index + 1
+        first_instruct_index += 2
 
         if first_message_index in injected_prompt_indices:
             continue
 
-        if starting_message > max_index:  # TODO check if that's a proper index
+        if first_instruct_index > max_index:  # TODO check if that's a proper index
             context_overflow = True
             min_message_context = messages_len
             break
 
-        messages_to_merge.pop(starting_message)  # pop the instruct part
+        messages_to_merge.pop(first_instruct_index)  # pop the instruct part
         messages_to_merge.pop(first_message_index)  # pop actual message content
 
         messages_list = [messages_to_merge[index] for index in sorted(messages_to_merge.keys())]
@@ -272,28 +278,65 @@ def fill_context(prompt, floating_prompts, chat, docs, context_size, api_type):
                                      api_url=settings['main_api']['url'],
                                      api_auth=settings['main_api']['auth_key'])
 
-    # Grimoire + WI context overflow
-    if context_overflow:
-        general_logger.warning(f'Context overflow after culling messages. Trimming grimoire entries')
-        starting_grimoire_index = 0
-        max_grimoire_context = max_context - definitions_context_len - min_message_context
-        grimoire_entry_list = grimoire_text.splitlines()
-        max_grimoire_index = len(grimoire_entry_list) - 1
+    return context_overflow, messages_text, min_message_context
 
-        # This should never happen unless there is some bug in frontend, and it sent prompt that's above context window
-        if max_grimoire_context < 0:
-            general_logger.error(f'Prompt is above declared max context. Passing the original prompt.')
-            return prompt
 
-        while max_grimoire_context < grimoire_text_len and starting_grimoire_index < max_grimoire_index:
-            starting_grimoire_index += 1
-            grimoire_text = '\n'.join(grimoire_entry_list[starting_grimoire_index:])
-            grimoire_text_len = count_context(text=grimoire_text, api_type=api_type,
-                                              api_url=settings['main_api']['url'],
-                                              api_auth=settings['main_api']['auth_key'])
+def generate_grimoire_text(api_type, max_grimoire_context, summaries):
+    grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
+    grimoire_text = ''
 
-    final_prompt = ''.join([prompt_definitions, grimoire_text, messages_text])
-    return final_prompt
+    while grimoire_estimated_tokens > max_grimoire_context:
+        summaries.pop()
+        grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
+
+    for summary in summaries:
+        grimoire_text = grimoire_text + f'[ {summary[2]}: {summary[0]} ]\n'
+
+    grimoire_text_len = count_context(text=grimoire_text, api_type=api_type,
+                                      api_url=settings['main_api']['url'],
+                                      api_auth=settings['main_api']['auth_key'])
+    return grimoire_text, grimoire_text_len
+
+
+def get_summaries(chat, unique_ents):
+    summaries = []
+    with Session(db) as session:
+        for ent in unique_ents:
+            query = select(Knowledge).where(Knowledge.entity.ilike(ent[0]),
+                                            Knowledge.entity_type == 'NAMED ENTITY',
+                                            Knowledge.chat_id == chat,
+                                            Knowledge.summary.isnot(None),
+                                            Knowledge.summary.isnot(''), Knowledge.token_count.isnot(None),
+                                            Knowledge.token_count.isnot(0))
+            instance = session.scalars(query).first()
+
+            if instance is not None:
+                summaries.append((instance.summary, instance.token_count, instance.entity))
+
+    return summaries
+
+
+def get_ordered_entities(banned_labels, docs):
+    full_ent_list = []
+
+    for doc in docs:
+        general_logger.debug(doc.text_with_ws)
+        ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
+        full_ent_list += ent_list
+
+    unique_ents = list(dict.fromkeys(full_ent_list[::-1]))  # unique ents ordered from bottom of context
+    return unique_ents
+
+
+def get_injected_indices(floating_prompts):
+    injected_prompt_indices = []
+
+    for mes_index, message in enumerate(floating_prompts):
+        if message.injected:
+            corresponding_index = (mes_index + 1) * 2
+            injected_prompt_indices.append(corresponding_index)
+
+    return injected_prompt_indices
 
 
 def update_instruct(instruct_info: Instruct):
