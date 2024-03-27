@@ -5,6 +5,7 @@ defaults = {
     'LOG_PROMPTS': False,
     'single_api_mode': False,
     'context_percentage': 0.25,
+    'preserved_messages': 2,
     'main_api': {
         'backend': 'GenericOAI',
         'url': '',

@@ -40,7 +40,7 @@ async def completions(oai_request: OAIGeneration, request: Request):
     passthrough_url = urljoin(settings['main_api']['url'], '/v1/completions')
     passthrough_json['api_server'] = settings['main_api']['url']
     new_prompt = process_prompt(oai_request.prompt, oai_request.grimoire.chat_id, oai_request.truncation_length,
-                                oai_request.api_type)
+                                oai_request.api_type, oai_request.grimoire.generation_data)
     passthrough_json['prompt'] = new_prompt
     if oai_request.stream:
         return StreamingResponse(streaming_messages(passthrough_url, passthrough_json), media_type="text/event-stream")

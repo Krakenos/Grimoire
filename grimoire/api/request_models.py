@@ -26,9 +26,34 @@ class Instruct(BaseModel):
     names: bool
 
 
+class Message(BaseModel):
+    message: str
+    extensionPrompts: list[str]
+    injected: bool
+
+
+class GenerationData(BaseModel):
+    description: str
+    personality: str
+    persona: str
+    scenario: str
+    char: str
+    user: str
+    worldInfoBefore: str
+    worldInfoAfter: str
+    beforeScenarioAnchor: str
+    afterScenarioAnchor: str
+    storyString: str
+    finalMesSend: list[Message]
+    main: str
+    jailbreak: str
+    naiPreamble: str
+
+
 class Grimoire(BaseModel):
     chat_id: str
     instruct: Optional[Instruct] = None
+    generation_data: Optional[GenerationData] = None
 
 
 class KAIGeneration(BaseModel):
