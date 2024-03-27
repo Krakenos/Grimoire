@@ -18,7 +18,7 @@ nlp = spacy.load("en_core_web_trf")
 db = create_engine(settings['DB_ENGINE'])
 
 
-def save_messages(messages: list, docs: list, chat_id: str, session) -> list:
+def save_messages(messages: list, docs: list, chat_id: str, session) -> list[int]:
     """
     Saves messages to and returns indices of new messages
     :param messages:
@@ -237,14 +237,21 @@ def fill_context(prompt, floating_prompts, chat, docs, context_size, api_type):
     messages_to_merge = {original_index: text for original_index, text in enumerate(messages_with_delimiters)}
     messages_to_merge.pop(0)
 
-    # TODO edge case where we can't remove more messages, but still end up above context limit
-    #  (WI+grimoire overflow)
+    context_overflow = False
+    max_index = max(messages_to_merge.keys())
+    min_message_context = 0
+
     while messages_len > max_chat_context:
         first_message_index = starting_message + 1
         starting_message += 2
 
         if first_message_index in injected_prompt_indices:
             continue
+
+        if starting_message > max_index:  # TODO check if that's a proper index
+            context_overflow = True
+            min_message_context = messages_len
+            break
 
         messages_to_merge.pop(starting_message)  # pop the instruct part
         messages_to_merge.pop(first_message_index)  # pop actual message content
@@ -264,6 +271,26 @@ def fill_context(prompt, floating_prompts, chat, docs, context_size, api_type):
         messages_len = count_context(text=messages_text, api_type=api_type,
                                      api_url=settings['main_api']['url'],
                                      api_auth=settings['main_api']['auth_key'])
+
+    # Grimoire + WI context overflow
+    if context_overflow:
+        general_logger.warning(f'Context overflow after culling messages. Trimming grimoire entries')
+        starting_grimoire_index = 0
+        max_grimoire_context = max_context - definitions_context_len - min_message_context
+        grimoire_entry_list = grimoire_text.splitlines()
+        max_grimoire_index = len(grimoire_entry_list) - 1
+
+        # This should never happen unless there is some bug in frontend, and it sent prompt that's above context window
+        if max_grimoire_context < 0:
+            general_logger.error(f'Prompt is above declared max context. Passing the original prompt.')
+            return prompt
+
+        while max_grimoire_context < grimoire_text_len and starting_grimoire_index < max_grimoire_index:
+            starting_grimoire_index += 1
+            grimoire_text = '\n'.join(grimoire_entry_list[starting_grimoire_index:])
+            grimoire_text_len = count_context(text=grimoire_text, api_type=api_type,
+                                              api_url=settings['main_api']['url'],
+                                              api_auth=settings['main_api']['auth_key'])
 
     final_prompt = ''.join([prompt_definitions, grimoire_text, messages_text])
     return final_prompt
