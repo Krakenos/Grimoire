@@ -124,6 +124,8 @@ def process_prompt(prompt, chat, context_length, api_type=None, generation_data=
         for mes_index, message in enumerate(all_messages):
             if not floating_prompts[mes_index].injected:
                 chat_messages.append(message)
+    else:
+        chat_messages = all_messages
 
     with Session(db) as session:
         doc_time = timeit.default_timer()
