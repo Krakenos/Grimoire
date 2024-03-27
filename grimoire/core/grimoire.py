@@ -244,7 +244,7 @@ def chat_messages_culling(api_type, injected_prompt_indices, max_chat_context, m
     messages_to_merge = {original_index: text for original_index, text in enumerate(messages_with_delimiters)}
     messages_to_merge.pop(0)
     context_overflow = False
-    max_index = max(messages_to_merge.keys())
+    max_index = max(messages_to_merge.keys()) - settings['preserved_messages'] * 2
     min_message_context = 0
 
     while messages_len > max_chat_context:
@@ -254,7 +254,7 @@ def chat_messages_culling(api_type, injected_prompt_indices, max_chat_context, m
         if first_message_index in injected_prompt_indices:
             continue
 
-        if first_instruct_index > max_index:  # TODO check if that's a proper index
+        if first_instruct_index > max_index:
             context_overflow = True
             min_message_context = messages_len
             break
