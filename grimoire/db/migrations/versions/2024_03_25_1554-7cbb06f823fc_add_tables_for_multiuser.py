@@ -9,7 +9,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy import orm
+from sqlalchemy import orm, text, select
 from sqlalchemy.ext.declarative import declarative_base
 
 # revision identifiers, used by Alembic.
@@ -43,6 +43,36 @@ class Message(Base):
     chat_id = sa.Column(sa.String, nullable=False)
 
 
+class KnowledgeOld(Base):
+    __tablename__ = 'knowledge'
+
+    id = sa.Column(sa.Integer(), nullable=False),
+    chat_id = sa.Column(sa.Integer(), nullable=False)
+    entity = sa.Column(sa.String(), nullable=False)
+    entity_type = sa.Column(sa.String(), nullable=True)
+    entity_label = sa.Column(sa.String(), nullable=True)
+    summary = sa.Column(sa.String(), nullable=True)
+    token_count = sa.Column(sa.Integer(), nullable=True)
+    updated_date = sa.Column(sa.DateTime(), nullable=False)
+    update_at = sa.Column(sa.Integer(), nullable=True)
+    update_count = sa.Column(sa.Integer(), nullable=True)
+
+
+class KnowledgeNew(Base):
+    __tablename__ = 'knowledge_new'
+
+    id = sa.Column(sa.Integer(), nullable=False),
+    chat_id = sa.Column(sa.Integer(), nullable=False)
+    entity = sa.Column(sa.String(), nullable=False)
+    entity_type = sa.Column(sa.String(), nullable=True)
+    entity_label = sa.Column(sa.String(), nullable=True)
+    summary = sa.Column(sa.String(), nullable=True)
+    token_count = sa.Column(sa.Integer(), nullable=True)
+    updated_date = sa.Column(sa.DateTime(), nullable=False)
+    update_at = sa.Column(sa.Integer(), nullable=True)
+    update_count = sa.Column(sa.Integer(), nullable=True)
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     session = orm.Session(bind=bind)
@@ -67,38 +97,67 @@ def upgrade() -> None:
                     sa.PrimaryKeyConstraint('id')
                     )
     existing_chats = session.query(Message.chat_id).distinct()
-    chats = [Chat(external_id=chat_id, user_id=default_user.id) for chat_id in existing_chats]
+    print(existing_chats)
+    print(default_user.id)
+    chats = {chat_id[0]: Chat(external_id=chat_id[0], user_id=default_user.id) for chat_id in existing_chats}
+    for chat in chats.values():
+        print(f'{chat.external_id}: {chat.user_id}')
     session.add_all(chats)
     session.commit()
 
     # Migrating the data and modifying Knowledge table
-    op.add_column('knowledge', sa.Column('new_chat_id', sa.Integer(), nullable=True))
-    for chat in chats:
-        op.execute('UPDATE knowledge SET new_chat_id = :chat_id WHERE chat_id = :external_id',
-                   execution_options={
-                       'chat_id': chat.id,
-                       'external_id': chat.external_id
-                   })
+    op.create_table('knowledge_new',
+                    sa.Column('id', sa.Integer(), nullable=False),
+                    sa.Column('chat_id', sa.Integer(), nullable=False),
+                    sa.Column('entity', sa.String(), nullable=False),
+                    sa.Column('entity_type', sa.String(), nullable=True),
+                    sa.Column('entity_label', sa.String(), nullable=True),
+                    sa.Column('summary', sa.String(), nullable=True),
+                    sa.Column('token_count', sa.Integer(), nullable=True),
+                    sa.Column('updated_date', sa.DateTime(), nullable=False),
+                    sa.Column('update_at', sa.Integer(), nullable=True),
+                    sa.Column('update_count', sa.Integer(), nullable=True),
+                    sa.ForeignKeyConstraint(['chat_id'], ['chat.id'], ),
+                    sa.PrimaryKeyConstraint('id'))
+
+    query = select(KnowledgeOld)
+    knowledge_entries = session.execute(query)
+    new_knowledge_entries = []
+    for entry in knowledge_entries:
+        new_entry = list(entry)
+        new_entry[1] = chats[entry[1]].id
+        new_knowledge_entries.append(tuple(new_entry))
+
+
+    for chat in chats.values():
+        bind.execute(text('UPDATE knowledge SET new_chat_id = :chat_id WHERE chat_id = :external_id'),
+                     {
+                         'chat_id': chat.id,
+                         'external_id': chat.external_id
+                     })
     op.drop_column('knowledge', 'chat_id')
+    # op.alter_column('knowledge', 'new_chat_id',
+    #                 existing_type=sa.VARCHAR(),
+    #                 existing_nullable=True,
+    #                 nullable=False)
     op.alter_column('knowledge', 'new_chat_id',
-                    table_name='chat_id',
-                    existing_nullable=True,
-                    nullable=False)
+                    new_column_name='chat_id')
     op.create_foreign_key(None, 'knowledge', 'chat', ['chat_id'], ['id'])
 
     # Migrating the data and modifying Message table
     op.add_column('message', sa.Column('new_chat_id', sa.Integer(), nullable=True))
     for chat in chats:
-        op.execute('UPDATE message SET new_chat_id = :chat_id WHERE chat_id = :external_id',
-                   execution_options={
-                       'chat_id': chat.id,
-                       'external_id': chat.external_id
-                   })
+        bind.execute(text('UPDATE message SET new_chat_id = :chat_id WHERE chat_id = :external_id'),
+                     {
+                         'chat_id': chat.id,
+                         'external_id': chat.external_id
+                     })
     op.drop_column('message', 'chat_id')
     op.alter_column('message', 'new_chat_id',
-                    table_name='chat_id',
                     existing_nullable=True,
                     nullable=False)
+    op.alter_column('message', 'new_chat_id',
+                    new_column_name='chat_id')
     op.create_foreign_key(None, 'message', 'chat', ['chat_id'], ['id'])
     # ### end Alembic commands ###
 
@@ -113,14 +172,14 @@ def downgrade() -> None:
     op.drop_constraint(None, 'message', type_='foreignkey')
     op.add_column('message', sa.Column('old_chat_id', sa.VARCHAR(), nullable=True))
     for chat in chats:
-        op.execute('UPDATE message SET old_chat_id = :external_id WHERE chat_id = :chat_id',
-                   execution_options={
-                       'chat_id': chat.id,
-                       'external_id': chat.external_id
-                   })
+        bind.execute(text('UPDATE message SET old_chat_id = :external_id WHERE chat_id = :chat_id'),
+                     {
+                         'chat_id': chat.id,
+                         'external_id': chat.external_id
+                     })
     op.drop_column('message', 'chat_id')
     op.alter_column('message', 'new_chat_id',
-                    table_name='chat_id',
+                    new_column_name='chat_id',
                     existing_nullable=True,
                     nullable=False)
 
@@ -128,14 +187,14 @@ def downgrade() -> None:
     op.drop_constraint(None, 'knowledge', type_='foreignkey')
     op.add_column('knowledge', sa.Column('old_chat_id', sa.VARCHAR(), nullable=True))
     for chat in chats:
-        op.execute('UPDATE knowledge SET old_chat_id = :external_id WHERE chat_id = :chat_id',
-                   execution_options={
-                       'chat_id': chat.id,
-                       'external_id': chat.external_id
-                   })
+        bind.execute(text('UPDATE knowledge SET old_chat_id = :external_id WHERE chat_id = :chat_id'),
+                     {
+                         'chat_id': chat.id,
+                         'external_id': chat.external_id
+                     })
     op.drop_column('knowledge', 'chat_id')
     op.alter_column('knowledge', 'new_chat_id',
-                    table_name='chat_id',
+                    new_column_name='chat_id',
                     existing_nullable=True,
                     nullable=False)
 
