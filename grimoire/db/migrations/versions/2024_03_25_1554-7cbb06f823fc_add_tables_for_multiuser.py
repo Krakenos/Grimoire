@@ -9,7 +9,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy import orm, text, select
+from sqlalchemy import orm, text, select, insert
 from sqlalchemy.ext.declarative import declarative_base
 
 # revision identifiers, used by Alembic.
@@ -47,7 +47,7 @@ class KnowledgeOld(Base):
     __tablename__ = 'knowledge'
 
     id = sa.Column(sa.Integer(), nullable=False),
-    chat_id = sa.Column(sa.Integer(), nullable=False)
+    chat_id = sa.Column(sa.String(), nullable=False)
     entity = sa.Column(sa.String(), nullable=False)
     entity_type = sa.Column(sa.String(), nullable=True)
     entity_label = sa.Column(sa.String(), nullable=True)
@@ -71,6 +71,32 @@ class KnowledgeNew(Base):
     updated_date = sa.Column(sa.DateTime(), nullable=False)
     update_at = sa.Column(sa.Integer(), nullable=True)
     update_count = sa.Column(sa.Integer(), nullable=True)
+
+
+class MessageOld(Base):
+    __tablename__ = 'message'
+
+    id = sa.Column(sa.Integer(), nullable=False)
+    chat_id = sa.Column(sa.String(), nullable=False)
+    message_index = sa.Column(sa.Integer(), nullable=False)
+    summary = sa.Column(sa.String(), nullable=True)
+    message = sa.Column(sa.String(), nullable=False)
+    summary_tokens = sa.Column(sa.Integer(), nullable=True)
+    message_tokens = sa.Column(sa.Integer(), nullable=True)
+    created_date = sa.Column(sa.DateTime(), nullable=False)
+
+
+class MessageNew(Base):
+    __tablename__ = 'message_new'
+
+    id = sa.Column(sa.Integer(), nullable=False)
+    chat_id = sa.Column(sa.Integer(), nullable=False)
+    message_index = sa.Column(sa.Integer(), nullable=False)
+    summary = sa.Column(sa.String(), nullable=True)
+    message = sa.Column(sa.String(), nullable=False)
+    summary_tokens = sa.Column(sa.Integer(), nullable=True)
+    message_tokens = sa.Column(sa.Integer(), nullable=True)
+    created_date = sa.Column(sa.DateTime(), nullable=False)
 
 
 def upgrade() -> None:
@@ -97,11 +123,7 @@ def upgrade() -> None:
                     sa.PrimaryKeyConstraint('id')
                     )
     existing_chats = session.query(Message.chat_id).distinct()
-    print(existing_chats)
-    print(default_user.id)
     chats = {chat_id[0]: Chat(external_id=chat_id[0], user_id=default_user.id) for chat_id in existing_chats}
-    for chat in chats.values():
-        print(f'{chat.external_id}: {chat.user_id}')
     session.add_all(chats)
     session.commit()
 
@@ -121,44 +143,63 @@ def upgrade() -> None:
                     sa.PrimaryKeyConstraint('id'))
 
     query = select(KnowledgeOld)
-    knowledge_entries = session.execute(query)
+    knowledge_entries = session.scalars(query)
     new_knowledge_entries = []
+
     for entry in knowledge_entries:
-        new_entry = list(entry)
-        new_entry[1] = chats[entry[1]].id
-        new_knowledge_entries.append(tuple(new_entry))
+        new_entry = {
+            'id': entry.id,
+            'chat_id': chats[entry.chat_id].id,
+            'entity': entry.entity,
+            'entity_type': entry.entity_type,
+            'entity_label': entry.entity_label,
+            'summary': entry.summary,
+            'token_count': entry.token_count,
+            'updated_date': entry.updated_date,
+            'update_at': entry.update_at,
+            'update_count': entry.update_count,
+        }
+        new_knowledge_entries.append(new_entry)
 
-
-    for chat in chats.values():
-        bind.execute(text('UPDATE knowledge SET new_chat_id = :chat_id WHERE chat_id = :external_id'),
-                     {
-                         'chat_id': chat.id,
-                         'external_id': chat.external_id
-                     })
-    op.drop_column('knowledge', 'chat_id')
-    # op.alter_column('knowledge', 'new_chat_id',
-    #                 existing_type=sa.VARCHAR(),
-    #                 existing_nullable=True,
-    #                 nullable=False)
-    op.alter_column('knowledge', 'new_chat_id',
-                    new_column_name='chat_id')
-    op.create_foreign_key(None, 'knowledge', 'chat', ['chat_id'], ['id'])
+    session.execute(insert(KnowledgeNew), new_knowledge_entries)
+    session.commit()
+    op.drop_table('knowledge')
+    op.rename_table('knowledge_new', 'knowledge')
 
     # Migrating the data and modifying Message table
-    op.add_column('message', sa.Column('new_chat_id', sa.Integer(), nullable=True))
-    for chat in chats:
-        bind.execute(text('UPDATE message SET new_chat_id = :chat_id WHERE chat_id = :external_id'),
-                     {
-                         'chat_id': chat.id,
-                         'external_id': chat.external_id
-                     })
-    op.drop_column('message', 'chat_id')
-    op.alter_column('message', 'new_chat_id',
-                    existing_nullable=True,
-                    nullable=False)
-    op.alter_column('message', 'new_chat_id',
-                    new_column_name='chat_id')
-    op.create_foreign_key(None, 'message', 'chat', ['chat_id'], ['id'])
+    op.create_table('message_new',
+                    sa.Column('id', sa.Integer(), nullable=False),
+                    sa.Column('chat_id', sa.Integer(), nullable=False),
+                    sa.Column('message_index', sa.Integer(), nullable=False),
+                    sa.Column('summary', sa.String(), nullable=True),
+                    sa.Column('message', sa.String(), nullable=False),
+                    sa.Column('summary_tokens', sa.Integer(), nullable=True),
+                    sa.Column('message_tokens', sa.Integer(), nullable=True),
+                    sa.Column('created_date', sa.DateTime(), nullable=False),
+                    sa.ForeignKeyConstraint(['chat_id'], ['chat.id'], ),
+                    sa.PrimaryKeyConstraint('id')
+                    )
+    query = select(MessageOld)
+    message_entries = session.scalars(query)
+    new_message_entries = []
+
+    for entry in message_entries:
+        new_entry = {
+            'id': entry.id,
+            'chat_id': chats[entry.chat_id].id,
+            'message_index': entry.message_index,
+            'summary': entry.summary,
+            'message': entry.message,
+            'summary_tokens': entry.summary_tokens,
+            'message_tokens': entry.message_tokens,
+            'created_date': entry.created_date
+        }
+        new_message_entries.append(new_entry)
+
+    session.execute(insert(MessageNew), new_message_entries)
+    op.drop_table('message')
+    op.rename_table('message_new', 'message')
+
     # ### end Alembic commands ###
 
 
