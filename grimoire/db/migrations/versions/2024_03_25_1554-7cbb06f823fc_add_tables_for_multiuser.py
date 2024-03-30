@@ -84,6 +84,7 @@ class MessageOld(Base):
     summary_tokens = sa.Column(sa.Integer(), nullable=True)
     message_tokens = sa.Column(sa.Integer(), nullable=True)
     created_date = sa.Column(sa.DateTime(), nullable=False)
+    spacy_doc = sa.Column(sa.LargeBinary(), nullable=True)
 
 
 class MessageNew(Base):
@@ -97,6 +98,7 @@ class MessageNew(Base):
     summary_tokens = sa.Column(sa.Integer(), nullable=True)
     message_tokens = sa.Column(sa.Integer(), nullable=True)
     created_date = sa.Column(sa.DateTime(), nullable=False)
+    spacy_doc = sa.Column(sa.LargeBinary(), nullable=True)
 
 
 def upgrade() -> None:
@@ -176,6 +178,7 @@ def upgrade() -> None:
                     sa.Column('summary_tokens', sa.Integer(), nullable=True),
                     sa.Column('message_tokens', sa.Integer(), nullable=True),
                     sa.Column('created_date', sa.DateTime(), nullable=False),
+                    sa.Column('spacy_doc', sa.LargeBinary(), nullable=True),
                     sa.ForeignKeyConstraint(['chat_id'], ['chat.id'], ),
                     sa.PrimaryKeyConstraint('id')
                     )
@@ -192,7 +195,8 @@ def upgrade() -> None:
             'message': entry.message,
             'summary_tokens': entry.summary_tokens,
             'message_tokens': entry.message_tokens,
-            'created_date': entry.created_date
+            'created_date': entry.created_date,
+            'spacy_doc': entry.spacy_doc
         }
         new_message_entries.append(new_entry)
 
