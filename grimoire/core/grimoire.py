@@ -2,7 +2,7 @@ import re
 import timeit
 
 import spacy
-from spacy.tokens import DocBin
+from spacy.tokens import DocBin, Doc
 from sqlalchemy import desc, create_engine, select
 from sqlalchemy.orm import Session
 
@@ -60,13 +60,13 @@ def add_missing_docs(messages, docs, session):
     session.commit()
 
 
-def get_docs(messages, chat_id, session):
+def get_docs(messages: list[str], chat: Chat, session: Session) -> list[Doc]:
     docs = []
     processing_indices = []
     to_process = []
     messages_to_update = []
     for index, message in enumerate(messages):
-        db_message = session.query(Message).filter_by(chat_id=chat_id, message=message).first()
+        db_message = session.query(Message).filter_by(chat_id=chat.id, message=message).first()
         if db_message is not None:
             if db_message.spacy_doc is not None:
                 doc_bin = DocBin().from_bytes(db_message.spacy_doc)
@@ -160,7 +160,7 @@ def process_prompt(prompt: str,
 
     with Session(db) as session:
         doc_time = timeit.default_timer()
-        docs = get_docs(chat_messages, chat_id, session)
+        docs = get_docs(chat_messages, chat, session)
         doc_end_time = timeit.default_timer()
         general_logger.debug(f'Creating spacy docs {doc_end_time - doc_time} seconds')
         last_messages = chat_messages[:-1]  # exclude user prompt
@@ -175,7 +175,8 @@ def process_prompt(prompt: str,
         for entity in set(doc.ents):
             if entity.label_ not in banned_labels:
                 general_logger.debug(f'{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}')
-                summarize.delay(entity.text.lower(), entity.label_, chat_id, summarization_api, settings['summarization'],
+                summarize.delay(entity.text.lower(), entity.label_, chat_id, summarization_api,
+                                settings['summarization'],
                                 settings['DB_ENGINE'])
 
     end_time = timeit.default_timer()
