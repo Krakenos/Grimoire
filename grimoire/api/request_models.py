@@ -52,6 +52,7 @@ class GenerationData(BaseModel):
 
 class Grimoire(BaseModel):
     chat_id: str
+    user_id: str = None
     instruct: Optional[Instruct] = None
     generation_data: Optional[GenerationData] = None
 
