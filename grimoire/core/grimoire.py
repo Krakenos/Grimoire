@@ -12,7 +12,7 @@ from grimoire.common.loggers import general_logger, context_logger
 from grimoire.common.utils import orm_get_or_create
 from grimoire.core.settings import settings
 from grimoire.core.tasks import summarize
-from grimoire.db.models import Message, Knowledge
+from grimoire.db.models import Message, Knowledge, User
 
 nlp = spacy.load("en_core_web_trf")
 db = create_engine(settings['DB_ENGINE'])
@@ -95,20 +95,28 @@ def get_extra_info(prompt, generation_data: GenerationData):
     return floating_prompts
 
 
+def get_user(user_id: str | None) -> User:
+    with Session(db) as session:
+        if user_id and settings['multi_user_mode']:
+            query = select(User).where(User.external_id == user_id)
+        else:
+            query = select(User).where(User.external_id == 'DEFAULT_USER', User.id == 1)
+        result = session.scalar(query)
+    return result
+
+
 def process_prompt(prompt: str,
                    chat: str,
                    context_length: int,
                    api_type: str | None = None,
                    generation_data: GenerationData | None = None,
                    user_id: str | None = None):
-
     start_time = timeit.default_timer()
 
     if api_type is None:
         api_type = settings['main_api']['backend']
 
-    if user_id and settings['multi_user_mode']:
-        pass
+    user = get_user(user_id)
 
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     floating_prompts = None
