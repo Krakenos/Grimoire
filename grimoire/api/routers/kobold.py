@@ -32,7 +32,7 @@ async def generate(k_request: KAIGeneration):
     if k_request.grimoire.instruct is not None:
         update_instruct(k_request.grimoire.instruct)
     new_prompt = process_prompt(prompt=k_request.prompt,
-                                chat=k_request.grimoire.chat_id,
+                                chat_id=k_request.grimoire.chat_id,
                                 context_length=k_request.max_context_length,
                                 api_type='kobold',
                                 generation_data=k_request.grimoire.generation_data,

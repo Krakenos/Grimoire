@@ -43,7 +43,7 @@ async def completions(oai_request: OAIGeneration, request: Request):
     passthrough_json['api_server'] = settings['main_api']['url']
 
     new_prompt = process_prompt(prompt=oai_request.prompt,
-                                chat=oai_request.grimoire.chat_id,
+                                chat_id=oai_request.grimoire.chat_id,
                                 context_length=oai_request.truncation_length,
                                 api_type=oai_request.api_type,
                                 generation_data=oai_request.grimoire.generation_data,

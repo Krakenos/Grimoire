@@ -12,7 +12,7 @@ from grimoire.common.loggers import general_logger, context_logger
 from grimoire.common.utils import orm_get_or_create
 from grimoire.core.settings import settings
 from grimoire.core.tasks import summarize
-from grimoire.db.models import Message, Knowledge, User
+from grimoire.db.models import Message, Knowledge, User, Chat
 
 nlp = spacy.load("en_core_web_trf")
 db = create_engine(settings['DB_ENGINE'])
@@ -101,22 +101,36 @@ def get_user(user_id: str | None) -> User:
             query = select(User).where(User.external_id == user_id)
         else:
             query = select(User).where(User.external_id == 'DEFAULT_USER', User.id == 1)
-        result = session.scalar(query)
+        result = session.scalars(query).one()
     return result
 
 
+def get_chat(user: User, chat_id: str) -> Chat:
+    with Session(db) as session:
+        query = select(Chat).where(Chat.external_id == chat_id,
+                                   Chat.user_id == user.id)
+        chat = session.scalars(query).first()
+        if chat is None:
+            chat = Chat(external_id=chat_id, user_id=user.id)
+            session.add(chat)
+            session.commit()
+
+    return chat
+
+
 def process_prompt(prompt: str,
-                   chat: str,
+                   chat_id: str,
                    context_length: int,
                    api_type: str | None = None,
                    generation_data: GenerationData | None = None,
-                   user_id: str | None = None):
+                   user_id: str | None = None) -> str:
     start_time = timeit.default_timer()
 
     if api_type is None:
         api_type = settings['main_api']['backend']
 
     user = get_user(user_id)
+    chat = get_chat(user, chat_id)
 
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     floating_prompts = None
@@ -146,22 +160,22 @@ def process_prompt(prompt: str,
 
     with Session(db) as session:
         doc_time = timeit.default_timer()
-        docs = get_docs(chat_messages, chat, session)
+        docs = get_docs(chat_messages, chat_id, session)
         doc_end_time = timeit.default_timer()
         general_logger.debug(f'Creating spacy docs {doc_end_time - doc_time} seconds')
         last_messages = chat_messages[:-1]  # exclude user prompt
         last_docs = docs[:-1]
-        new_message_indices = save_messages(last_messages, last_docs, chat, session)
-        save_named_entities(chat, last_docs, session)
+        new_message_indices = save_messages(last_messages, last_docs, chat_id, session)
+        save_named_entities(chat_id, last_docs, session)
 
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
-    new_prompt = fill_context(prompt, floating_prompts, chat, docs, context_length, api_type)
+    new_prompt = fill_context(prompt, floating_prompts, chat_id, docs, context_length, api_type)
 
     for doc in docs_to_summarize:
         for entity in set(doc.ents):
             if entity.label_ not in banned_labels:
                 general_logger.debug(f'{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}')
-                summarize.delay(entity.text.lower(), entity.label_, chat, summarization_api, settings['summarization'],
+                summarize.delay(entity.text.lower(), entity.label_, chat_id, summarization_api, settings['summarization'],
                                 settings['DB_ENGINE'])
 
     end_time = timeit.default_timer()
