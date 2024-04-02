@@ -95,11 +95,20 @@ def get_extra_info(prompt, generation_data: GenerationData):
     return floating_prompts
 
 
-def process_prompt(prompt, chat, context_length, api_type=None, generation_data=None):
+def process_prompt(prompt: str,
+                   chat: str,
+                   context_length: int,
+                   api_type: str | None = None,
+                   generation_data: GenerationData | None = None,
+                   user_id: str | None = None):
+
     start_time = timeit.default_timer()
 
     if api_type is None:
         api_type = settings['main_api']['backend']
+
+    if user_id and settings['multi_user_mode']:
+        pass
 
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     floating_prompts = None

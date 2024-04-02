@@ -35,13 +35,22 @@ async def completions(oai_request: OAIGeneration, request: Request):
             yield f'data: {event.data}\n\n'
 
     passthrough_json = oai_request.model_dump()
+
     if oai_request.grimoire.instruct is not None:
         update_instruct(oai_request.grimoire.instruct)
+
     passthrough_url = urljoin(settings['main_api']['url'], '/v1/completions')
     passthrough_json['api_server'] = settings['main_api']['url']
-    new_prompt = process_prompt(oai_request.prompt, oai_request.grimoire.chat_id, oai_request.truncation_length,
-                                oai_request.api_type, oai_request.grimoire.generation_data)
+
+    new_prompt = process_prompt(prompt=oai_request.prompt,
+                                chat=oai_request.grimoire.chat_id,
+                                context_length=oai_request.truncation_length,
+                                api_type=oai_request.api_type,
+                                generation_data=oai_request.grimoire.generation_data,
+                                user_id=oai_request.grimoire.user_id)
+
     passthrough_json['prompt'] = new_prompt
+
     if oai_request.stream:
         return StreamingResponse(streaming_messages(passthrough_url, passthrough_json), media_type="text/event-stream")
 
