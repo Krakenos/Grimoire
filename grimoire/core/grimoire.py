@@ -373,7 +373,6 @@ def get_ordered_entities(banned_labels: list[str], docs: list[Doc]) -> list[tupl
     full_ent_list = []
 
     for doc in docs:
-        general_logger.debug(doc.text_with_ws)
         ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
         full_ent_list += ent_list
 
