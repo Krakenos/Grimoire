@@ -212,6 +212,8 @@ def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
             session.commit()
 
 
+# TODO Check if tokenization can be done better, waiting for the request is majority of time that takes it to process
+#   potentially prefer using local tokenizer
 def fill_context(prompt: str,
                  floating_prompts: list[RequestMessage],
                  chat: Chat,
