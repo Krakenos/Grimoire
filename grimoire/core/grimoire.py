@@ -18,22 +18,22 @@ nlp = spacy.load("en_core_web_trf")
 db = create_engine(settings['DB_ENGINE'])
 
 
-def save_messages(messages: list, docs: list, chat_id: str, session) -> list[int]:
+def save_messages(messages: list, docs: list, chat: Chat, session) -> list[int]:
     """
     Saves messages to and returns indices of new messages
     :param messages:
     :param docs:
-    :param chat_id:
+    :param chat:
     :param session:
     :return: indices of new messages
     """
     new_messages_indices = []
     for message_index, message in enumerate(messages):
-        message_exists = session.query(Message.id).filter_by(message=message, chat_id=chat_id).first() is not None
+        message_exists = session.query(Message.id).filter_by(message=message, chat_id=chat.id).first() is not None
         if not message_exists:
-            chat_exists = session.query(Message.id).filter_by(chat_id=chat_id).first() is not None
+            chat_exists = session.query(Message.id).filter_by(chat_id=chat.id).first() is not None
             if chat_exists:
-                latest_index = session.query(Message.message_index).filter_by(chat_id=chat_id).order_by(
+                latest_index = session.query(Message.message_index).filter_by(chat_id=chat.id).order_by(
                     desc(Message.message_index)).first()[0]
                 current_index = latest_index + 1
             else:
@@ -42,7 +42,7 @@ def save_messages(messages: list, docs: list, chat_id: str, session) -> list[int
             doc_bin = DocBin()
             doc_bin.add(spacy_doc)
             bytes_data = doc_bin.to_bytes()
-            new_message = Message(message=message, chat_id=chat_id, message_index=current_index, spacy_doc=bytes_data)
+            new_message = Message(message=message, chat_id=chat.id, message_index=current_index, spacy_doc=bytes_data)
             new_messages_indices.append(message_index)
             session.add(new_message)
             session.commit()
@@ -124,6 +124,7 @@ def process_prompt(prompt: str,
                    api_type: str | None = None,
                    generation_data: GenerationData | None = None,
                    user_id: str | None = None) -> str:
+
     start_time = timeit.default_timer()
 
     if api_type is None:
@@ -165,17 +166,20 @@ def process_prompt(prompt: str,
         general_logger.debug(f'Creating spacy docs {doc_end_time - doc_time} seconds')
         last_messages = chat_messages[:-1]  # exclude user prompt
         last_docs = docs[:-1]
-        new_message_indices = save_messages(last_messages, last_docs, chat_id, session)
-        save_named_entities(chat_id, last_docs, session)
+        new_message_indices = save_messages(last_messages, last_docs, chat, session)
+        save_named_entities(chat, last_docs, session)
 
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
-    new_prompt = fill_context(prompt, floating_prompts, chat_id, docs, context_length, api_type)
+    new_prompt = fill_context(prompt, floating_prompts, chat, docs, context_length, api_type)
 
     for doc in docs_to_summarize:
         for entity in set(doc.ents):
             if entity.label_ not in banned_labels:
                 general_logger.debug(f'{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}')
-                summarize.delay(entity.text.lower(), entity.label_, chat_id, summarization_api,
+                summarize.delay(entity.text.lower(),
+                                entity.label_,
+                                chat.id,
+                                summarization_api,
                                 settings['summarization'],
                                 settings['DB_ENGINE'])
 
@@ -185,7 +189,7 @@ def process_prompt(prompt: str,
     return new_prompt
 
 
-def save_named_entities(chat, docs, session):
+def save_named_entities(chat: Chat, docs: list[Doc], session: Session):
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     for doc in docs:
         db_message = orm_get_or_create(session, Message, message=doc.text)
@@ -194,12 +198,12 @@ def save_named_entities(chat, docs, session):
         for ent, ent_label in unique_ents:
             knowledge_entity = session.query(Knowledge).filter(Knowledge.entity.ilike(ent),
                                                                Knowledge.entity_type == 'NAMED ENTITY',
-                                                               Knowledge.chat_id == chat).first()
+                                                               Knowledge.chat_id == chat.id).first()
             if not knowledge_entity:
                 knowledge_entity = Knowledge(entity=ent,
                                              entity_label=ent_label,
                                              entity_type='NAMED ENTITY',
-                                             chat_id=chat)
+                                             chat_id=chat.id)
                 session.add(knowledge_entity)
                 session.commit()
             knowledge_entity.messages.append(db_message)
@@ -207,7 +211,7 @@ def save_named_entities(chat, docs, session):
             session.commit()
 
 
-def fill_context(prompt, floating_prompts, chat, docs, context_size, api_type):
+def fill_context(prompt, floating_prompts, chat: Chat, docs, context_size, api_type):
     max_context = context_size
     max_grimoire_context = max_context * settings['context_percentage']
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
@@ -332,13 +336,13 @@ def generate_grimoire_text(api_type, max_grimoire_context, summaries):
     return grimoire_text, grimoire_text_len
 
 
-def get_summaries(chat, unique_ents):
+def get_summaries(chat: Chat, unique_ents) -> list[tuple[str, int, str]]:
     summaries = []
     with Session(db) as session:
         for ent in unique_ents:
             query = select(Knowledge).where(Knowledge.entity.ilike(ent[0]),
                                             Knowledge.entity_type == 'NAMED ENTITY',
-                                            Knowledge.chat_id == chat,
+                                            Knowledge.chat_id == chat.id,
                                             Knowledge.summary.isnot(None),
                                             Knowledge.summary.isnot(''), Knowledge.token_count.isnot(None),
                                             Knowledge.token_count.isnot(0))
