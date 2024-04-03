@@ -54,7 +54,7 @@ def make_summary_prompt(session, knowledge_entry, max_context: int, api_settings
 
 
 @celery_app.task(base=Singleton, lock_expiry=60)
-def summarize(term: str, label: str, chat_id: str, api_settings: dict = None, summarization_settings: dict = None,
+def summarize(term: str, label: str, chat_id: int, api_settings: dict = None, summarization_settings: dict = None,
               db_engine: str = None, context_len: int = 4096, response_len: int = 300) -> None:
     db = create_engine(db_engine)
     summarization_url = api_settings['url']

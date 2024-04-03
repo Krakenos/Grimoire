@@ -1,39 +1,41 @@
 import re
 import timeit
+from typing import Type
 
 import spacy
-from spacy.tokens import DocBin
+from spacy.tokens import DocBin, Doc
 from sqlalchemy import desc, create_engine, select
 from sqlalchemy.orm import Session
 
 from grimoire.api.request_models import Instruct, GenerationData
+from grimoire.api.request_models import Message as RequestMessage
 from grimoire.common.llm_helpers import count_context
 from grimoire.common.loggers import general_logger, context_logger
 from grimoire.common.utils import orm_get_or_create
 from grimoire.core.settings import settings
 from grimoire.core.tasks import summarize
-from grimoire.db.models import Message, Knowledge
+from grimoire.db.models import Message, Knowledge, User, Chat
 
 nlp = spacy.load("en_core_web_trf")
 db = create_engine(settings['DB_ENGINE'])
 
 
-def save_messages(messages: list, docs: list, chat_id: str, session) -> list[int]:
+def save_messages(messages: list, docs: list, chat: Chat, session: Session) -> list[int]:
     """
     Saves messages to and returns indices of new messages
     :param messages:
     :param docs:
-    :param chat_id:
+    :param chat:
     :param session:
     :return: indices of new messages
     """
     new_messages_indices = []
     for message_index, message in enumerate(messages):
-        message_exists = session.query(Message.id).filter_by(message=message, chat_id=chat_id).first() is not None
+        message_exists = session.query(Message.id).filter_by(message=message, chat_id=chat.id).first() is not None
         if not message_exists:
-            chat_exists = session.query(Message.id).filter_by(chat_id=chat_id).first() is not None
+            chat_exists = session.query(Message.id).filter_by(chat_id=chat.id).first() is not None
             if chat_exists:
-                latest_index = session.query(Message.message_index).filter_by(chat_id=chat_id).order_by(
+                latest_index = session.query(Message.message_index).filter_by(chat_id=chat.id).order_by(
                     desc(Message.message_index)).first()[0]
                 current_index = latest_index + 1
             else:
@@ -42,14 +44,14 @@ def save_messages(messages: list, docs: list, chat_id: str, session) -> list[int
             doc_bin = DocBin()
             doc_bin.add(spacy_doc)
             bytes_data = doc_bin.to_bytes()
-            new_message = Message(message=message, chat_id=chat_id, message_index=current_index, spacy_doc=bytes_data)
+            new_message = Message(message=message, chat_id=chat.id, message_index=current_index, spacy_doc=bytes_data)
             new_messages_indices.append(message_index)
             session.add(new_message)
             session.commit()
     return new_messages_indices
 
 
-def add_missing_docs(messages, docs, session):
+def add_missing_docs(messages: list[tuple[int, Type[Message]]], docs: list[Doc], session: Session) -> None:
     for index, message in messages:
         spacy_doc = docs[index]
         doc_bin = DocBin()
@@ -60,13 +62,13 @@ def add_missing_docs(messages, docs, session):
     session.commit()
 
 
-def get_docs(messages, chat_id, session):
+def get_docs(messages: list[str], chat: Chat, session: Session) -> list[Doc]:
     docs = []
     processing_indices = []
     to_process = []
     messages_to_update = []
     for index, message in enumerate(messages):
-        db_message = session.query(Message).filter_by(chat_id=chat_id, message=message).first()
+        db_message = session.query(Message).filter_by(chat_id=chat.id, message=message).first()
         if db_message is not None:
             if db_message.spacy_doc is not None:
                 doc_bin = DocBin().from_bytes(db_message.spacy_doc)
@@ -88,18 +90,49 @@ def get_docs(messages, chat_id, session):
     return docs
 
 
-def get_extra_info(prompt, generation_data: GenerationData):
+def get_extra_info(prompt: str, generation_data: GenerationData) -> list[RequestMessage]:
     floating_prompts = []
     for message in generation_data.finalMesSend:
         floating_prompts.append(message)
     return floating_prompts
 
 
-def process_prompt(prompt, chat, context_length, api_type=None, generation_data=None):
+def get_user(user_id: str | None) -> User:
+    with Session(db) as session:
+        if user_id and settings['multi_user_mode']:
+            query = select(User).where(User.external_id == user_id)
+        else:
+            query = select(User).where(User.external_id == 'DEFAULT_USER', User.id == 1)
+        result = session.scalars(query).one()
+    return result
+
+
+def get_chat(user: User, chat_id: str) -> Chat:
+    with Session(db) as session:
+        query = select(Chat).where(Chat.external_id == chat_id,
+                                   Chat.user_id == user.id)
+        chat = session.scalars(query).first()
+        if chat is None:
+            chat = Chat(external_id=chat_id, user_id=user.id)
+            session.add(chat)
+            session.commit()
+
+    return chat
+
+
+def process_prompt(prompt: str,
+                   chat_id: str,
+                   context_length: int,
+                   api_type: str | None = None,
+                   generation_data: GenerationData | None = None,
+                   user_id: str | None = None) -> str:
     start_time = timeit.default_timer()
 
     if api_type is None:
         api_type = settings['main_api']['backend']
+
+    user = get_user(user_id)
+    chat = get_chat(user, chat_id)
 
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     floating_prompts = None
@@ -144,7 +177,11 @@ def process_prompt(prompt, chat, context_length, api_type=None, generation_data=
         for entity in set(doc.ents):
             if entity.label_ not in banned_labels:
                 general_logger.debug(f'{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}')
-                summarize.delay(entity.text.lower(), entity.label_, chat, summarization_api, settings['summarization'],
+                summarize.delay(entity.text.lower(),
+                                entity.label_,
+                                chat.id,
+                                summarization_api,
+                                settings['summarization'],
                                 settings['DB_ENGINE'])
 
     end_time = timeit.default_timer()
@@ -153,7 +190,7 @@ def process_prompt(prompt, chat, context_length, api_type=None, generation_data=
     return new_prompt
 
 
-def save_named_entities(chat, docs, session):
+def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     for doc in docs:
         db_message = orm_get_or_create(session, Message, message=doc.text)
@@ -162,12 +199,12 @@ def save_named_entities(chat, docs, session):
         for ent, ent_label in unique_ents:
             knowledge_entity = session.query(Knowledge).filter(Knowledge.entity.ilike(ent),
                                                                Knowledge.entity_type == 'NAMED ENTITY',
-                                                               Knowledge.chat_id == chat).first()
+                                                               Knowledge.chat_id == chat.id).first()
             if not knowledge_entity:
                 knowledge_entity = Knowledge(entity=ent,
                                              entity_label=ent_label,
                                              entity_type='NAMED ENTITY',
-                                             chat_id=chat)
+                                             chat_id=chat.id)
                 session.add(knowledge_entity)
                 session.commit()
             knowledge_entity.messages.append(db_message)
@@ -175,7 +212,14 @@ def save_named_entities(chat, docs, session):
             session.commit()
 
 
-def fill_context(prompt, floating_prompts, chat, docs, context_size, api_type):
+# TODO Check if tokenization can be done better, waiting for the request is majority of time that takes it to process
+#   potentially prefer using local tokenizer
+def fill_context(prompt: str,
+                 floating_prompts: list[RequestMessage],
+                 chat: Chat,
+                 docs: list[Doc],
+                 context_size: int,
+                 api_type: str) -> str:
     max_context = context_size
     max_grimoire_context = max_context * settings['context_percentage']
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
@@ -215,8 +259,12 @@ def fill_context(prompt, floating_prompts, chat, docs, context_size, api_type):
     return final_prompt
 
 
-def grimoire_entries_culling(api_type, definitions_context_len, grimoire_text, grimoire_text_len, max_context,
-                             min_message_context):
+def grimoire_entries_culling(api_type: str,
+                             definitions_context_len: int,
+                             grimoire_text: str,
+                             grimoire_text_len: int,
+                             max_context: int,
+                             min_message_context: int) -> str | None:
     starting_grimoire_index = 0
     max_grimoire_context = max_context - definitions_context_len - min_message_context
     grimoire_entry_list = grimoire_text.splitlines()
@@ -237,7 +285,10 @@ def grimoire_entries_culling(api_type, definitions_context_len, grimoire_text, g
     return grimoire_text
 
 
-def chat_messages_culling(api_type, injected_prompt_indices, max_chat_context, messages_with_delimiters):
+def chat_messages_culling(api_type: str,
+                          injected_prompt_indices: list[int],
+                          max_chat_context: int,
+                          messages_with_delimiters: list[str]) -> tuple[bool, str, int]:
     first_instruct_index = 1
     messages_text = ''.join(messages_with_delimiters[first_instruct_index:])
     messages_len = count_context(text=messages_text, api_type=api_type,
@@ -283,7 +334,9 @@ def chat_messages_culling(api_type, injected_prompt_indices, max_chat_context, m
     return context_overflow, messages_text, min_message_context
 
 
-def generate_grimoire_text(api_type, max_grimoire_context, summaries):
+def generate_grimoire_text(api_type: str,
+                           max_grimoire_context: int,
+                           summaries: list[tuple[str, int, str]]) -> tuple[str, int]:
     grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
     grimoire_text = ''
 
@@ -300,13 +353,13 @@ def generate_grimoire_text(api_type, max_grimoire_context, summaries):
     return grimoire_text, grimoire_text_len
 
 
-def get_summaries(chat, unique_ents):
+def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]]) -> list[tuple[str, int, str]]:
     summaries = []
     with Session(db) as session:
         for ent in unique_ents:
             query = select(Knowledge).where(Knowledge.entity.ilike(ent[0]),
                                             Knowledge.entity_type == 'NAMED ENTITY',
-                                            Knowledge.chat_id == chat,
+                                            Knowledge.chat_id == chat.id,
                                             Knowledge.summary.isnot(None),
                                             Knowledge.summary.isnot(''), Knowledge.token_count.isnot(None),
                                             Knowledge.token_count.isnot(0))
@@ -318,11 +371,10 @@ def get_summaries(chat, unique_ents):
     return summaries
 
 
-def get_ordered_entities(banned_labels, docs):
+def get_ordered_entities(banned_labels: list[str], docs: list[Doc]) -> list[tuple[str, str]]:
     full_ent_list = []
 
     for doc in docs:
-        general_logger.debug(doc.text_with_ws)
         ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
         full_ent_list += ent_list
 
@@ -330,7 +382,7 @@ def get_ordered_entities(banned_labels, docs):
     return unique_ents
 
 
-def get_injected_indices(floating_prompts):
+def get_injected_indices(floating_prompts: list[RequestMessage]) -> list[int]:
     injected_prompt_indices = []
 
     for mes_index, message in enumerate(floating_prompts):
@@ -341,7 +393,7 @@ def get_injected_indices(floating_prompts):
     return injected_prompt_indices
 
 
-def update_instruct(instruct_info: Instruct):
+def update_instruct(instruct_info: Instruct) -> None:
     if instruct_info.wrap:
         input_seq = f'{instruct_info.input_sequence}\n'
         output_seq = f'\n{instruct_info.output_sequence}\n'
@@ -355,7 +407,7 @@ def update_instruct(instruct_info: Instruct):
     settings['main_api']['separator_sequence'] = instruct_info.separator_sequence
 
 
-def instruct_regex():
+def instruct_regex() -> str:
     input_seq = re.escape(settings['main_api']['input_sequence'])
     output_seq = re.escape(settings['main_api']['output_sequence'])
     first_output_seq = re.escape(settings['main_api']['first_output_sequence'])

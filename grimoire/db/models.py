@@ -21,7 +21,7 @@ class Knowledge(Base):
     __tablename__ = 'knowledge'
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    chat_id: Mapped[str]
+    chat_id: Mapped[int] = mapped_column(ForeignKey('chat.id'))
     entity: Mapped[str]
     entity_type: Mapped[Optional[str]]
     entity_label: Mapped[Optional[str]]
@@ -40,7 +40,7 @@ class Message(Base):
     __tablename__ = 'message'
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    chat_id: Mapped[str]
+    chat_id: Mapped[int] = mapped_column(ForeignKey('chat.id'))
     message_index: Mapped[int]
     summary: Mapped[Optional[str]]
     message: Mapped[str]
@@ -48,3 +48,19 @@ class Message(Base):
     message_tokens: Mapped[Optional[int]]
     created_date: Mapped[datetime] = mapped_column(default=datetime.now)
     spacy_doc: Mapped[Optional[bytes]]
+
+
+class Chat(Base):
+    __tablename__ = 'chat'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    external_id: Mapped[str]
+    user_id: Mapped[int] = mapped_column(ForeignKey('user.id'))
+
+
+class User(Base):
+    __tablename__ = 'user'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    external_id: Mapped[str]
+    chats: Mapped[List['Chat']] = relationship()
