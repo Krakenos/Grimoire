@@ -211,6 +211,7 @@ def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
                 session.add(knowledge_entity)
                 session.commit()
             knowledge_entity.messages.append(db_message)
+            knowledge_entity.update_count += 1
             session.add(knowledge_entity)
             session.commit()
 

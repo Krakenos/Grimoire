@@ -60,10 +60,15 @@ def summarize(term: str, label: str, chat_id: int, api_settings: dict = None, su
     summarization_url = api_settings['url']
     summarization_backend = api_settings['backend']
     summarization_auth = api_settings['auth_key']
+    limit_rate = summarization_settings['limit_rate']
     with Session(db) as session:
         knowledge_entry = session.query(Knowledge).filter(Knowledge.entity.ilike(term),
                                                           Knowledge.entity_type == 'NAMED ENTITY',
                                                           Knowledge.chat_id == chat_id).first()
+
+        if knowledge_entry.update_count < limit_rate:  # Don't summarize if it's below the limit
+            return None
+
         prompt = make_summary_prompt(session, knowledge_entry, context_len, api_settings, summarization_settings)
         if prompt is None:  # Edge case of having 1 message for summary, only may happen at start of chat
             return None
@@ -91,5 +96,6 @@ def summarize(term: str, label: str, chat_id: int, api_settings: dict = None, su
         knowledge_entry.summary = summary_text
         knowledge_entry.token_count = count_context(summary_text, summarization_backend, summarization_url,
                                                     summarization_auth)
+        knowledge_entry.update_count = 1
         summary_logger.debug(f'({knowledge_entry.token_count} tokens){term} ({label}): {summary_text}\n{request_json}')
         session.commit()
