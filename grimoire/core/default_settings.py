@@ -5,6 +5,7 @@ defaults = {
     'LOG_PROMPTS': False,
     'single_api_mode': False,
     'multi_user_mode': False,
+    'prefer_gpu': False,
     'context_percentage': 0.25,
     'preserved_messages': 2,
     'main_api': {
@@ -29,6 +30,7 @@ defaults = {
     },
     'summarization': {
         'prompt': '{bos_token}{previous_summary}\n{messages}\n{input_sequence}Describe {term}.{output_sequence}',
+        'limit_rate': 1,
         'bos_token': '<s>',
         'params': {
             'min_p': 0.1,
