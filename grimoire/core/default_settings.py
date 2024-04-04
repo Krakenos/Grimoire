@@ -1,6 +1,6 @@
 defaults = {
     'CELERY_BROKER_URL': 'redis://127.0.0.1:6379/0',
-    'DB_ENGINE': 'sqlite:///db.sqlite3',
+    'DB_ENGINE': 'postgresql+psycopg2://grimoire:secretpassword@127.0.0.1:5432/grimoire',
     'DEBUG': False,
     'LOG_PROMPTS': False,
     'single_api_mode': False,
