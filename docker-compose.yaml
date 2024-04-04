@@ -18,5 +18,9 @@ services:
   postgres:
     image: postgres
     container_name: 'postgres'
+    environment:
+      - POSTGRES_USER=grimoire
+      - POSTGRES_PASSWORD=secretpassword
+      - POSTGRES_DB=grimoire
     ports:
       - 5432:5432
