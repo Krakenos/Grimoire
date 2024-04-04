@@ -47,7 +47,7 @@ class SettingsLoader:
 
 
 def merge_settings(settings_dict, overrides):
-    settings_dict = settings_dict.copy()
+    settings_dict = settings_dict.deepcopy()
     for key, value in overrides.items():
         if key in settings_dict and value not in ('', None):
             match value:
@@ -58,7 +58,7 @@ def merge_settings(settings_dict, overrides):
     return settings_dict
 
 
-settings = defaults.copy()
+settings = defaults.deepcopy()
 loaded_settings = SettingsLoader.load_config()
 settings = merge_settings(settings, loaded_settings)
 
