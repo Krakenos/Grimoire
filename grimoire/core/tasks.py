@@ -42,7 +42,7 @@ def make_summary_prompt(session, knowledge_entry, max_context: int, api_settings
         new_prompt = summarization_settings['prompt'].format(term=knowledge_entry.entity,
                                                              previous_summary=summary,
                                                              messages=messages_text,
-                                                             bos_token=settings['summarization']['bos_token'],
+                                                             bos_token=summarization_settings['bos_token'],
                                                              input_sequence=input_sequence,
                                                              output_sequence=output_sequence)
         new_tokens = count_context(new_prompt, summarization_backend, summarization_url, summarization_auth)
@@ -54,8 +54,8 @@ def make_summary_prompt(session, knowledge_entry, max_context: int, api_settings
 
 
 @celery_app.task(base=Singleton, lock_expiry=60)
-def summarize(term: str, label: str, chat_id: int, api_settings: dict = None, summarization_settings: dict = None,
-              db_engine: str = None, context_len: int = 4096, response_len: int = 300) -> None:
+def summarize(term: str, label: str, chat_id: int, api_settings: dict, summarization_settings: dict,
+              db_engine: str, context_len: int = 4096, response_len: int = 300) -> None:
     db = create_engine(db_engine)
     summarization_url = api_settings['url']
     summarization_backend = api_settings['backend']

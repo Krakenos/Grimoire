@@ -1,3 +1,4 @@
+import copy
 from urllib.parse import urljoin
 
 import requests
@@ -29,8 +30,9 @@ async def extra_version():
 @router.post('/api/v1/generate')
 async def generate(k_request: KAIGeneration):
     passthrough_json = k_request.model_dump()
+    current_settings = copy.deepcopy(settings)
     if k_request.grimoire.instruct is not None:
-        update_instruct(k_request.grimoire.instruct)
+        current_settings = update_instruct(k_request.grimoire.instruct)
     new_prompt = process_prompt(prompt=k_request.prompt,
                                 chat_id=k_request.grimoire.chat_id,
                                 context_length=k_request.max_context_length,

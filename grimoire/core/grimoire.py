@@ -1,3 +1,4 @@
+import copy
 import re
 import timeit
 from typing import Type
@@ -128,11 +129,15 @@ def process_prompt(prompt: str,
                    context_length: int,
                    api_type: str | None = None,
                    generation_data: GenerationData | None = None,
-                   user_id: str | None = None) -> str:
+                   user_id: str | None = None,
+                   current_settings: dict | None = None) -> str:
     start_time = timeit.default_timer()
 
+    if current_settings is None:
+        current_settings = copy.deepcopy(settings)
+
     if api_type is None:
-        api_type = settings['main_api']['backend']
+        api_type = current_settings['main_api']['backend']
 
     user = get_user(user_id)
     chat = get_chat(user, chat_id)
@@ -140,12 +145,12 @@ def process_prompt(prompt: str,
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     floating_prompts = None
 
-    if settings['single_api_mode']:
-        summarization_api = settings['main_api'].copy()
+    if current_settings['single_api_mode']:
+        summarization_api = current_settings['main_api'].copy()
         if api_type is not None:
             summarization_api['backend'] = api_type
     else:
-        summarization_api = settings['side_api'].copy()
+        summarization_api = current_settings['side_api'].copy()
 
     if generation_data:
         floating_prompts = get_extra_info(prompt, generation_data)
@@ -184,8 +189,8 @@ def process_prompt(prompt: str,
                                 entity.label_,
                                 chat.id,
                                 summarization_api,
-                                settings['summarization'],
-                                settings['DB_ENGINE'])
+                                current_settings['summarization'],
+                                current_settings['DB_ENGINE'])
 
     end_time = timeit.default_timer()
     general_logger.info(f'Prompt processing time: {end_time - start_time}s')
@@ -397,18 +402,20 @@ def get_injected_indices(floating_prompts: list[RequestMessage]) -> list[int]:
     return injected_prompt_indices
 
 
-def update_instruct(instruct_info: Instruct) -> None:
+def update_instruct(instruct_info: Instruct) -> dict:
+    new_settings = copy.deepcopy(settings)
     if instruct_info.wrap:
         input_seq = f'{instruct_info.input_sequence}\n'
         output_seq = f'\n{instruct_info.output_sequence}\n'
     else:
         input_seq = instruct_info.input_sequence
         output_seq = instruct_info.output_sequence
-    settings['main_api']['input_sequence'] = input_seq
-    settings['main_api']['output_sequence'] = output_seq
-    settings['main_api']['first_output_sequence'] = instruct_info.first_output_sequence
-    settings['main_api']['last_output_sequence'] = instruct_info.last_output_sequence
-    settings['main_api']['separator_sequence'] = instruct_info.separator_sequence
+    new_settings['main_api']['input_sequence'] = input_seq
+    new_settings['main_api']['output_sequence'] = output_seq
+    new_settings['main_api']['first_output_sequence'] = instruct_info.first_output_sequence
+    new_settings['main_api']['last_output_sequence'] = instruct_info.last_output_sequence
+    new_settings['main_api']['separator_sequence'] = instruct_info.separator_sequence
+    return new_settings
 
 
 def instruct_regex() -> str:

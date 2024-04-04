@@ -1,3 +1,4 @@
+import copy
 from urllib.parse import urljoin
 
 import requests
@@ -36,8 +37,9 @@ async def completions(oai_request: OAIGeneration, request: Request):
 
     passthrough_json = oai_request.model_dump()
 
+    current_settings = copy.deepcopy(settings)
     if oai_request.grimoire.instruct is not None:
-        update_instruct(oai_request.grimoire.instruct)
+        current_settings = update_instruct(oai_request.grimoire.instruct)
 
     passthrough_url = urljoin(settings['main_api']['url'], '/v1/completions')
     passthrough_json['api_server'] = settings['main_api']['url']
