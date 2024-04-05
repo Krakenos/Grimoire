@@ -38,8 +38,9 @@ async def generate(k_request: KAIGeneration):
                                 context_length=k_request.max_context_length,
                                 api_type='kobold',
                                 generation_data=k_request.grimoire.generation_data,
-                                user_id=k_request.grimoire.user_id)
-    passthrough_url = urljoin(settings['main_api']['url'], '/api/v1/generate')
+                                user_id=k_request.grimoire.user_id,
+                                current_settings=current_settings)
+    passthrough_url = urljoin(current_settings['main_api']['url'], '/api/v1/generate')
     passthrough_json['prompt'] = new_prompt
     kobold_response = requests.post(passthrough_url, json=passthrough_json)
     return kobold_response.json()
