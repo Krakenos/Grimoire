@@ -17,6 +17,7 @@ IF NOT EXIST "venv\" (
 CALL docker container inspect grimoire-redis
 IF ERRORLEVEL 1 (
     CALL docker run -d --name grimoire-redis -p 6379:6379 redis
+    CALL docker run --name grimoire-postgres -p 5432:5432 -e POSTGRES_PASSWORD=secretpassword -e POSTGRES_USER=grimoire -e POSTGRES_DB=grimoire -d postgres
     IF ERRORLEVEL 1 (
         ECHO Error, docker is either not installed or not running.
         PAUSE

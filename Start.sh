@@ -10,6 +10,7 @@ if [ $? -eq 0 ]; then
     docker start grimoire-redis
 else
     docker run -d --name grimoire-redis -p 6379:6379 redis
+    docker run --name grimoire-postgres -p 5432:5432 -e POSTGRES_PASSWORD=secretpassword -e POSTGRES_USER=grimoire -e POSTGRES_DB=grimoire -d postgres
 fi
 
 source venv/bin/activate

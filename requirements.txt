@@ -1,7 +1,8 @@
 spacy~=3.7.2
+spacy[cuda12x]
 requests~=2.31.0
 uvicorn~=0.23.2
-fastapi~=0.104.0
+fastapi~=0.110.1
 pydantic~=2.4.2
 SQLAlchemy~=2.0.22
 alembic~=1.12.1
@@ -11,3 +12,4 @@ transformers~=4.36.2
 sseclient-py~=1.8.0
 celery-singleton~=0.3.1
 PyYAML~=6.0.1
+psycopg2-binary

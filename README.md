@@ -34,7 +34,7 @@ side_api: # The whole section below is ignored if single api mode is set to True
 ```
 
 Depending on your system, run `Start.bat` for windows, or `Start.sh` on linux. These scripts will automatically:
-- download and run docker image for redis
+- download and run docker image for redis and postgres
 - create and enter python virtual environment
 - install required dependencies
 - run Grimoire
@@ -64,13 +64,17 @@ Grimoire API starts by default on port 5005, and you interact with it pretty muc
 }
 ```
 
-Note: Lorebooks/world info and author's note break Grimoire, so it's not compatible with these features as of now.
 ### Running from source
 If instead of using `Start` scripts you want to run Grimoire manually, here is how you do it.
 
 To install Redis through docker use the following command:
 ```bash
 docker run -d --name redis -p 6379:6379 redis
+```
+
+Installing postgres in docker container:
+```bash
+docker run --name grimoire-postgres -p 5432:5432 -e POSTGRES_PASSWORD=secretpassword -e POSTGRES_USER=grimoire -e POSTGRES_DB=grimoire -d postgres
 ```
 
 Installing Grimoire requirements:

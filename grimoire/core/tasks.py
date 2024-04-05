@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from grimoire.common.llm_helpers import count_context, generate_text
-from grimoire.common.loggers import summary_logger
+from grimoire.common.loggers import summary_logger, general_logger
 from grimoire.core.settings import settings
 from grimoire.db.models import Knowledge, Message
 
@@ -42,7 +42,7 @@ def make_summary_prompt(session, knowledge_entry, max_context: int, api_settings
         new_prompt = summarization_settings['prompt'].format(term=knowledge_entry.entity,
                                                              previous_summary=summary,
                                                              messages=messages_text,
-                                                             bos_token=settings['summarization']['bos_token'],
+                                                             bos_token=summarization_settings['bos_token'],
                                                              input_sequence=input_sequence,
                                                              output_sequence=output_sequence)
         new_tokens = count_context(new_prompt, summarization_backend, summarization_url, summarization_auth)
@@ -54,16 +54,22 @@ def make_summary_prompt(session, knowledge_entry, max_context: int, api_settings
 
 
 @celery_app.task(base=Singleton, lock_expiry=60)
-def summarize(term: str, label: str, chat_id: int, api_settings: dict = None, summarization_settings: dict = None,
-              db_engine: str = None, context_len: int = 4096, response_len: int = 300) -> None:
+def summarize(term: str, label: str, chat_id: int, api_settings: dict, summarization_settings: dict,
+              db_engine: str, context_len: int = 4096, response_len: int = 300) -> None:
     db = create_engine(db_engine)
     summarization_url = api_settings['url']
     summarization_backend = api_settings['backend']
     summarization_auth = api_settings['auth_key']
+    limit_rate = summarization_settings['limit_rate']
     with Session(db) as session:
         knowledge_entry = session.query(Knowledge).filter(Knowledge.entity.ilike(term),
                                                           Knowledge.entity_type == 'NAMED ENTITY',
                                                           Knowledge.chat_id == chat_id).first()
+
+        if knowledge_entry.update_count < limit_rate:  # Don't summarize if it's below the limit
+            general_logger.info('Skipping entry to summarize, messages amount below limit rate')
+            return None
+
         prompt = make_summary_prompt(session, knowledge_entry, context_len, api_settings, summarization_settings)
         if prompt is None:  # Edge case of having 1 message for summary, only may happen at start of chat
             return None
@@ -91,5 +97,6 @@ def summarize(term: str, label: str, chat_id: int, api_settings: dict = None, su
         knowledge_entry.summary = summary_text
         knowledge_entry.token_count = count_context(summary_text, summarization_backend, summarization_url,
                                                     summarization_auth)
+        knowledge_entry.update_count = 1
         summary_logger.debug(f'({knowledge_entry.token_count} tokens){term} ({label}): {summary_text}\n{request_json}')
         session.commit()
