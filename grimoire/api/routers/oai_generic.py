@@ -27,9 +27,9 @@ async def model():
 
 @router.post('/v1/completions')
 async def completions(oai_request: OAIGeneration, request: Request):
-    def streaming_messages(url, data_json):
+    def streaming_messages(url, auth_key, data_json):
         streaming_response = requests.post(url, stream=True,
-                                           headers={'Authorization': f"Bearer {settings['main_api']['auth_key']}"},
+                                           headers={'Authorization': f"Bearer {auth_key}"},
                                            json=data_json)
         client = sseclient.SSEClient(streaming_response)
         for event in client.events():
@@ -38,27 +38,31 @@ async def completions(oai_request: OAIGeneration, request: Request):
     passthrough_json = oai_request.model_dump()
 
     current_settings = copy.deepcopy(settings)
+
     if oai_request.grimoire.instruct is not None:
         current_settings = update_instruct(oai_request.grimoire.instruct)
 
-    passthrough_url = urljoin(settings['main_api']['url'], '/v1/completions')
-    passthrough_json['api_server'] = settings['main_api']['url']
+    passthrough_url = urljoin(current_settings['main_api']['url'], '/v1/completions')
+    auth_key = current_settings['main_api']['auth_key']
+    passthrough_json['api_server'] = current_settings['main_api']['url']
 
     new_prompt = process_prompt(prompt=oai_request.prompt,
                                 chat_id=oai_request.grimoire.chat_id,
                                 context_length=oai_request.truncation_length,
                                 api_type=oai_request.api_type,
                                 generation_data=oai_request.grimoire.generation_data,
-                                user_id=oai_request.grimoire.user_id)
+                                user_id=oai_request.grimoire.user_id,
+                                current_settings=current_settings)
 
     passthrough_json['prompt'] = new_prompt
 
     if oai_request.stream:
-        return StreamingResponse(streaming_messages(passthrough_url, passthrough_json), media_type="text/event-stream")
+        return StreamingResponse(streaming_messages(passthrough_url, auth_key, passthrough_json),
+                                 media_type="text/event-stream")
 
     else:
         engine_response = requests.post(passthrough_url,
-                                        headers={'Authorization': f"Bearer {settings['main_api']['auth_key']}"},
+                                        headers={'Authorization': f"Bearer {auth_key}"},
                                         json=passthrough_json)
         return engine_response.json()
 
