@@ -18,7 +18,13 @@ from grimoire.core.tasks import summarize
 from grimoire.db.models import Message, Knowledge, User, Chat
 
 if settings['prefer_gpu']:
-    spacy.prefer_gpu()
+    gpu_check = spacy.prefer_gpu()
+    if gpu_check:
+        general_logger.info('Running spacy on GPU')
+    else:
+        general_logger.info('Failed to run on gpu, defaulting to CPU')
+else:
+    general_logger.info('Running spacy on CPU')
 
 nlp = spacy.load("en_core_web_trf")
 db = create_engine(settings['DB_ENGINE'])
