@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from grimoire.common.llm_helpers import count_context, generate_text
-from grimoire.common.loggers import summary_logger
+from grimoire.common.loggers import summary_logger, general_logger
 from grimoire.core.settings import settings
 from grimoire.db.models import Knowledge, Message
 
@@ -67,6 +67,7 @@ def summarize(term: str, label: str, chat_id: int, api_settings: dict, summariza
                                                           Knowledge.chat_id == chat_id).first()
 
         if knowledge_entry.update_count < limit_rate:  # Don't summarize if it's below the limit
+            general_logger.info('Skipping entry to summarize, messages amount below limit rate')
             return None
 
         prompt = make_summary_prompt(session, knowledge_entry, context_len, api_settings, summarization_settings)
