@@ -375,8 +375,8 @@ def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]]) -> list[tuple[
                                             Knowledge.entity_type == 'NAMED ENTITY',
                                             Knowledge.chat_id == chat.id,
                                             Knowledge.summary.isnot(None),
-                                            Knowledge.summary.isnot(''), Knowledge.token_count.isnot(None),
-                                            Knowledge.token_count.isnot(0))
+                                            Knowledge.token_count.isnot(None),
+                                            Knowledge.token_count != 0)
             instance = session.scalars(query).first()
 
             if instance is not None:
@@ -432,7 +432,7 @@ def instruct_regex(current_settings) -> str:
     pattern = input_seq + r'|' + output_seq
     if last_output_seq:
         pattern += f'|{last_output_seq}'
-    if first_output_seq:
+    if first_output_seq and first_output_seq != '\n':
         pattern += f'|{first_output_seq}'
     if separator_seq:
         pattern += f'|{separator_seq}{input_seq}'
