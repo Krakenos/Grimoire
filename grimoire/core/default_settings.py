@@ -20,7 +20,7 @@ defaults = {
         'output_suffix': '',
         'first_output_sequence': '',
         'last_output_sequence': '',
-        'wrap': False,
+        'wrap': False
     },
     'side_api': {
         'backend': 'GenericOAI',
@@ -34,7 +34,7 @@ defaults = {
         'output_suffix': '',
         'first_output_sequence': '',
         'last_output_sequence': '',
-        'wrap': False,
+        'wrap': False
     },
     'summarization': {
         'prompt': '{bos_token}{previous_summary}\n{messages}\n{input_sequence}Describe {term}.{output_sequence}',

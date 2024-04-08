@@ -13,6 +13,7 @@ class KAIAbort(BaseModel):
 
 class Instruct(BaseModel):
     enabled: bool
+    collapse_newlines: bool
     system_sequence: str
     system_suffix: str
     input_sequence: str
