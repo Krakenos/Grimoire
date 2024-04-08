@@ -13,17 +13,16 @@ class KAIAbort(BaseModel):
 
 class Instruct(BaseModel):
     enabled: bool
-    system_prompt: str
+    system_sequence: str
+    system_suffix: str
     input_sequence: str
+    input_suffix: str
     output_sequence: str
+    output_suffix: str
     first_output_sequence: str
     last_output_sequence: str
-    system_sequence_prefix: str
-    system_sequence_suffix: str
-    stop_sequence: str
-    separator_sequence: str
     wrap: bool
-    names: bool
+
 
 
 class Message(BaseModel):
