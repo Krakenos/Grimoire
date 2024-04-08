@@ -429,6 +429,10 @@ def update_instruct(instruct_info: Instruct) -> dict:
     new_settings['main_api']['output_suffix'] = instruct_info.output_suffix
     new_settings['main_api']['first_output_sequence'] = instruct_info.first_output_sequence
     new_settings['main_api']['last_output_sequence'] = instruct_info.last_output_sequence
+    if instruct_info.collapse_newlines:
+        for key, value in new_settings['main_api']:
+            if key not in ['wrap', 'backend', 'url', 'auth'] and type(value) is str:
+                new_settings['main_api'][key] = re.sub(r'\n+', '\n', value)
     return new_settings
 
 
