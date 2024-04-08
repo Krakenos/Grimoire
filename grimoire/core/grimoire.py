@@ -145,8 +145,6 @@ def process_prompt(prompt: str,
     if api_type is None:
         api_type = current_settings['main_api']['backend']
 
-
-
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     floating_prompts = None
 
@@ -448,24 +446,17 @@ def instruct_regex(current_settings) -> str:
     system_suffix = re.escape(current_settings['main_api']['system_suffix'])
     first_output_seq = re.escape(current_settings['main_api']['first_output_sequence'])
     last_output_seq = re.escape(current_settings['main_api']['last_output_sequence'])
-    pattern = input_seq + r'|' + output_seq + r'|' + system_seq
-    if input_suffix:
-        pattern += f'|{input_suffix}{input_seq}'
-        pattern += f'|{input_suffix}{output_seq}'
-        pattern += f'|{input_suffix}{system_seq}'
-    if output_suffix:
-        pattern += f'|{output_suffix}{input_seq}'
-        pattern += f'|{output_suffix}{output_seq}'
-        pattern += f'|{output_suffix}{system_seq}'
-    if system_suffix:
-        pattern += f'|{system_suffix}{input_seq}'
-        pattern += f'|{system_suffix}{output_seq}'
-        pattern += f'|{system_suffix}{system_seq}'
-    if last_output_seq:
-        pattern += f'|{last_output_seq}'
-    if first_output_seq and first_output_seq != '\n':
-        pattern += f'|{first_output_seq}'
+
+    patterns = [input_seq, output_seq, system_seq, f'{input_suffix}{input_seq}', f'{input_suffix}{output_seq}',
+                f'{input_suffix}{system_seq}', f'{output_suffix}{input_seq}', f'{output_suffix}{output_seq}',
+                f'{output_suffix}{system_seq}', f'{system_suffix}{input_seq}', f'{system_suffix}{output_seq}',
+                f'{system_suffix}{system_seq}', f'{last_output_seq}', f'{first_output_seq}']
+
+    unique_patterns = list(set(patterns))
+    filtered_patterns = filter(lambda x: x and x not in ('\n', '\\\n', ' '), unique_patterns)
+
+    pattern = '|'.join(filtered_patterns)
+
     if current_settings['main_api']['collapse_newlines']:
-        old_pattern = pattern
         pattern = re.sub(r'(\\\n)+', '\\\n', pattern)
     return pattern
