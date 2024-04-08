@@ -431,6 +431,7 @@ def update_instruct(instruct_info: Instruct) -> dict:
     new_settings['main_api']['output_suffix'] = instruct_info.output_suffix
     new_settings['main_api']['first_output_sequence'] = instruct_info.first_output_sequence
     new_settings['main_api']['last_output_sequence'] = instruct_info.last_output_sequence
+    new_settings['main_api']['collapse_newlines'] = instruct_info.collapse_newlines
     if instruct_info.collapse_newlines:
         for key, value in new_settings['main_api'].items():
             if key not in ['wrap', 'backend', 'url', 'auth'] and type(value) is str:
@@ -464,4 +465,7 @@ def instruct_regex(current_settings) -> str:
         pattern += f'|{last_output_seq}'
     if first_output_seq and first_output_seq != '\n':
         pattern += f'|{first_output_seq}'
+    if current_settings['main_api']['collapse_newlines']:
+        old_pattern = pattern
+        pattern = re.sub(r'(\\\n)+', '\\\n', pattern)
     return pattern
