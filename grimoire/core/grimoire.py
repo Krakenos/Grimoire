@@ -421,11 +421,14 @@ def update_instruct(instruct_info: Instruct) -> dict:
     else:
         input_seq = instruct_info.input_sequence
         output_seq = instruct_info.output_sequence
+    new_settings['main_api']['system_sequence'] = instruct_info.system_sequence
+    new_settings['main_api']['system_suffix'] = instruct_info.system_suffix
     new_settings['main_api']['input_sequence'] = input_seq
+    new_settings['main_api']['input_suffix'] = instruct_info.input_suffix
     new_settings['main_api']['output_sequence'] = output_seq
+    new_settings['main_api']['output_suffix'] = instruct_info.output_suffix
     new_settings['main_api']['first_output_sequence'] = instruct_info.first_output_sequence
     new_settings['main_api']['last_output_sequence'] = instruct_info.last_output_sequence
-    new_settings['main_api']['separator_sequence'] = instruct_info.separator_sequence
     return new_settings
 
 
