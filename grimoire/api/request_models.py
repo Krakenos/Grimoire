@@ -24,7 +24,6 @@ class Instruct(BaseModel):
     wrap: bool
 
 
-
 class Message(BaseModel):
     message: str
     extensionPrompts: list[str]
