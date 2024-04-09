@@ -63,9 +63,25 @@ def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
 
 async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None):
     tasks = []
-    async with aiohttp.ClientSession() as session:
+    tokenization_endpoint = ''
+    request_jsons = []
+
+    if api_type.lower() in ('koboldai', 'koboldcpp'):
+        tokenization_endpoint = urljoin(api_url, '/api/extra/tokencount')
         for text in batch:
-            task = asyncio.ensure_future(post_json({'prompt': text}, api_url, session))
+            request_jsons.append({'prompt': text})
+    elif api_type.lower() == 'tabby':
+        tokenization_endpoint = urljoin(api_url, '/v1/token/encode')
+        for text in batch:
+            request_jsons.append({'text': text})
+    elif api_type.lower() == 'aphrodite':
+        tokenization_endpoint = urljoin(api_url, '/v1/tokenize')
+        for text in batch:
+            request_jsons.append({'prompt': text})
+
+    async with aiohttp.ClientSession() as session:
+        for request_json in request_jsons:
+            task = asyncio.ensure_future(post_json(request_json, api_url, session))
             tasks.append(task)
         responses = await asyncio.gather(*tasks)
         return responses
