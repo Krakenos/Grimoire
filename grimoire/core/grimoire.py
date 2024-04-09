@@ -248,8 +248,11 @@ def fill_context(prompt: str,
     unique_ents = get_ordered_entities(banned_labels, docs)
     summaries = get_summaries(chat, unique_ents)
 
-    grimoire_text, grimoire_text_len = generate_grimoire_text(api_type, max_grimoire_context,
-                                                              summaries, current_settings)
+    prompt_entries = {}
+
+    grimoire_entries = generate_grimoire_entries(max_grimoire_context, summaries)
+
+    prompt_entries['grimoire'] = grimoire_entries
 
     definitions_context_len = count_context(text=prompt_definitions, api_type=api_type,
                                             api_url=current_settings['main_api']['url'],
@@ -353,24 +356,16 @@ def chat_messages_culling(api_type: str,
     return context_overflow, messages_text, min_message_context
 
 
-def generate_grimoire_text(api_type: str,
-                           max_grimoire_context: int,
-                           summaries: list[tuple[str, int, str]],
-                           current_settings: dict) -> tuple[str, int]:
+def generate_grimoire_entries(max_grimoire_context: int,
+                              summaries: list[tuple[str, int, str]]) -> list[str]:
     grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
-    grimoire_text = ''
 
     while grimoire_estimated_tokens > max_grimoire_context:
         summaries.pop()
         grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
 
-    for summary in summaries:
-        grimoire_text = grimoire_text + f'[ {summary[2]}: {summary[0]} ]\n'
-
-    grimoire_text_len = count_context(text=grimoire_text, api_type=api_type,
-                                      api_url=current_settings['main_api']['url'],
-                                      api_auth=current_settings['main_api']['auth_key'])
-    return grimoire_text, grimoire_text_len
+    grimoire_entries = [f'[ {summary[2]}: {summary[0]} ]\n' for summary in summaries]
+    return grimoire_entries
 
 
 def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]]) -> list[tuple[str, int, str]]:
