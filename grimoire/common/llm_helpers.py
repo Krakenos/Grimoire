@@ -1,5 +1,7 @@
+import asyncio
 from urllib.parse import urljoin
 
+import aiohttp
 import requests
 from transformers import AutoTokenizer
 
@@ -57,6 +59,21 @@ def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
         encoded = tokenizer(text)
         token_amount = len(encoded['input_ids'])
         return token_amount
+
+
+async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None):
+    tasks = []
+    async with aiohttp.ClientSession() as session:
+        for text in batch:
+            task = asyncio.ensure_future(post_json({'prompt': text}, api_url, session))
+            tasks.append(task)
+        responses = await asyncio.gather(*tasks)
+        return responses
+
+
+async def post_json(json_content: dict, url: str, session):
+    async with session.post(url, json=json_content) as resp:
+        return await resp.json()
 
 
 def get_context_length(api_url: str) -> int:
