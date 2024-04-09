@@ -12,21 +12,31 @@ defaults = {
         'backend': 'GenericOAI',
         'url': '',
         'auth_key': '',
+        'system_sequence': '',
+        'system_suffix': '',
         'input_sequence': '### Instruction:\n',
+        'input_suffix': '',
         'output_sequence': '\n### Response:\n',
+        'output_suffix': '',
         'first_output_sequence': '',
         'last_output_sequence': '',
-        'separator_sequence': '',
-        'wrap': '',
-        'system_sequence_prefix': '',
-        'system_sequence_suffix': ''
+        'wrap': False,
+        'collapse_newlines': False
     },
     'side_api': {
         'backend': 'GenericOAI',
         'url': '',
         'auth_key': '',
+        'system_sequence': '',
+        'system_suffix': '',
         'input_sequence': '### Instruction:\n',
-        'output_sequence': '\n### Response:\n'
+        'input_suffix': '',
+        'output_sequence': '\n### Response:\n',
+        'output_suffix': '',
+        'first_output_sequence': '',
+        'last_output_sequence': '',
+        'wrap': False,
+        'collapse_newlines': False
     },
     'summarization': {
         'prompt': '{bos_token}{previous_summary}\n{messages}\n{input_sequence}Describe {term}.{output_sequence}',

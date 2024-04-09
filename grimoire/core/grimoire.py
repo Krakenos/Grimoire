@@ -145,9 +145,6 @@ def process_prompt(prompt: str,
     if api_type is None:
         api_type = current_settings['main_api']['backend']
 
-    user = get_user(user_id, current_settings)
-    chat = get_chat(user, chat_id)
-
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
     floating_prompts = None
 
@@ -173,6 +170,9 @@ def process_prompt(prompt: str,
                 chat_messages.append(message)
     else:
         chat_messages = all_messages
+
+    user = get_user(user_id, current_settings)
+    chat = get_chat(user, chat_id)
 
     with Session(db) as session:
         doc_time = timeit.default_timer()
@@ -421,25 +421,42 @@ def update_instruct(instruct_info: Instruct) -> dict:
     else:
         input_seq = instruct_info.input_sequence
         output_seq = instruct_info.output_sequence
+    new_settings['main_api']['system_sequence'] = instruct_info.system_sequence
+    new_settings['main_api']['system_suffix'] = instruct_info.system_suffix
     new_settings['main_api']['input_sequence'] = input_seq
+    new_settings['main_api']['input_suffix'] = instruct_info.input_suffix
     new_settings['main_api']['output_sequence'] = output_seq
+    new_settings['main_api']['output_suffix'] = instruct_info.output_suffix
     new_settings['main_api']['first_output_sequence'] = instruct_info.first_output_sequence
     new_settings['main_api']['last_output_sequence'] = instruct_info.last_output_sequence
-    new_settings['main_api']['separator_sequence'] = instruct_info.separator_sequence
+    new_settings['main_api']['collapse_newlines'] = instruct_info.collapse_newlines
+    if instruct_info.collapse_newlines:
+        for key, value in new_settings['main_api'].items():
+            if key not in ['wrap', 'backend', 'url', 'auth'] and type(value) is str:
+                new_settings['main_api'][key] = re.sub(r'\n+', '\n', value)
     return new_settings
 
 
 def instruct_regex(current_settings) -> str:
     input_seq = re.escape(current_settings['main_api']['input_sequence'])
+    input_suffix = re.escape(current_settings['main_api']['input_suffix'])
     output_seq = re.escape(current_settings['main_api']['output_sequence'])
+    output_suffix = re.escape(current_settings['main_api']['output_suffix'])
+    system_seq = re.escape(current_settings['main_api']['system_sequence'])
+    system_suffix = re.escape(current_settings['main_api']['system_suffix'])
     first_output_seq = re.escape(current_settings['main_api']['first_output_sequence'])
     last_output_seq = re.escape(current_settings['main_api']['last_output_sequence'])
-    separator_seq = re.escape(current_settings['main_api']['separator_sequence'])
-    pattern = input_seq + r'|' + output_seq
-    if last_output_seq:
-        pattern += f'|{last_output_seq}'
-    if first_output_seq and first_output_seq != '\n':
-        pattern += f'|{first_output_seq}'
-    if separator_seq:
-        pattern += f'|{separator_seq}{input_seq}'
+
+    patterns = [input_seq, output_seq, system_seq, f'{input_suffix}{input_seq}', f'{input_suffix}{output_seq}',
+                f'{input_suffix}{system_seq}', f'{output_suffix}{input_seq}', f'{output_suffix}{output_seq}',
+                f'{output_suffix}{system_seq}', f'{system_suffix}{input_seq}', f'{system_suffix}{output_seq}',
+                f'{system_suffix}{system_seq}', f'{last_output_seq}', f'{first_output_seq}']
+
+    unique_patterns = list(set(patterns))
+    filtered_patterns = filter(lambda x: x and x not in ('\n', '\\\n', ' '), unique_patterns)
+
+    pattern = '|'.join(filtered_patterns)
+
+    if current_settings['main_api']['collapse_newlines']:
+        pattern = re.sub(r'(\\\n)+', '\\\n', pattern)
     return pattern
