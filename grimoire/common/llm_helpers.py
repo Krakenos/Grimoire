@@ -61,10 +61,12 @@ def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
         return token_amount
 
 
-async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None):
+async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None) -> list[int]:
     tasks = []
     tokenization_endpoint = ''
     request_jsons = []
+    header = {'Authorization': f'Bearer {api_auth}'}
+    token_amounts = []
 
     if api_type.lower() in ('koboldai', 'koboldcpp'):
         tokenization_endpoint = urljoin(api_url, '/api/extra/tokencount')
@@ -81,14 +83,25 @@ async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=No
 
     async with aiohttp.ClientSession() as session:
         for request_json in request_jsons:
-            task = asyncio.ensure_future(post_json(request_json, api_url, session))
+            task = asyncio.ensure_future(post_json(request_json, header, tokenization_endpoint, session))
             tasks.append(task)
         responses = await asyncio.gather(*tasks)
-        return responses
+
+    if api_type.lower() in ('koboldai', 'koboldcpp'):
+        for response in responses:
+            token_amounts.append(int(response['value']))
+    elif api_type.lower() == 'tabby':
+        for response in responses:
+            token_amounts.append(int(response['length']))
+    elif api_type.lower() == 'aphrodite':
+        for response in responses:
+            token_amounts.append(int(response['value']))
+
+    return token_amounts
 
 
-async def post_json(json_content: dict, url: str, session):
-    async with session.post(url, json=json_content) as resp:
+async def post_json(json_content: dict, headers: dict, url: str, session: aiohttp.ClientSession) -> dict:
+    async with session.post(url, json=json_content, headers=headers) as resp:
         return await resp.json()
 
 
