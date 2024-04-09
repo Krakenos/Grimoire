@@ -61,6 +61,26 @@ def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
         return token_amount
 
 
+def local_tokenization(texts: str | list[str], api_url: str, api_auth: str, api_type: str) -> int | list[int]:
+    model_name = get_model_name(api_url, api_auth, api_type)
+    text = ''
+    if texts is str:
+        text = texts
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+    except OSError as s:
+        general_logger.warning('Could not load model tokenizer, defaulting to llama-tokenizer')
+        general_logger.warning(s)
+        tokenizer = AutoTokenizer.from_pretrained('oobabooga/llama-tokenizer')
+    if text:
+        encoded = tokenizer(text)
+        token_amount = len(encoded['input_ids'])
+        return token_amount
+    else:
+        encoded_texts = [tokenizer(text) for text in texts]
+        return [len(tokenized_text['input_ids']) for tokenized_text in encoded_texts]
+
+
 async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None) -> list[int]:
     tasks = []
     tokenization_endpoint = ''
