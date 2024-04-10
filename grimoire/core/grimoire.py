@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from grimoire.api.request_models import Instruct, GenerationData
 from grimoire.api.request_models import Message as RequestMessage
-from grimoire.common.llm_helpers import count_context
+from grimoire.common.llm_helpers import count_context, token_count
 from grimoire.common.loggers import general_logger, context_logger
 from grimoire.common.utils import orm_get_or_create
 from grimoire.core.settings import settings
@@ -130,13 +130,13 @@ def get_chat(user: User, chat_id: str) -> Chat:
     return chat
 
 
-def process_prompt(prompt: str,
-                   chat_id: str,
-                   context_length: int,
-                   api_type: str | None = None,
-                   generation_data: GenerationData | None = None,
-                   user_id: str | None = None,
-                   current_settings: dict | None = None) -> str:
+async def process_prompt(prompt: str,
+                         chat_id: str,
+                         context_length: int,
+                         api_type: str | None = None,
+                         generation_data: GenerationData | None = None,
+                         user_id: str | None = None,
+                         current_settings: dict | None = None) -> str:
     start_time = timeit.default_timer()
 
     if current_settings is None:
@@ -185,7 +185,7 @@ def process_prompt(prompt: str,
         save_named_entities(chat, last_docs, session)
 
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
-    new_prompt = fill_context(prompt, floating_prompts, chat, docs, context_length, api_type, current_settings)
+    new_prompt = await fill_context(prompt, floating_prompts, chat, docs, context_length, api_type, current_settings)
 
     for doc in docs_to_summarize:
         for entity in set(doc.ents):
@@ -229,13 +229,13 @@ def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
 
 # TODO Check if tokenization can be done better, waiting for the request is majority of time that takes it to process
 #   potentially prefer using local tokenizer
-def fill_context(prompt: str,
-                 floating_prompts: list[RequestMessage],
-                 chat: Chat,
-                 docs: list[Doc],
-                 context_size: int,
-                 api_type: str,
-                 current_settings: dict) -> str:
+async def fill_context(prompt: str,
+                       floating_prompts: list[RequestMessage],
+                       chat: Chat,
+                       docs: list[Doc],
+                       context_size: int,
+                       api_type: str,
+                       current_settings: dict) -> str:
     max_context = context_size
     max_grimoire_context = max_context * current_settings['context_percentage']
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
@@ -248,34 +248,36 @@ def fill_context(prompt: str,
     unique_ents = get_ordered_entities(banned_labels, docs)
     summaries = get_summaries(chat, unique_ents)
 
-    prompt_entries = {}
+    prompt_entries = {
+        'prompt_definitions': prompt_definitions,
+        'grimoire': [],
+        'messages_with_delimiters': messages_with_delimiters,
+    }
 
     grimoire_entries = generate_grimoire_entries(max_grimoire_context, summaries)
 
     prompt_entries['grimoire'] = grimoire_entries
 
-    definitions_context_len = count_context(text=prompt_definitions, api_type=api_type,
-                                            api_url=current_settings['main_api']['url'],
-                                            api_auth=current_settings['main_api']['auth_key'])
+    final_prompt = await prompt_culling(api_type, prompt_entries, context_size, current_settings)
 
-    max_chat_context = max_context - definitions_context_len - grimoire_text_len
-
-    context_overflow, messages_text, min_message_context = chat_messages_culling(api_type, injected_prompt_indices,
-                                                                                 max_chat_context,
-                                                                                 messages_with_delimiters,
-                                                                                 current_settings)
-
-    # Grimoire + WI context overflow
-    if context_overflow:
-        general_logger.warning(f'Context overflow after culling messages. Trimming grimoire entries')
-        grimoire_text = grimoire_entries_culling(api_type, definitions_context_len, grimoire_text, grimoire_text_len,
-                                                 max_context, min_message_context, current_settings)
-
-    if grimoire_text is None:
-        general_logger.warning(f'No Grimoire entries. Passing the original prompt.')
-        return prompt
-
-    final_prompt = ''.join([prompt_definitions, grimoire_text, messages_text])
+    # max_chat_context = max_context - definitions_context_len - grimoire_text_len
+    #
+    # context_overflow, messages_text, min_message_context = chat_messages_culling(api_type, injected_prompt_indices,
+    #                                                                              max_chat_context,
+    #                                                                              messages_with_delimiters,
+    #                                                                              current_settings)
+    #
+    # # Grimoire + WI context overflow
+    # if context_overflow:
+    #     general_logger.warning(f'Context overflow after culling messages. Trimming grimoire entries')
+    #     grimoire_text = grimoire_entries_culling(api_type, definitions_context_len, grimoire_text, grimoire_text_len,
+    #                                              max_context, min_message_context, current_settings)
+    #
+    # if grimoire_text is None:
+    #     general_logger.warning(f'No Grimoire entries. Passing the original prompt.')
+    #     return prompt
+    #
+    # final_prompt = ''.join([prompt_definitions, grimoire_text, messages_text])
     return final_prompt
 
 
@@ -354,6 +356,24 @@ def chat_messages_culling(api_type: str,
                                      api_auth=current_settings['main_api']['auth_key'])
 
     return context_overflow, messages_text, min_message_context
+
+
+async def prompt_culling(api_type: str,
+                         prompt_entries: dict,
+                         max_context: int,
+                         current_settings: dict) -> str:
+    prompt_definitions = prompt_entries['prompt_definitions']
+    grimoire_entries = prompt_entries['grimoire']
+    messages_with_delimiters = prompt_entries['messages_with_delimiters']
+    merged_messages = [instruct_prompt + message for instruct_prompt, message in
+                       zip(messages_with_delimiters[0::2], messages_with_delimiters[1::2])]
+    messages = [prompt_definitions, *grimoire_entries, *merged_messages]
+
+    token_amounts = await token_count(messages, api_type, current_settings['main_api']['url'],
+                                      current_settings['main_api']['auth_key'])
+    current_tokens = sum(token_amounts)
+    prompt_text = ''.join(messages)
+    return prompt_text
 
 
 def generate_grimoire_entries(max_grimoire_context: int,

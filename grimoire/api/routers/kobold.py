@@ -33,13 +33,13 @@ async def generate(k_request: KAIGeneration):
     current_settings = copy.deepcopy(settings)
     if k_request.grimoire.instruct is not None:
         current_settings = update_instruct(k_request.grimoire.instruct)
-    new_prompt = process_prompt(prompt=k_request.prompt,
-                                chat_id=k_request.grimoire.chat_id,
-                                context_length=k_request.max_context_length,
-                                api_type='kobold',
-                                generation_data=k_request.grimoire.generation_data,
-                                user_id=k_request.grimoire.user_id,
-                                current_settings=current_settings)
+    new_prompt = await process_prompt(prompt=k_request.prompt,
+                                      chat_id=k_request.grimoire.chat_id,
+                                      context_length=k_request.max_context_length,
+                                      api_type='kobold',
+                                      generation_data=k_request.grimoire.generation_data,
+                                      user_id=k_request.grimoire.user_id,
+                                      current_settings=current_settings)
     passthrough_url = urljoin(current_settings['main_api']['url'], '/api/v1/generate')
     passthrough_json['prompt'] = new_prompt
     kobold_response = requests.post(passthrough_url, json=passthrough_json)
