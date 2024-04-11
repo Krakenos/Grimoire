@@ -253,7 +253,8 @@ async def fill_context(prompt: str,
         'prompt_definitions': prompt_definitions,
         'grimoire': [],
         'messages_with_delimiters': messages_with_delimiters,
-        'floating_prompts': floating_prompts
+        'floating_prompts': floating_prompts,
+        'original_prompt': prompt
     }
 
     grimoire_entries = generate_grimoire_entries(max_grimoire_context, summaries)
@@ -379,16 +380,25 @@ async def prompt_culling(api_type: str,
                                       current_settings['main_api']['auth_key'])
     current_tokens = sum(token_amounts)
 
+    max_index = max(messages_dict.keys()) - current_settings['preserved_messages']
     messages_start_index = 0
+    starting_grimoire_index = 0
     while current_tokens > max_context:
-        if messages_start_index not in injected_indices:
+        if messages_start_index not in injected_indices and messages_start_index < max_index:
             messages_dict.pop(messages_start_index)
             messages_list = [messages_dict[index] for index in sorted(messages_dict.keys())]
             messages = [prompt_definitions, *grimoire_entries, *messages_list]
             token_amounts = await token_count(messages, api_type, current_settings['main_api']['url'],
                                               current_settings['main_api']['auth_key'])
             current_tokens = sum(token_amounts)
-        messages_start_index += 1
+            messages_start_index += 1
+        elif starting_grimoire_index < grimoire_entries:
+            starting_grimoire_index += 1
+            messages = [prompt_definitions, *grimoire_entries[starting_grimoire_index:], *messages_list]
+            current_tokens = sum(token_amounts)
+        else:
+            general_logger.warning(f'No Grimoire entries. Passing the original prompt.')
+            return prompt_entries['original_prompt']
     prompt_text = ''.join(messages)
     return prompt_text
 
