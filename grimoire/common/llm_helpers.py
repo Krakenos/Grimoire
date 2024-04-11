@@ -82,6 +82,15 @@ def local_tokenization(texts: str | list[str], api_url: str, api_auth: str, api_
 
 
 async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None) -> list[int]:
+    if api_type.lower() in ('koboldai', 'koboldcpp', 'tabby', 'aphrodite', 'genericoai'):
+        token_amounts = await remote_tokenization(batch, api_url, api_auth, api_type)
+    else:
+        token_amounts = local_tokenization(batch, api_url, api_auth, api_type)
+
+    return token_amounts
+
+
+async def remote_tokenization(batch, api_url, api_auth, api_type):
     tasks = []
     tokenization_endpoint = ''
     request_jsons = []
@@ -92,11 +101,13 @@ async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=No
         tokenization_endpoint = urljoin(api_url, '/api/extra/tokencount')
         for text in batch:
             request_jsons.append({'prompt': text})
+
     elif api_type.lower() == 'tabby':
         tokenization_endpoint = urljoin(api_url, '/v1/token/encode')
         for text in batch:
             request_jsons.append({'text': text})
-    elif api_type.lower() == 'aphrodite':
+
+    elif api_type.lower() in ('genericoai', 'aphrodite'):
         tokenization_endpoint = urljoin(api_url, '/v1/tokenize')
         for text in batch:
             request_jsons.append({'prompt': text})
@@ -110,10 +121,12 @@ async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=No
     if api_type.lower() in ('koboldai', 'koboldcpp'):
         for response in responses:
             token_amounts.append(int(response['value']))
+
     elif api_type.lower() == 'tabby':
         for response in responses:
             token_amounts.append(int(response['length']))
-    elif api_type.lower() == 'aphrodite':
+
+    elif api_type.lower() in ('genericoai', 'aphrodite'):
         for response in responses:
             token_amounts.append(int(response['value']))
 
