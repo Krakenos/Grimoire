@@ -57,7 +57,7 @@ def save_messages(messages: list, docs: list, chat: Chat, session: Session) -> l
             new_message = Message(message=message, chat_id=chat.id, message_index=current_index, spacy_doc=bytes_data)
             new_messages_indices.append(message_index)
             session.add(new_message)
-            session.commit()
+    session.commit()
     return new_messages_indices
 
 
@@ -137,8 +137,6 @@ async def process_prompt(prompt: str,
                          generation_data: GenerationData | None = None,
                          user_id: str | None = None,
                          current_settings: dict | None = None) -> str:
-    start_time = timeit.default_timer()
-
     if current_settings is None:
         current_settings = copy.deepcopy(settings)
 
@@ -181,10 +179,14 @@ async def process_prompt(prompt: str,
         general_logger.debug(f'Creating spacy docs {doc_end_time - doc_time} seconds')
         last_messages = chat_messages[:-1]  # exclude user prompt
         last_docs = docs[:-1]
+        start_time = timeit.default_timer()
         new_message_indices = save_messages(last_messages, last_docs, chat, session)
         save_named_entities(chat, last_docs, session)
+        end_time = timeit.default_timer()
+        general_logger.info(f'Save messages and entities: {end_time - start_time}s')
 
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
+
     new_prompt = await fill_context(prompt, floating_prompts, chat, docs, context_length, api_type, current_settings)
 
     for doc in docs_to_summarize:
@@ -220,11 +222,10 @@ def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
                                              entity_type='NAMED ENTITY',
                                              chat_id=chat.id)
                 session.add(knowledge_entity)
-                session.commit()
             knowledge_entity.messages.append(db_message)
             knowledge_entity.update_count += 1
             session.add(knowledge_entity)
-            session.commit()
+    session.commit()
 
 
 # TODO Check if tokenization can be done better, waiting for the request is majority of time that takes it to process
@@ -252,6 +253,7 @@ async def fill_context(prompt: str,
         'prompt_definitions': prompt_definitions,
         'grimoire': [],
         'messages_with_delimiters': messages_with_delimiters,
+        'floating_prompts': floating_prompts
     }
 
     grimoire_entries = generate_grimoire_entries(max_grimoire_context, summaries)
@@ -365,13 +367,28 @@ async def prompt_culling(api_type: str,
     prompt_definitions = prompt_entries['prompt_definitions']
     grimoire_entries = prompt_entries['grimoire']
     messages_with_delimiters = prompt_entries['messages_with_delimiters']
+    floating_prompts = prompt_entries['floating_prompts']
+    injected_indices = [index for index, message in enumerate(floating_prompts) if message.injected]
     merged_messages = [instruct_prompt + message for instruct_prompt, message in
                        zip(messages_with_delimiters[0::2], messages_with_delimiters[1::2])]
-    messages = [prompt_definitions, *grimoire_entries, *merged_messages]
+    messages_dict = {index: message for index, message in enumerate(merged_messages)}
 
+    messages_list = [messages_dict[index] for index in sorted(messages_dict.keys())]
+    messages = [prompt_definitions, *grimoire_entries, *messages_list]
     token_amounts = await token_count(messages, api_type, current_settings['main_api']['url'],
                                       current_settings['main_api']['auth_key'])
     current_tokens = sum(token_amounts)
+
+    messages_start_index = 0
+    while current_tokens > max_context:
+        if messages_start_index not in injected_indices:
+            messages_dict.pop(messages_start_index)
+            messages_list = [messages_dict[index] for index in sorted(messages_dict.keys())]
+            messages = [prompt_definitions, *grimoire_entries, *messages_list]
+            token_amounts = await token_count(messages, api_type, current_settings['main_api']['url'],
+                                              current_settings['main_api']['auth_key'])
+            current_tokens = sum(token_amounts)
+        messages_start_index += 1
     prompt_text = ''.join(messages)
     return prompt_text
 
@@ -452,7 +469,7 @@ def update_instruct(instruct_info: Instruct) -> dict:
     return new_settings
 
 
-def instruct_regex(current_settings) -> str:
+def instruct_regex(current_settings: dict) -> str:
     input_seq = re.escape(current_settings['main_api']['input_sequence'])
     input_suffix = re.escape(current_settings['main_api']['input_suffix'])
     output_seq = re.escape(current_settings['main_api']['output_sequence'])
