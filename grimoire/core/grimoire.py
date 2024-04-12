@@ -228,8 +228,6 @@ def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
     session.commit()
 
 
-# TODO Check if tokenization can be done better, waiting for the request is majority of time that takes it to process
-#   potentially prefer using local tokenizer
 async def fill_context(prompt: str,
                        floating_prompts: list[RequestMessage],
                        chat: Chat,
@@ -384,13 +382,14 @@ async def prompt_culling(api_type: str,
     messages_start_index = 0
     starting_grimoire_index = 0
     while current_tokens > max_context:
-        if messages_start_index not in injected_indices and messages_start_index < max_index:
-            messages_dict.pop(messages_start_index)
-            messages_list = [messages_dict[index] for index in sorted(messages_dict.keys())]
-            messages = [prompt_definitions, *grimoire_entries, *messages_list]
-            token_amounts = await token_count(messages, api_type, current_settings['main_api']['url'],
-                                              current_settings['main_api']['auth_key'])
-            current_tokens = sum(token_amounts)
+        if messages_start_index < max_index:
+            if messages_start_index not in injected_indices:
+                messages_dict.pop(messages_start_index)
+                messages_list = [messages_dict[index] for index in sorted(messages_dict.keys())]
+                messages = [prompt_definitions, *grimoire_entries, *messages_list]
+                token_amounts = await token_count(messages, api_type, current_settings['main_api']['url'],
+                                                  current_settings['main_api']['auth_key'])
+                current_tokens = sum(token_amounts)
             messages_start_index += 1
         elif starting_grimoire_index < grimoire_entries:
             starting_grimoire_index += 1
