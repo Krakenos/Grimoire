@@ -367,9 +367,19 @@ async def prompt_culling(api_type: str,
     grimoire_entries = prompt_entries['grimoire']
     messages_with_delimiters = prompt_entries['messages_with_delimiters']
     floating_prompts = prompt_entries['floating_prompts']
+
+    first_output_seq = current_settings['main_api']['first_output_sequence']
+    output_seq = current_settings['main_api']['output_sequence']
+    system_suffix = current_settings['main_api']['system_suffix']
+    input_suffix = current_settings['main_api']['input_suffix']
+    output_suffix = current_settings['main_api']['output_suffix']
+
     injected_indices = [index for index, message in enumerate(floating_prompts) if message.injected]
-    merged_messages = [instruct_prompt + message for instruct_prompt, message in
-                       zip(messages_with_delimiters[0::2], messages_with_delimiters[1::2])]
+    instruct_messages = messages_with_delimiters[0::2]
+    messages_text = messages_with_delimiters[1::2]
+    merged_messages = [f'{instruct_prompt}{message}' for instruct_prompt, message in
+                       zip(instruct_messages, messages_text)]
+
     messages_dict = {index: message for index, message in enumerate(merged_messages)}
 
     messages_list = [messages_dict[index] for index in sorted(messages_dict.keys())]
@@ -386,6 +396,19 @@ async def prompt_culling(api_type: str,
             if messages_start_index not in injected_indices:
                 messages_dict.pop(messages_start_index)
                 messages_list = [messages_dict[index] for index in sorted(messages_dict.keys())]
+                first_message_index = min(messages_dict.keys())
+                first_instruct = instruct_messages[first_message_index]
+                first_text = messages_text[first_message_index]
+
+                if first_instruct == output_seq and first_output_seq:
+                    messages_list[0] = f'{first_output_seq}{first_text}'
+                elif system_suffix in first_instruct:
+                    messages_list[0] = messages_list[0].replace(system_suffix, '')
+                elif input_suffix in first_instruct:
+                    messages_list[0] = messages_list[0].replace(input_suffix, '')
+                elif output_suffix in first_instruct:
+                    messages_list[0] = messages_list[0].replace(output_suffix, '')
+
                 messages = [prompt_definitions, *grimoire_entries, *messages_list]
                 token_amounts = await token_count(messages, api_type, current_settings['main_api']['url'],
                                                   current_settings['main_api']['auth_key'])
