@@ -261,24 +261,6 @@ async def fill_context(prompt: str,
 
     final_prompt = await prompt_culling(api_type, prompt_entries, context_size, current_settings)
 
-    # max_chat_context = max_context - definitions_context_len - grimoire_text_len
-    #
-    # context_overflow, messages_text, min_message_context = chat_messages_culling(api_type, injected_prompt_indices,
-    #                                                                              max_chat_context,
-    #                                                                              messages_with_delimiters,
-    #                                                                              current_settings)
-    #
-    # # Grimoire + WI context overflow
-    # if context_overflow:
-    #     general_logger.warning(f'Context overflow after culling messages. Trimming grimoire entries')
-    #     grimoire_text = grimoire_entries_culling(api_type, definitions_context_len, grimoire_text, grimoire_text_len,
-    #                                              max_context, min_message_context, current_settings)
-    #
-    # if grimoire_text is None:
-    #     general_logger.warning(f'No Grimoire entries. Passing the original prompt.')
-    #     return prompt
-    #
-    # final_prompt = ''.join([prompt_definitions, grimoire_text, messages_text])
     return final_prompt
 
 
