@@ -33,7 +33,7 @@ class SettingsLoader:
         else:  # Other envs
             proj_path = pathlib.Path(__file__).parents[2]
 
-        default_settings_path = proj_path / "config" / "settings.yml"
+        default_settings_path = proj_path / "config" / "settings.yaml"
 
         config_path = os.environ.get('APP_CONFIG', default_settings_path.resolve())
 
