@@ -25,9 +25,16 @@ services:
     ports:
       - 5432:5432
 
-  tests:
+  test:
     build:
       context: .
       dockerfile: Dockerfile
       target: testing
     command: [ "python", "-m", "unittest", "discover" ]
+
+  lint:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: testing
+    command: [ "ruff", "check", "." ]
