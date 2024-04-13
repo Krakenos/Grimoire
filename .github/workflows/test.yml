@@ -1,0 +1,29 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+  schedule:
+    # cron every week on monday
+    - cron: "0 0 * * 1"
+
+jobs:
+  lint:
+    timeout-minutes: 10
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint
+        run: docker compose run lint
+
+  test:
+    timeout-minutes: 10
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint
+        run: docker compose run test

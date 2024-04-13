@@ -1,5 +1,7 @@
-name: docker-compose-build
+name: Build
+
 on: push
+
 jobs:
   test:
     runs-on: self-hosted
