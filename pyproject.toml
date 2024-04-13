@@ -1,0 +1,75 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "Grimoire"
+description = "An implementation of long term memory for AI chatbots"
+readme = "README.md"
+license.file = "LICENSE"
+authors = [
+    { name = "Krakenos", email = "put.email@here.com" },
+]
+license = "AGPL-3.0"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "alembic~=1.12.1",
+    "celery~=5.3.6",
+    "celery-singleton~=0.3.1",
+    "fastapi~=0.110.1",
+    "psycopg2-binary~=2.9.9",
+    "pydantic~=2.4.2",
+    "python-dotenv~=1.0.0",
+    "PyYAML~=6.0.1",
+    "requests~=2.31.0",
+    "spacy~=3.7.2",
+    "spacy[cuda12x]",
+    "SQLAlchemy~=2.0.22",
+    "sseclient-py~=1.8.0",
+    "transformers~=4.36.2",
+    "uvicorn~=0.23.2",
+]
+dynamic = ["version"]
+
+[tool.hatch.version]
+path = "grimoire/__init__.py"
+
+[tool.ruff]
+exclude = [
+    ".git",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "venv",
+]
+
+line-length = 120
+indent-width = 4
+
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "C901",  # too complex
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-line-length = "dynamic"
