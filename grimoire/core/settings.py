@@ -1,5 +1,6 @@
 import copy
 import os
+import pathlib
 
 import yaml
 from dotenv import load_dotenv
@@ -25,8 +26,17 @@ def envvar_constructor(loader: yaml.Loader, node: yaml.ScalarNode):
 class SettingsLoader:
     @classmethod
     def settings_path(cls):
-        settings_file_name = os.environ.get('SETTINGS_FILE_NAME', 'settings.yaml')
-        config_path = os.environ.get('APP_CONFIG', settings_file_name)
+        proj_dir = os.environ.get("PYTHONPATH")
+
+        if proj_dir and proj_dir.startswith("/app"):  # Dockerfile
+            proj_path = pathlib.Path(proj_dir)
+        else:  # Other envs
+            proj_path = pathlib.Path(__file__).parents[2]
+
+        default_settings_path = proj_path / "config" / "settings.yml"
+
+        config_path = os.environ.get('APP_CONFIG', default_settings_path.resolve())
+
         return config_path
 
     @classmethod
