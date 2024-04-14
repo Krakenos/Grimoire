@@ -7,6 +7,7 @@ on:
   pull_request:
     types:
       - opened
+      - synchronize
   schedule:
     # cron every week on monday
     - cron: "0 0 * * 1"
@@ -25,5 +26,5 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - name: Lint
+      - name: Test
         run: docker compose run test
