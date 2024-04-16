@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from grimoire.api.request_models import Instruct, GenerationData
 from grimoire.api.request_models import Message as RequestMessage
-from grimoire.common.llm_helpers import count_context
+from grimoire.common.llm_helpers import count_context, token_count
 from grimoire.common.loggers import general_logger, context_logger
 from grimoire.common.utils import orm_get_or_create
 from grimoire.core.settings import settings
@@ -57,7 +57,7 @@ def save_messages(messages: list, docs: list, chat: Chat, session: Session) -> l
             new_message = Message(message=message, chat_id=chat.id, message_index=current_index, spacy_doc=bytes_data)
             new_messages_indices.append(message_index)
             session.add(new_message)
-            session.commit()
+    session.commit()
     return new_messages_indices
 
 
@@ -130,15 +130,13 @@ def get_chat(user: User, chat_id: str) -> Chat:
     return chat
 
 
-def process_prompt(prompt: str,
-                   chat_id: str,
-                   context_length: int,
-                   api_type: str | None = None,
-                   generation_data: GenerationData | None = None,
-                   user_id: str | None = None,
-                   current_settings: dict | None = None) -> str:
-    start_time = timeit.default_timer()
-
+async def process_prompt(prompt: str,
+                         chat_id: str,
+                         context_length: int,
+                         api_type: str | None = None,
+                         generation_data: GenerationData | None = None,
+                         user_id: str | None = None,
+                         current_settings: dict | None = None) -> str:
     if current_settings is None:
         current_settings = copy.deepcopy(settings)
 
@@ -181,11 +179,15 @@ def process_prompt(prompt: str,
         general_logger.debug(f'Creating spacy docs {doc_end_time - doc_time} seconds')
         last_messages = chat_messages[:-1]  # exclude user prompt
         last_docs = docs[:-1]
+        start_time = timeit.default_timer()
         new_message_indices = save_messages(last_messages, last_docs, chat, session)
         save_named_entities(chat, last_docs, session)
+        end_time = timeit.default_timer()
+        general_logger.info(f'Save messages and entities: {end_time - start_time}s')
 
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
-    new_prompt = fill_context(prompt, floating_prompts, chat, docs, context_length, api_type, current_settings)
+
+    new_prompt = await fill_context(prompt, floating_prompts, chat, docs, context_length, api_type, current_settings)
 
     for doc in docs_to_summarize:
         for entity in set(doc.ents):
@@ -220,22 +222,19 @@ def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
                                              entity_type='NAMED ENTITY',
                                              chat_id=chat.id)
                 session.add(knowledge_entity)
-                session.commit()
             knowledge_entity.messages.append(db_message)
             knowledge_entity.update_count += 1
             session.add(knowledge_entity)
-            session.commit()
+    session.commit()
 
 
-# TODO Check if tokenization can be done better, waiting for the request is majority of time that takes it to process
-#   potentially prefer using local tokenizer
-def fill_context(prompt: str,
-                 floating_prompts: list[RequestMessage],
-                 chat: Chat,
-                 docs: list[Doc],
-                 context_size: int,
-                 api_type: str,
-                 current_settings: dict) -> str:
+async def fill_context(prompt: str,
+                       floating_prompts: list[RequestMessage],
+                       chat: Chat,
+                       docs: list[Doc],
+                       context_size: int,
+                       api_type: str,
+                       current_settings: dict) -> str:
     max_context = context_size
     max_grimoire_context = max_context * current_settings['context_percentage']
     banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
@@ -248,31 +247,20 @@ def fill_context(prompt: str,
     unique_ents = get_ordered_entities(banned_labels, docs)
     summaries = get_summaries(chat, unique_ents)
 
-    grimoire_text, grimoire_text_len = generate_grimoire_text(api_type, max_grimoire_context,
-                                                              summaries, current_settings)
+    prompt_entries = {
+        'prompt_definitions': prompt_definitions,
+        'grimoire': [],
+        'messages_with_delimiters': messages_with_delimiters,
+        'floating_prompts': floating_prompts,
+        'original_prompt': prompt
+    }
 
-    definitions_context_len = count_context(text=prompt_definitions, api_type=api_type,
-                                            api_url=current_settings['main_api']['url'],
-                                            api_auth=current_settings['main_api']['auth_key'])
+    grimoire_entries = generate_grimoire_entries(max_grimoire_context, summaries)
 
-    max_chat_context = max_context - definitions_context_len - grimoire_text_len
+    prompt_entries['grimoire'] = grimoire_entries
 
-    context_overflow, messages_text, min_message_context = chat_messages_culling(api_type, injected_prompt_indices,
-                                                                                 max_chat_context,
-                                                                                 messages_with_delimiters,
-                                                                                 current_settings)
+    final_prompt = await prompt_culling(api_type, prompt_entries, context_size, current_settings)
 
-    # Grimoire + WI context overflow
-    if context_overflow:
-        general_logger.warning(f'Context overflow after culling messages. Trimming grimoire entries')
-        grimoire_text = grimoire_entries_culling(api_type, definitions_context_len, grimoire_text, grimoire_text_len,
-                                                 max_context, min_message_context, current_settings)
-
-    if grimoire_text is None:
-        general_logger.warning(f'No Grimoire entries. Passing the original prompt.')
-        return prompt
-
-    final_prompt = ''.join([prompt_definitions, grimoire_text, messages_text])
     return final_prompt
 
 
@@ -353,24 +341,82 @@ def chat_messages_culling(api_type: str,
     return context_overflow, messages_text, min_message_context
 
 
-def generate_grimoire_text(api_type: str,
-                           max_grimoire_context: int,
-                           summaries: list[tuple[str, int, str]],
-                           current_settings: dict) -> tuple[str, int]:
+async def prompt_culling(api_type: str,
+                         prompt_entries: dict,
+                         max_context: int,
+                         current_settings: dict) -> str:
+    prompt_definitions = prompt_entries['prompt_definitions']
+    grimoire_entries = prompt_entries['grimoire']
+    messages_with_delimiters = prompt_entries['messages_with_delimiters']
+    floating_prompts = prompt_entries['floating_prompts']
+
+    first_output_seq = current_settings['main_api']['first_output_sequence']
+    output_seq = current_settings['main_api']['output_sequence']
+    system_suffix = current_settings['main_api']['system_suffix']
+    input_suffix = current_settings['main_api']['input_suffix']
+    output_suffix = current_settings['main_api']['output_suffix']
+
+    injected_indices = [index for index, message in enumerate(floating_prompts) if message.injected]
+    instruct_messages = messages_with_delimiters[0::2]
+    messages_text = messages_with_delimiters[1::2]
+    merged_messages = [f'{instruct_prompt}{message}' for instruct_prompt, message in
+                       zip(instruct_messages, messages_text)]
+
+    messages_dict = {index: message for index, message in enumerate(merged_messages)}
+
+    messages_list = [messages_dict[index] for index in sorted(messages_dict.keys())]
+    messages = [prompt_definitions, *grimoire_entries, *messages_list]
+    token_amounts = await token_count(messages, api_type, current_settings['main_api']['url'],
+                                      current_settings['main_api']['auth_key'])
+    current_tokens = sum(token_amounts)
+
+    max_index = max(messages_dict.keys()) - current_settings['preserved_messages']
+    messages_start_index = 0
+    starting_grimoire_index = 0
+    while current_tokens > max_context:
+        if messages_start_index < max_index:
+            if messages_start_index not in injected_indices:
+                messages_dict.pop(messages_start_index)
+                messages_list = [messages_dict[index] for index in sorted(messages_dict.keys())]
+                first_message_index = min(messages_dict.keys())
+                first_instruct = instruct_messages[first_message_index]
+                first_text = messages_text[first_message_index]
+
+                if first_instruct == output_seq and first_output_seq:
+                    messages_list[0] = f'{first_output_seq}{first_text}'
+                elif system_suffix in first_instruct:
+                    messages_list[0] = messages_list[0].replace(system_suffix, '')
+                elif input_suffix in first_instruct:
+                    messages_list[0] = messages_list[0].replace(input_suffix, '')
+                elif output_suffix in first_instruct:
+                    messages_list[0] = messages_list[0].replace(output_suffix, '')
+
+                messages = [prompt_definitions, *grimoire_entries, *messages_list]
+                token_amounts = await token_count(messages, api_type, current_settings['main_api']['url'],
+                                                  current_settings['main_api']['auth_key'])
+                current_tokens = sum(token_amounts)
+            messages_start_index += 1
+        elif starting_grimoire_index < grimoire_entries:
+            starting_grimoire_index += 1
+            messages = [prompt_definitions, *grimoire_entries[starting_grimoire_index:], *messages_list]
+            current_tokens = sum(token_amounts)
+        else:
+            general_logger.warning(f'No Grimoire entries. Passing the original prompt.')
+            return prompt_entries['original_prompt']
+    prompt_text = ''.join(messages)
+    return prompt_text
+
+
+def generate_grimoire_entries(max_grimoire_context: int,
+                              summaries: list[tuple[str, int, str]]) -> list[str]:
     grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
-    grimoire_text = ''
 
     while grimoire_estimated_tokens > max_grimoire_context:
         summaries.pop()
         grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
 
-    for summary in summaries:
-        grimoire_text = grimoire_text + f'[ {summary[2]}: {summary[0]} ]\n'
-
-    grimoire_text_len = count_context(text=grimoire_text, api_type=api_type,
-                                      api_url=current_settings['main_api']['url'],
-                                      api_auth=current_settings['main_api']['auth_key'])
-    return grimoire_text, grimoire_text_len
+    grimoire_entries = [f'[ {summary[2]}: {summary[0]} ]\n' for summary in summaries]
+    return grimoire_entries
 
 
 def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]]) -> list[tuple[str, int, str]]:
@@ -437,7 +483,7 @@ def update_instruct(instruct_info: Instruct) -> dict:
     return new_settings
 
 
-def instruct_regex(current_settings) -> str:
+def instruct_regex(current_settings: dict) -> str:
     input_seq = re.escape(current_settings['main_api']['input_sequence'])
     input_suffix = re.escape(current_settings['main_api']['input_suffix'])
     output_seq = re.escape(current_settings['main_api']['output_sequence'])
