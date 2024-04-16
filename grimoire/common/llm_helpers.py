@@ -85,6 +85,15 @@ def cache_entries(keys: list, values: list) -> None:
         redis_client.set(key, value)
 
 
+def get_cached_tokens(keys: list[str]) -> list[int | None]:
+    redis_client = redis.StrictRedis(host=settings['REDIS_HOST'], port=settings['REDIS_PORT'])
+    cached_tokens = []
+    for key in keys:
+        cached_tokens.append(redis_client.get(key))
+
+    return cached_tokens
+
+
 async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None) -> list[int]:
     if api_type.lower() in ("koboldai", "koboldcpp", "tabby", "aphrodite", "genericoai"):
         token_amounts = await remote_tokenization(batch, api_url, api_auth, api_type)
