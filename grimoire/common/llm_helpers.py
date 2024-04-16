@@ -113,6 +113,8 @@ async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=No
     for text, tokens in zip(to_tokenize, new_tokens):
         tokens_dict[text] = tokens
 
+    new_keys = [f'llm_{api_type}_{api_url} {text}' for text in to_tokenize]
+    cache_entries(new_keys, new_tokens)
     tokens = [tokens_dict[text] for text in batch]
     return tokens
 
