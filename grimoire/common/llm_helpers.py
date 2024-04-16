@@ -82,7 +82,7 @@ def local_tokenization(texts: str | list[str], api_url: str, api_auth: str, api_
 def cache_entries(keys: list, values: list) -> None:
     redis_client = redis.StrictRedis(host=settings['REDIS_HOST'], port=settings['REDIS_PORT'])
     for key, value in zip(keys, values):
-        redis_client.set(key, value)
+        redis_client.set(key, value, settings['CACHE_EXPIRE_TIME'])
 
 
 def get_cached_tokens(keys: list[str]) -> list[int | None]:
