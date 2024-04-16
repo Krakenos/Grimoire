@@ -1,5 +1,7 @@
 defaults = {
     "CELERY_BROKER_URL": "redis://127.0.0.1:6379/0",
+    "REDIS_HOST": "localhost",
+    "REDIS_PORT": 6379,
     "DB_ENGINE": "postgresql+psycopg2://grimoire:secretpassword@127.0.0.1:5432/grimoire",
     "DEBUG": False,
     "LOG_PROMPTS": False,
