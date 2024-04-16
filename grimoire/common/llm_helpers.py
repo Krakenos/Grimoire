@@ -2,10 +2,12 @@ import asyncio
 from urllib.parse import urljoin
 
 import aiohttp
+import redis
 import requests
 from transformers import AutoTokenizer
 
 from grimoire.common.loggers import general_logger
+from grimoire.core.settings import settings
 
 
 # TODO refactor this
@@ -75,6 +77,12 @@ def local_tokenization(texts: str | list[str], api_url: str, api_auth: str, api_
     else:
         encoded_texts = [tokenizer(text) for text in texts]
         return [len(tokenized_text["input_ids"]) for tokenized_text in encoded_texts]
+
+
+def cache_entries(keys: list, values: list) -> None:
+    redis_client = redis.StrictRedis(host=settings['REDIS_HOST'], port=settings['REDIS_PORT'])
+    for key, value in zip(keys, values):
+        redis_client.set(key, value)
 
 
 async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None) -> list[int]:
