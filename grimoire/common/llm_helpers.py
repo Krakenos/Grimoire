@@ -89,9 +89,10 @@ def get_cached_tokens(keys: list[str]) -> list[int | None]:
     redis_client = redis.StrictRedis(host=settings['REDIS_HOST'], port=settings['REDIS_PORT'], decode_responses=True)
     cached_tokens = []
     for key in keys:
-        cached_value = int(redis_client.get(key))
+        cached_value: str | None = redis_client.get(key)
         cached_tokens.append(cached_value)
 
+    cached_tokens = [int(number) if number else None for number in cached_tokens]
     return cached_tokens
 
 
