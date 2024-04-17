@@ -10,7 +10,6 @@ license.file = "LICENSE"
 authors = [
     { name = "Krakenos", email = "put.email@here.com" },
 ]
-license = "AGPL-3.0"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
