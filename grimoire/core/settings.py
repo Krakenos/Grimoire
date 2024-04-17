@@ -35,7 +35,7 @@ class SettingsLoader:
 
         default_settings_path = proj_path / "config" / "settings.yaml"
 
-        config_path = os.environ.get('APP_CONFIG', default_settings_path.resolve())
+        config_path = os.environ.get("APP_CONFIG", default_settings_path.resolve())
 
         return config_path
 
@@ -48,7 +48,7 @@ class SettingsLoader:
     @classmethod
     def make_config_loader(cls):
         loader = yaml.SafeLoader
-        loader.add_constructor('!env', envvar_constructor)
+        loader.add_constructor("!env", envvar_constructor)
         return loader
 
     @classmethod
@@ -60,7 +60,7 @@ class SettingsLoader:
 def merge_settings(settings_dict, overrides):
     settings_dict = copy.deepcopy(settings_dict)
     for key, value in overrides.items():
-        if key in settings_dict and value not in ('', None):
+        if key in settings_dict and value not in ("", None):
             match value:
                 case dict():
                     settings_dict[key] = merge_settings(settings_dict[key], value)
@@ -73,5 +73,5 @@ settings = copy.deepcopy(defaults)
 loaded_settings = SettingsLoader.load_config()
 settings = merge_settings(settings, loaded_settings)
 
-if settings['side_api']['url'] in ('', None):
-    settings['single_api_mode'] = True
+if settings["side_api"]["url"] in ("", None):
+    settings["single_api_mode"] = True

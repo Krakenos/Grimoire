@@ -1,6 +1,4 @@
-from typing import Optional
-
-from pydantic import BaseModel, PositiveInt, ConfigDict
+from pydantic import BaseModel, ConfigDict, PositiveInt
 
 
 class KAITokenCount(BaseModel):
@@ -52,12 +50,12 @@ class GenerationData(BaseModel):
 class Grimoire(BaseModel):
     chat_id: str
     user_id: str = None
-    instruct: Optional[Instruct] = None
-    generation_data: Optional[GenerationData] = None
+    instruct: Instruct | None = None
+    generation_data: GenerationData | None = None
 
 
 class KAIGeneration(BaseModel):
-    model_config = ConfigDict(extra='allow')
+    model_config = ConfigDict(extra="allow")
 
     prompt: str
     max_context_length: PositiveInt
@@ -66,13 +64,13 @@ class KAIGeneration(BaseModel):
 
 
 class OAIGeneration(BaseModel):
-    model_config = ConfigDict(extra='allow')
+    model_config = ConfigDict(extra="allow")
 
     prompt: str
     max_tokens: PositiveInt
     truncation_length: PositiveInt
     stream: bool = False
-    api_type: str = 'GenericOAI'
+    api_type: str = "GenericOAI"
     grimoire: Grimoire
 
 

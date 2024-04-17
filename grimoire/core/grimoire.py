@@ -1,33 +1,32 @@
 import copy
 import re
 import timeit
-from typing import Type
 
 import spacy
-from spacy.tokens import DocBin, Doc
-from sqlalchemy import desc, create_engine, select
+from spacy.tokens import Doc, DocBin
+from sqlalchemy import create_engine, desc, select
 from sqlalchemy.orm import Session
 
-from grimoire.api.request_models import Instruct, GenerationData
+from grimoire.api.request_models import GenerationData, Instruct
 from grimoire.api.request_models import Message as RequestMessage
 from grimoire.common.llm_helpers import count_context, token_count
-from grimoire.common.loggers import general_logger, context_logger
+from grimoire.common.loggers import context_logger, general_logger
 from grimoire.common.utils import orm_get_or_create
 from grimoire.core.settings import settings
 from grimoire.core.tasks import summarize
-from grimoire.db.models import Message, Knowledge, User, Chat
+from grimoire.db.models import Chat, Knowledge, Message, User
 
-if settings['prefer_gpu']:
+if settings["prefer_gpu"]:
     gpu_check = spacy.prefer_gpu()
     if gpu_check:
-        general_logger.info('Running spacy on GPU')
+        general_logger.info("Running spacy on GPU")
     else:
-        general_logger.info('Failed to run on gpu, defaulting to CPU')
+        general_logger.info("Failed to run on gpu, defaulting to CPU")
 else:
-    general_logger.info('Running spacy on CPU')
+    general_logger.info("Running spacy on CPU")
 
 nlp = spacy.load("en_core_web_trf")
-db = create_engine(settings['DB_ENGINE'])
+db = create_engine(settings["DB_ENGINE"])
 
 
 def save_messages(messages: list, docs: list, chat: Chat, session: Session) -> list[int]:
@@ -45,8 +44,12 @@ def save_messages(messages: list, docs: list, chat: Chat, session: Session) -> l
         if not message_exists:
             chat_exists = session.query(Message.id).filter_by(chat_id=chat.id).first() is not None
             if chat_exists:
-                latest_index = session.query(Message.message_index).filter_by(chat_id=chat.id).order_by(
-                    desc(Message.message_index)).first()[0]
+                latest_index = (
+                    session.query(Message.message_index)
+                    .filter_by(chat_id=chat.id)
+                    .order_by(desc(Message.message_index))
+                    .first()[0]
+                )
                 current_index = latest_index + 1
             else:
                 current_index = 1
@@ -61,7 +64,7 @@ def save_messages(messages: list, docs: list, chat: Chat, session: Session) -> l
     return new_messages_indices
 
 
-def add_missing_docs(messages: list[tuple[int, Type[Message]]], docs: list[Doc], session: Session) -> None:
+def add_missing_docs(messages: list[tuple[int, type[Message]]], docs: list[Doc], session: Session) -> None:
     for index, message in messages:
         spacy_doc = docs[index]
         doc_bin = DocBin()
@@ -109,18 +112,17 @@ def get_extra_info(generation_data: GenerationData) -> list[RequestMessage]:
 
 def get_user(user_id: str | None, current_settings: dict) -> User:
     with Session(db) as session:
-        if user_id and current_settings['multi_user_mode']:
+        if user_id and current_settings["multi_user_mode"]:
             query = select(User).where(User.external_id == user_id)
         else:
-            query = select(User).where(User.external_id == 'DEFAULT_USER', User.id == 1)
+            query = select(User).where(User.external_id == "DEFAULT_USER", User.id == 1)
         result = session.scalars(query).one()
     return result
 
 
 def get_chat(user: User, chat_id: str) -> Chat:
     with Session(db) as session:
-        query = select(Chat).where(Chat.external_id == chat_id,
-                                   Chat.user_id == user.id)
+        query = select(Chat).where(Chat.external_id == chat_id, Chat.user_id == user.id)
         chat = session.scalars(query).first()
         if chat is None:
             chat = Chat(external_id=chat_id, user_id=user.id)
@@ -130,28 +132,30 @@ def get_chat(user: User, chat_id: str) -> Chat:
     return chat
 
 
-async def process_prompt(prompt: str,
-                         chat_id: str,
-                         context_length: int,
-                         api_type: str | None = None,
-                         generation_data: GenerationData | None = None,
-                         user_id: str | None = None,
-                         current_settings: dict | None = None) -> str:
+async def process_prompt(
+    prompt: str,
+    chat_id: str,
+    context_length: int,
+    api_type: str | None = None,
+    generation_data: GenerationData | None = None,
+    user_id: str | None = None,
+    current_settings: dict | None = None,
+) -> str:
     if current_settings is None:
         current_settings = copy.deepcopy(settings)
 
     if api_type is None:
-        api_type = current_settings['main_api']['backend']
+        api_type = current_settings["main_api"]["backend"]
 
-    banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
+    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME"]
     floating_prompts = None
 
-    if current_settings['single_api_mode']:
-        summarization_api = current_settings['main_api'].copy()
+    if current_settings["single_api_mode"]:
+        summarization_api = current_settings["main_api"].copy()
         if api_type is not None:
-            summarization_api['backend'] = api_type
+            summarization_api["backend"] = api_type
     else:
-        summarization_api = current_settings['side_api'].copy()
+        summarization_api = current_settings["side_api"].copy()
 
     if generation_data:
         floating_prompts = get_extra_info(generation_data)
@@ -176,14 +180,14 @@ async def process_prompt(prompt: str,
         doc_time = timeit.default_timer()
         docs = get_docs(chat_messages, chat, session)
         doc_end_time = timeit.default_timer()
-        general_logger.debug(f'Creating spacy docs {doc_end_time - doc_time} seconds')
+        general_logger.debug(f"Creating spacy docs {doc_end_time - doc_time} seconds")
         last_messages = chat_messages[:-1]  # exclude user prompt
         last_docs = docs[:-1]
         start_time = timeit.default_timer()
         new_message_indices = save_messages(last_messages, last_docs, chat, session)
         save_named_entities(chat, last_docs, session)
         end_time = timeit.default_timer()
-        general_logger.info(f'Save messages and entities: {end_time - start_time}s')
+        general_logger.info(f"Save messages and entities: {end_time - start_time}s")
 
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
 
@@ -192,35 +196,40 @@ async def process_prompt(prompt: str,
     for doc in docs_to_summarize:
         for entity in set(doc.ents):
             if entity.label_ not in banned_labels:
-                general_logger.debug(f'{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}')
-                summarize.delay(entity.text.lower(),
-                                entity.label_,
-                                chat.id,
-                                summarization_api,
-                                current_settings['summarization'],
-                                current_settings['DB_ENGINE'])
+                general_logger.debug(f"{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}")
+                summarize.delay(
+                    entity.text.lower(),
+                    entity.label_,
+                    chat.id,
+                    summarization_api,
+                    current_settings["summarization"],
+                    current_settings["DB_ENGINE"],
+                )
 
     end_time = timeit.default_timer()
-    general_logger.info(f'Prompt processing time: {end_time - start_time}s')
-    context_logger.debug(f'Old prompt: \n{prompt}\n\nNew prompt: \n{new_prompt}')
+    general_logger.info(f"Prompt processing time: {end_time - start_time}s")
+    context_logger.debug(f"Old prompt: \n{prompt}\n\nNew prompt: \n{new_prompt}")
     return new_prompt
 
 
 def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
-    banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
+    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME"]
     for doc in docs:
         db_message = orm_get_or_create(session, Message, message=doc.text)
         ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
         unique_ents = list(set(ent_list))
         for ent, ent_label in unique_ents:
-            knowledge_entity = session.query(Knowledge).filter(Knowledge.entity.ilike(ent),
-                                                               Knowledge.entity_type == 'NAMED ENTITY',
-                                                               Knowledge.chat_id == chat.id).first()
+            knowledge_entity = (
+                session.query(Knowledge)
+                .filter(
+                    Knowledge.entity.ilike(ent), Knowledge.entity_type == "NAMED ENTITY", Knowledge.chat_id == chat.id
+                )
+                .first()
+            )
             if not knowledge_entity:
-                knowledge_entity = Knowledge(entity=ent,
-                                             entity_label=ent_label,
-                                             entity_type='NAMED ENTITY',
-                                             chat_id=chat.id)
+                knowledge_entity = Knowledge(
+                    entity=ent, entity_label=ent_label, entity_type="NAMED ENTITY", chat_id=chat.id
+                )
                 session.add(knowledge_entity)
             knowledge_entity.messages.append(db_message)
             knowledge_entity.update_count += 1
@@ -228,49 +237,52 @@ def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
     session.commit()
 
 
-async def fill_context(prompt: str,
-                       floating_prompts: list[RequestMessage],
-                       chat: Chat,
-                       docs: list[Doc],
-                       context_size: int,
-                       api_type: str,
-                       current_settings: dict) -> str:
+async def fill_context(
+    prompt: str,
+    floating_prompts: list[RequestMessage],
+    chat: Chat,
+    docs: list[Doc],
+    context_size: int,
+    api_type: str,
+    current_settings: dict,
+) -> str:
     max_context = context_size
-    max_grimoire_context = max_context * current_settings['context_percentage']
-    banned_labels = ['DATE', 'CARDINAL', 'ORDINAL', 'TIME']
+    max_grimoire_context = max_context * current_settings["context_percentage"]
+    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME"]
     pattern = instruct_regex(current_settings)
-    pattern_with_delimiters = f'({pattern})'
+    pattern_with_delimiters = f"({pattern})"
     messages = re.split(pattern, prompt)
     messages_with_delimiters = re.split(pattern_with_delimiters, prompt)
     prompt_definitions = messages[0]  # first portion should always be instruction and char definitions
-    injected_prompt_indices = get_injected_indices(floating_prompts)
     unique_ents = get_ordered_entities(banned_labels, docs)
     summaries = get_summaries(chat, unique_ents)
 
     prompt_entries = {
-        'prompt_definitions': prompt_definitions,
-        'grimoire': [],
-        'messages_with_delimiters': messages_with_delimiters,
-        'floating_prompts': floating_prompts,
-        'original_prompt': prompt
+        "prompt_definitions": prompt_definitions,
+        "grimoire": [],
+        "messages_with_delimiters": messages_with_delimiters,
+        "floating_prompts": floating_prompts,
+        "original_prompt": prompt,
     }
 
     grimoire_entries = generate_grimoire_entries(max_grimoire_context, summaries)
 
-    prompt_entries['grimoire'] = grimoire_entries
+    prompt_entries["grimoire"] = grimoire_entries
 
     final_prompt = await prompt_culling(api_type, prompt_entries, context_size, current_settings)
 
     return final_prompt
 
 
-def grimoire_entries_culling(api_type: str,
-                             definitions_context_len: int,
-                             grimoire_text: str,
-                             grimoire_text_len: int,
-                             max_context: int,
-                             min_message_context: int,
-                             current_settings: dict) -> str | None:
+def grimoire_entries_culling(
+    api_type: str,
+    definitions_context_len: int,
+    grimoire_text: str,
+    grimoire_text_len: int,
+    max_context: int,
+    min_message_context: int,
+    current_settings: dict,
+) -> str | None:
     starting_grimoire_index = 0
     max_grimoire_context = max_context - definitions_context_len - min_message_context
     grimoire_entry_list = grimoire_text.splitlines()
@@ -278,33 +290,41 @@ def grimoire_entries_culling(api_type: str,
 
     # This should never happen unless there is some bug in frontend, and it sent prompt that's above context window
     if max_grimoire_context < 0:
-        general_logger.error(f'Prompt is above declared max context.')
+        general_logger.error("Prompt is above declared max context.")
         return None
 
     while max_grimoire_context < grimoire_text_len and starting_grimoire_index < max_grimoire_index:
         starting_grimoire_index += 1
-        grimoire_text = '\n'.join(grimoire_entry_list[starting_grimoire_index:])
-        grimoire_text_len = count_context(text=grimoire_text, api_type=api_type,
-                                          api_url=current_settings['main_api']['url'],
-                                          api_auth=current_settings['main_api']['auth_key'])
+        grimoire_text = "\n".join(grimoire_entry_list[starting_grimoire_index:])
+        grimoire_text_len = count_context(
+            text=grimoire_text,
+            api_type=api_type,
+            api_url=current_settings["main_api"]["url"],
+            api_auth=current_settings["main_api"]["auth_key"],
+        )
 
     return grimoire_text
 
 
-def chat_messages_culling(api_type: str,
-                          injected_prompt_indices: list[int],
-                          max_chat_context: int,
-                          messages_with_delimiters: list[str],
-                          current_settings: dict) -> tuple[bool, str, int]:
+def chat_messages_culling(
+    api_type: str,
+    injected_prompt_indices: list[int],
+    max_chat_context: int,
+    messages_with_delimiters: list[str],
+    current_settings: dict,
+) -> tuple[bool, str, int]:
     first_instruct_index = 1
-    messages_text = ''.join(messages_with_delimiters[first_instruct_index:])
-    messages_len = count_context(text=messages_text, api_type=api_type,
-                                 api_url=current_settings['main_api']['url'],
-                                 api_auth=current_settings['main_api']['auth_key'])
-    messages_to_merge = {original_index: text for original_index, text in enumerate(messages_with_delimiters)}
+    messages_text = "".join(messages_with_delimiters[first_instruct_index:])
+    messages_len = count_context(
+        text=messages_text,
+        api_type=api_type,
+        api_url=current_settings["main_api"]["url"],
+        api_auth=current_settings["main_api"]["auth_key"],
+    )
+    messages_to_merge = dict(enumerate(messages_with_delimiters))
     messages_to_merge.pop(0)
     context_overflow = False
-    max_index = max(messages_to_merge.keys()) - current_settings['preserved_messages'] * 2
+    max_index = max(messages_to_merge.keys()) - current_settings["preserved_messages"] * 2
     min_message_context = 0
 
     while messages_len > max_chat_context:
@@ -324,53 +344,56 @@ def chat_messages_culling(api_type: str,
 
         messages_list = [messages_to_merge[index] for index in sorted(messages_to_merge.keys())]
         first_instruct = messages_list[0]
-        first_output_seq = current_settings['main_api']['first_output_sequence']
-        output_seq = current_settings['main_api']['output_sequence']
-        separator_seq = current_settings['main_api']['separator_sequence']
+        first_output_seq = current_settings["main_api"]["first_output_sequence"]
+        output_seq = current_settings["main_api"]["output_sequence"]
+        separator_seq = current_settings["main_api"]["separator_sequence"]
 
         if first_instruct == output_seq and first_output_seq:
             messages_list[0] = first_output_seq
         elif separator_seq in first_instruct:
-            messages_list[0] = first_instruct.replace(separator_seq, '')
+            messages_list[0] = first_instruct.replace(separator_seq, "")
 
-        messages_text = ''.join(messages_list)
-        messages_len = count_context(text=messages_text, api_type=api_type,
-                                     api_url=current_settings['main_api']['url'],
-                                     api_auth=current_settings['main_api']['auth_key'])
+        messages_text = "".join(messages_list)
+        messages_len = count_context(
+            text=messages_text,
+            api_type=api_type,
+            api_url=current_settings["main_api"]["url"],
+            api_auth=current_settings["main_api"]["auth_key"],
+        )
 
     return context_overflow, messages_text, min_message_context
 
 
-async def prompt_culling(api_type: str,
-                         prompt_entries: dict,
-                         max_context: int,
-                         current_settings: dict) -> str:
-    prompt_definitions = prompt_entries['prompt_definitions']
-    grimoire_entries = prompt_entries['grimoire']
-    messages_with_delimiters = prompt_entries['messages_with_delimiters']
-    floating_prompts = prompt_entries['floating_prompts']
+async def prompt_culling(api_type: str, prompt_entries: dict, max_context: int, current_settings: dict) -> str:
+    prompt_definitions = prompt_entries["prompt_definitions"]
+    grimoire_entries = prompt_entries["grimoire"]
+    messages_with_delimiters = prompt_entries["messages_with_delimiters"]
+    floating_prompts = prompt_entries["floating_prompts"]
 
-    first_output_seq = current_settings['main_api']['first_output_sequence']
-    output_seq = current_settings['main_api']['output_sequence']
-    system_suffix = current_settings['main_api']['system_suffix']
-    input_suffix = current_settings['main_api']['input_suffix']
-    output_suffix = current_settings['main_api']['output_suffix']
+    first_output_seq = current_settings["main_api"]["first_output_sequence"]
+    output_seq = current_settings["main_api"]["output_sequence"]
+    system_suffix = current_settings["main_api"]["system_suffix"]
+    input_suffix = current_settings["main_api"]["input_suffix"]
+    output_suffix = current_settings["main_api"]["output_suffix"]
 
     injected_indices = [index for index, message in enumerate(floating_prompts) if message.injected]
     instruct_messages = messages_with_delimiters[0::2]
     messages_text = messages_with_delimiters[1::2]
-    merged_messages = [f'{instruct_prompt}{message}' for instruct_prompt, message in
-                       zip(instruct_messages, messages_text)]
+    merged_messages = [
+        f"{instruct_prompt}{message}"
+        for instruct_prompt, message in zip(instruct_messages, messages_text, strict=False)
+    ]
 
-    messages_dict = {index: message for index, message in enumerate(merged_messages)}
+    messages_dict = dict(enumerate(merged_messages))
 
     messages_list = [messages_dict[index] for index in sorted(messages_dict.keys())]
     messages = [prompt_definitions, *grimoire_entries, *messages_list]
-    token_amounts = await token_count(messages, api_type, current_settings['main_api']['url'],
-                                      current_settings['main_api']['auth_key'])
+    token_amounts = await token_count(
+        messages, api_type, current_settings["main_api"]["url"], current_settings["main_api"]["auth_key"]
+    )
     current_tokens = sum(token_amounts)
 
-    max_index = max(messages_dict.keys()) - current_settings['preserved_messages']
+    max_index = max(messages_dict.keys()) - current_settings["preserved_messages"]
     messages_start_index = 0
     starting_grimoire_index = 0
     while current_tokens > max_context:
@@ -383,17 +406,18 @@ async def prompt_culling(api_type: str,
                 first_text = messages_text[first_message_index]
 
                 if first_instruct == output_seq and first_output_seq:
-                    messages_list[0] = f'{first_output_seq}{first_text}'
+                    messages_list[0] = f"{first_output_seq}{first_text}"
                 elif system_suffix in first_instruct:
-                    messages_list[0] = messages_list[0].replace(system_suffix, '')
+                    messages_list[0] = messages_list[0].replace(system_suffix, "")
                 elif input_suffix in first_instruct:
-                    messages_list[0] = messages_list[0].replace(input_suffix, '')
+                    messages_list[0] = messages_list[0].replace(input_suffix, "")
                 elif output_suffix in first_instruct:
-                    messages_list[0] = messages_list[0].replace(output_suffix, '')
+                    messages_list[0] = messages_list[0].replace(output_suffix, "")
 
                 messages = [prompt_definitions, *grimoire_entries, *messages_list]
-                token_amounts = await token_count(messages, api_type, current_settings['main_api']['url'],
-                                                  current_settings['main_api']['auth_key'])
+                token_amounts = await token_count(
+                    messages, api_type, current_settings["main_api"]["url"], current_settings["main_api"]["auth_key"]
+                )
                 current_tokens = sum(token_amounts)
             messages_start_index += 1
         elif starting_grimoire_index < grimoire_entries:
@@ -401,21 +425,20 @@ async def prompt_culling(api_type: str,
             messages = [prompt_definitions, *grimoire_entries[starting_grimoire_index:], *messages_list]
             current_tokens = sum(token_amounts)
         else:
-            general_logger.warning(f'No Grimoire entries. Passing the original prompt.')
-            return prompt_entries['original_prompt']
-    prompt_text = ''.join(messages)
+            general_logger.warning("No Grimoire entries. Passing the original prompt.")
+            return prompt_entries["original_prompt"]
+    prompt_text = "".join(messages)
     return prompt_text
 
 
-def generate_grimoire_entries(max_grimoire_context: int,
-                              summaries: list[tuple[str, int, str]]) -> list[str]:
+def generate_grimoire_entries(max_grimoire_context: int, summaries: list[tuple[str, int, str]]) -> list[str]:
     grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
 
     while grimoire_estimated_tokens > max_grimoire_context:
         summaries.pop()
         grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
 
-    grimoire_entries = [f'[ {summary[2]}: {summary[0]} ]\n' for summary in summaries]
+    grimoire_entries = [f"[ {summary[2]}: {summary[0]} ]\n" for summary in summaries]
     return grimoire_entries
 
 
@@ -423,12 +446,14 @@ def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]]) -> list[tuple[
     summaries = []
     with Session(db) as session:
         for ent in unique_ents:
-            query = select(Knowledge).where(Knowledge.entity.ilike(ent[0]),
-                                            Knowledge.entity_type == 'NAMED ENTITY',
-                                            Knowledge.chat_id == chat.id,
-                                            Knowledge.summary.isnot(None),
-                                            Knowledge.token_count.isnot(None),
-                                            Knowledge.token_count != 0)
+            query = select(Knowledge).where(
+                Knowledge.entity.ilike(ent[0]),
+                Knowledge.entity_type == "NAMED ENTITY",
+                Knowledge.chat_id == chat.id,
+                Knowledge.summary.isnot(None),
+                Knowledge.token_count.isnot(None),
+                Knowledge.token_count != 0,
+            )
             instance = session.scalars(query).first()
 
             if instance is not None:
@@ -462,47 +487,59 @@ def get_injected_indices(floating_prompts: list[RequestMessage]) -> list[int]:
 def update_instruct(instruct_info: Instruct) -> dict:
     new_settings = copy.deepcopy(settings)
     if instruct_info.wrap:
-        input_seq = f'{instruct_info.input_sequence}\n'
-        output_seq = f'\n{instruct_info.output_sequence}\n'
+        input_seq = f"{instruct_info.input_sequence}\n"
+        output_seq = f"\n{instruct_info.output_sequence}\n"
     else:
         input_seq = instruct_info.input_sequence
         output_seq = instruct_info.output_sequence
-    new_settings['main_api']['system_sequence'] = instruct_info.system_sequence
-    new_settings['main_api']['system_suffix'] = instruct_info.system_suffix
-    new_settings['main_api']['input_sequence'] = input_seq
-    new_settings['main_api']['input_suffix'] = instruct_info.input_suffix
-    new_settings['main_api']['output_sequence'] = output_seq
-    new_settings['main_api']['output_suffix'] = instruct_info.output_suffix
-    new_settings['main_api']['first_output_sequence'] = instruct_info.first_output_sequence
-    new_settings['main_api']['last_output_sequence'] = instruct_info.last_output_sequence
-    new_settings['main_api']['collapse_newlines'] = instruct_info.collapse_newlines
+    new_settings["main_api"]["system_sequence"] = instruct_info.system_sequence
+    new_settings["main_api"]["system_suffix"] = instruct_info.system_suffix
+    new_settings["main_api"]["input_sequence"] = input_seq
+    new_settings["main_api"]["input_suffix"] = instruct_info.input_suffix
+    new_settings["main_api"]["output_sequence"] = output_seq
+    new_settings["main_api"]["output_suffix"] = instruct_info.output_suffix
+    new_settings["main_api"]["first_output_sequence"] = instruct_info.first_output_sequence
+    new_settings["main_api"]["last_output_sequence"] = instruct_info.last_output_sequence
+    new_settings["main_api"]["collapse_newlines"] = instruct_info.collapse_newlines
     if instruct_info.collapse_newlines:
-        for key, value in new_settings['main_api'].items():
-            if key not in ['wrap', 'backend', 'url', 'auth'] and type(value) is str:
-                new_settings['main_api'][key] = re.sub(r'\n+', '\n', value)
+        for key, value in new_settings["main_api"].items():
+            if key not in ["wrap", "backend", "url", "auth"] and isinstance(value, str):
+                new_settings["main_api"][key] = re.sub(r"\n+", "\n", value)
     return new_settings
 
 
 def instruct_regex(current_settings: dict) -> str:
-    input_seq = re.escape(current_settings['main_api']['input_sequence'])
-    input_suffix = re.escape(current_settings['main_api']['input_suffix'])
-    output_seq = re.escape(current_settings['main_api']['output_sequence'])
-    output_suffix = re.escape(current_settings['main_api']['output_suffix'])
-    system_seq = re.escape(current_settings['main_api']['system_sequence'])
-    system_suffix = re.escape(current_settings['main_api']['system_suffix'])
-    first_output_seq = re.escape(current_settings['main_api']['first_output_sequence'])
-    last_output_seq = re.escape(current_settings['main_api']['last_output_sequence'])
+    input_seq = re.escape(current_settings["main_api"]["input_sequence"])
+    input_suffix = re.escape(current_settings["main_api"]["input_suffix"])
+    output_seq = re.escape(current_settings["main_api"]["output_sequence"])
+    output_suffix = re.escape(current_settings["main_api"]["output_suffix"])
+    system_seq = re.escape(current_settings["main_api"]["system_sequence"])
+    system_suffix = re.escape(current_settings["main_api"]["system_suffix"])
+    first_output_seq = re.escape(current_settings["main_api"]["first_output_sequence"])
+    last_output_seq = re.escape(current_settings["main_api"]["last_output_sequence"])
 
-    patterns = [input_seq, output_seq, system_seq, f'{input_suffix}{input_seq}', f'{input_suffix}{output_seq}',
-                f'{input_suffix}{system_seq}', f'{output_suffix}{input_seq}', f'{output_suffix}{output_seq}',
-                f'{output_suffix}{system_seq}', f'{system_suffix}{input_seq}', f'{system_suffix}{output_seq}',
-                f'{system_suffix}{system_seq}', f'{last_output_seq}', f'{first_output_seq}']
+    patterns = [
+        input_seq,
+        output_seq,
+        system_seq,
+        f"{input_suffix}{input_seq}",
+        f"{input_suffix}{output_seq}",
+        f"{input_suffix}{system_seq}",
+        f"{output_suffix}{input_seq}",
+        f"{output_suffix}{output_seq}",
+        f"{output_suffix}{system_seq}",
+        f"{system_suffix}{input_seq}",
+        f"{system_suffix}{output_seq}",
+        f"{system_suffix}{system_seq}",
+        f"{last_output_seq}",
+        f"{first_output_seq}",
+    ]
 
     unique_patterns = list(set(patterns))
-    filtered_patterns = filter(lambda x: x and x not in ('\n', '\\\n', ' '), unique_patterns)
+    filtered_patterns = filter(lambda x: x and x not in ("\n", "\\\n", " "), unique_patterns)
 
-    pattern = '|'.join(filtered_patterns)
+    pattern = "|".join(filtered_patterns)
 
-    if current_settings['main_api']['collapse_newlines']:
-        pattern = re.sub(r'(\\\n)+', '\\\n', pattern)
+    if current_settings["main_api"]["collapse_newlines"]:
+        pattern = re.sub(r"(\\\n)+", "\\\n", pattern)
     return pattern

@@ -2,9 +2,7 @@ from unittest import TestCase, mock
 
 from grimoire.common.llm_helpers import get_context_length
 
-responses = {
-    'http://sample.com/v1/config/max_context_length': {"value": 10}
-}
+responses = {"http://sample.com/v1/config/max_context_length": {"value": 10}}
 
 
 def mocked_requests_get(*args, **kwargs):
@@ -25,7 +23,7 @@ def mocked_requests_get(*args, **kwargs):
 
 
 class TestGetContextLength(TestCase):
-    @mock.patch('requests.get', side_effect=mocked_requests_get)
+    @mock.patch("requests.get", side_effect=mocked_requests_get)
     def test_returns_value(self, mock_requests_get):
-        result = get_context_length('http://sample.com')
+        result = get_context_length("http://sample.com")
         assert result == 10
