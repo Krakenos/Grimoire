@@ -377,8 +377,8 @@ async def prompt_culling(api_type: str, prompt_entries: dict, max_context: int, 
     output_suffix = current_settings["main_api"]["output_suffix"]
 
     injected_indices = [index for index, message in enumerate(floating_prompts) if message.injected]
-    instruct_messages = messages_with_delimiters[0::2]
-    messages_text = messages_with_delimiters[1::2]
+    instruct_messages = messages_with_delimiters[1::2]
+    messages_text = messages_with_delimiters[2::2]
     merged_messages = [
         f"{instruct_prompt}{message}"
         for instruct_prompt, message in zip(instruct_messages, messages_text, strict=False)
