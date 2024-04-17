@@ -122,7 +122,7 @@ async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=No
     return tokens
 
 
-async def remote_tokenization(batch, api_url, api_auth, api_type):
+async def remote_tokenization(batch: list[str], api_url: str, api_auth: str, api_type: str) -> list[int]:
     tasks = []
     tokenization_endpoint = ""
     request_jsons = []
