@@ -10,7 +10,7 @@ from grimoire.common.loggers import general_logger
 from grimoire.core.settings import settings
 
 
-# TODO refactor this
+# TODO old tokenization code, replace where it's used and remove
 def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
     """
     Counts the token length of the text either through endpoint or with local tokenizer
