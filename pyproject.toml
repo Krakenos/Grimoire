@@ -8,7 +8,7 @@ description = "An implementation of long term memory for AI chatbots"
 readme = "README.md"
 license.file = "LICENSE"
 authors = [
-    { name = "Krakenos", email = "put.email@here.com" },
+    { name = "Krakenos" },
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
