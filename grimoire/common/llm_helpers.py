@@ -92,7 +92,7 @@ def get_cached_tokens(keys: list[str]) -> list[int | None]:
         cached_value: str | None = redis_client.get(key)
         cached_tokens.append(cached_value)
 
-    cached_tokens = [int(number) if number else None for number in cached_tokens]
+    cached_tokens = [int(number) if number is not None else None for number in cached_tokens]
     return cached_tokens
 
 
