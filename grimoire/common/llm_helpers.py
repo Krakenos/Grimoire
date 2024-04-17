@@ -97,12 +97,13 @@ def get_cached_tokens(keys: list[str]) -> list[int | None]:
 
 
 async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None) -> list[int]:
-    cache_keys = [f'llm_{api_type}_{api_url} {text}' for text in batch]
+    unique_texts = list(set(batch))
+    cache_keys = [f'llm_{api_type}_{api_url} {text}' for text in unique_texts]
     cached_tokens = get_cached_tokens(cache_keys)
     tokens_dict = {}
     to_tokenize = []
 
-    for text, tokens in zip(batch, cached_tokens):
+    for text, tokens in zip(unique_texts, cached_tokens):
         tokens_dict[text] = tokens
         if tokens is None:
             to_tokenize.append(text)
