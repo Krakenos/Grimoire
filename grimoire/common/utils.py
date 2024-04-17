@@ -6,9 +6,8 @@ from grimoire.core.settings import settings
 
 
 def get_passthrough(endpoint: str, auth_token=None) -> dict:
-
-    passthrough_url = urljoin(settings['main_api']['url'], endpoint)
-    engine = requests.get(passthrough_url, headers={'Authorization': f'Bearer {auth_token}'})
+    passthrough_url = urljoin(settings["main_api"]["url"], endpoint)
+    engine = requests.get(passthrough_url, headers={"Authorization": f"Bearer {auth_token}"})
     return engine.json()
 
 

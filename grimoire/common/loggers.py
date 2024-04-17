@@ -2,26 +2,26 @@ import logging
 
 from grimoire.core.settings import settings
 
-if settings['DEBUG']:
+if settings["DEBUG"]:
     LOG_LEVEL = logging.DEBUG
 else:
     LOG_LEVEL = logging.INFO
 
-if settings['LOG_PROMPTS']:
+if settings["LOG_PROMPTS"]:
     PROMPT_LEVEL = logging.DEBUG
 else:
     PROMPT_LEVEL = logging.INFO
 
-logging.basicConfig(format='[%(asctime)s] %(levelname)s [%(module)s:%(funcName)s:%(lineno)d]: %(message)s')
-formatter = logging.Formatter('[%(asctime)s] %(levelname)s [%(module)s:%(funcName)s:%(lineno)d]: %(message)s')
+logging.basicConfig(format="[%(asctime)s] %(levelname)s [%(module)s:%(funcName)s:%(lineno)d]: %(message)s")
+formatter = logging.Formatter("[%(asctime)s] %(levelname)s [%(module)s:%(funcName)s:%(lineno)d]: %(message)s")
 
-GENERAL_LOG_FILE = 'general.log'
-SUMMARY_LOG_FILE = 'summary.log'
-CONTEXT_LOG_FILE = 'context.log'
+GENERAL_LOG_FILE = "general.log"
+SUMMARY_LOG_FILE = "summary.log"
+CONTEXT_LOG_FILE = "context.log"
 
-general_logger = logging.getLogger('general')
-summary_logger = logging.getLogger('summary')
-context_logger = logging.getLogger('context')
+general_logger = logging.getLogger("general")
+summary_logger = logging.getLogger("summary")
+context_logger = logging.getLogger("context")
 
 general_logger.setLevel(LOG_LEVEL)
 summary_logger.setLevel(PROMPT_LEVEL)

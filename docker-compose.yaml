@@ -11,16 +11,30 @@ services:
 
   redis:
     image: redis
-    container_name: 'redis'
+    container_name: "redis"
     ports:
       - 6379:6379
 
   postgres:
     image: postgres
-    container_name: 'postgres'
+    container_name: "postgres"
     environment:
       - POSTGRES_USER=grimoire
       - POSTGRES_PASSWORD=secretpassword
       - POSTGRES_DB=grimoire
     ports:
       - 5432:5432
+
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: testing
+    command: [ "python", "-m", "unittest", "discover" ]
+
+  lint:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: testing
+    command: [ "ruff", "check", "." ]
