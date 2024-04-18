@@ -2,12 +2,14 @@ import copy
 from urllib.parse import urljoin
 
 import requests
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
 from grimoire.api.request_models import KAIAbort, KAIGeneration, KAITokenCount
 from grimoire.common.utils import get_passthrough
 from grimoire.core.grimoire import process_prompt, update_instruct
 from grimoire.core.settings import settings
+from grimoire.db.connection import get_db
 
 router = APIRouter(tags=["Kobold passthrough"])
 
@@ -28,7 +30,7 @@ async def extra_version():
 
 
 @router.post("/api/v1/generate")
-async def generate(k_request: KAIGeneration):
+async def generate(k_request: KAIGeneration, db: Session = Depends(get_db)):
     passthrough_json = k_request.model_dump()
     current_settings = copy.deepcopy(settings)
     if k_request.grimoire.instruct is not None:

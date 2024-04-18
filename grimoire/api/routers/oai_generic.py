@@ -3,13 +3,15 @@ from urllib.parse import urljoin
 
 import requests
 import sseclient
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
 from grimoire.api.request_models import OAIGeneration, OAITokenEncode, OAITokenize
 from grimoire.common.utils import get_passthrough
 from grimoire.core.grimoire import process_prompt, update_instruct
 from grimoire.core.settings import settings
+from grimoire.db.connection import get_db
 
 router = APIRouter(tags=["Generic OAI passthrough"])
 
@@ -26,7 +28,7 @@ async def model():
 
 
 @router.post("/v1/completions")
-async def completions(oai_request: OAIGeneration, request: Request):
+async def completions(oai_request: OAIGeneration, request: Request, db: Session = Depends(get_db)):
     def streaming_messages(url, auth_key, data_json):
         streaming_response = requests.post(
             url, stream=True, headers={"Authorization": f"Bearer {auth_key}"}, json=data_json
