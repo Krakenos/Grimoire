@@ -1,4 +1,5 @@
 import asyncio
+import timeit
 from urllib.parse import urljoin
 
 import aiohttp
@@ -97,6 +98,7 @@ def get_cached_tokens(keys: list[str]) -> list[int | None]:
 
 
 async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None) -> list[int]:
+    tokenization_time_start = timeit.default_timer()
     unique_texts = list(set(batch))
     cache_keys = [f"llm_{api_type}_{api_url} {text}" for text in unique_texts]
     cached_tokens = get_cached_tokens(cache_keys)
@@ -108,17 +110,21 @@ async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=No
         if tokens is None:
             to_tokenize.append(text)
 
-    if api_type.lower() in ("koboldai", "koboldcpp", "tabby", "aphrodite", "genericoai"):
-        new_tokens = await remote_tokenization(batch, api_url, api_auth, api_type)
-    else:
-        new_tokens = local_tokenization(to_tokenize, api_url, api_auth, api_type)
+    if to_tokenize:
+        if api_type.lower() in ("koboldai", "koboldcpp", "tabby", "aphrodite", "genericoai"):
+            new_tokens = await remote_tokenization(to_tokenize, api_url, api_auth, api_type)
+        else:
+            new_tokens = local_tokenization(to_tokenize, api_url, api_auth, api_type)
 
-    for text, tokens in zip(to_tokenize, new_tokens, strict=False):
-        tokens_dict[text] = tokens
+        for text, tokens in zip(to_tokenize, new_tokens, strict=False):
+            tokens_dict[text] = tokens
 
-    new_keys = [f"llm_{api_type}_{api_url} {text}" for text in to_tokenize]
-    cache_entries(new_keys, new_tokens)
+        new_keys = [f"llm_{api_type}_{api_url} {text}" for text in to_tokenize]
+        cache_entries(new_keys, new_tokens)
     tokens = [tokens_dict[text] for text in batch]
+
+    tokenization_time_end = timeit.default_timer()
+    general_logger.debug(f"Tokenization time: {tokenization_time_end - tokenization_time_start} seconds")
     return tokens
 
 
