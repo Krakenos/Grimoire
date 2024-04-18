@@ -2,13 +2,16 @@ import asyncio
 from urllib.parse import urljoin
 
 import aiohttp
+import redis
 import requests
 from transformers import AutoTokenizer
 
 from grimoire.common.loggers import general_logger
+from grimoire.common.utils import time_execution
+from grimoire.core.settings import settings
 
 
-# TODO refactor this
+# TODO old tokenization code, replace where it's used and remove
 def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
     """
     Counts the token length of the text either through endpoint or with local tokenizer
@@ -77,16 +80,53 @@ def local_tokenization(texts: str | list[str], api_url: str, api_auth: str, api_
         return [len(tokenized_text["input_ids"]) for tokenized_text in encoded_texts]
 
 
+def cache_entries(keys: list, values: list) -> None:
+    redis_client = redis.StrictRedis(host=settings["REDIS_HOST"], port=settings["REDIS_PORT"])
+    for key, value in zip(keys, values, strict=False):
+        redis_client.set(key, value, settings["CACHE_EXPIRE_TIME"])
+
+
+def get_cached_tokens(keys: list[str]) -> list[int | None]:
+    redis_client = redis.StrictRedis(host=settings["REDIS_HOST"], port=settings["REDIS_PORT"], decode_responses=True)
+    cached_tokens = []
+    for key in keys:
+        cached_value: str | None = redis_client.get(key)
+        cached_tokens.append(cached_value)
+
+    cached_tokens = [int(number) if number is not None else None for number in cached_tokens]
+    return cached_tokens
+
+
+@time_execution
 async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None) -> list[int]:
-    if api_type.lower() in ("koboldai", "koboldcpp", "tabby", "aphrodite", "genericoai"):
-        token_amounts = await remote_tokenization(batch, api_url, api_auth, api_type)
-    else:
-        token_amounts = local_tokenization(batch, api_url, api_auth, api_type)
+    unique_texts = list(set(batch))
+    cache_keys = [f"llm_{api_type}_{api_url} {text}" for text in unique_texts]
+    cached_tokens = get_cached_tokens(cache_keys)
+    tokens_dict = {}
+    to_tokenize = []
 
-    return token_amounts
+    for text, tokens in zip(unique_texts, cached_tokens, strict=False):
+        tokens_dict[text] = tokens
+        if tokens is None:
+            to_tokenize.append(text)
+
+    if to_tokenize:
+        if api_type.lower() in ("koboldai", "koboldcpp", "tabby", "aphrodite", "genericoai"):
+            new_tokens = await remote_tokenization(to_tokenize, api_url, api_auth, api_type)
+        else:
+            new_tokens = local_tokenization(to_tokenize, api_url, api_auth, api_type)
+
+        for text, tokens in zip(to_tokenize, new_tokens, strict=False):
+            tokens_dict[text] = tokens
+
+        new_keys = [f"llm_{api_type}_{api_url} {text}" for text in to_tokenize]
+        cache_entries(new_keys, new_tokens)
+    tokens = [tokens_dict[text] for text in batch]
+
+    return tokens
 
 
-async def remote_tokenization(batch, api_url, api_auth, api_type):
+async def remote_tokenization(batch: list[str], api_url: str, api_auth: str, api_type: str) -> list[int]:
     tasks = []
     tokenization_endpoint = ""
     request_jsons = []

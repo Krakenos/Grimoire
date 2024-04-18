@@ -376,15 +376,8 @@ async def prompt_culling(api_type: str, prompt_entries: dict, max_context: int, 
     input_suffix = current_settings["main_api"]["input_suffix"]
     output_suffix = current_settings["main_api"]["output_suffix"]
 
-    injected_indices = [index for index, message in enumerate(floating_prompts) if message.injected]
-    instruct_messages = messages_with_delimiters[0::2]
-    messages_text = messages_with_delimiters[1::2]
-    merged_messages = [
-        f"{instruct_prompt}{message}"
-        for instruct_prompt, message in zip(instruct_messages, messages_text, strict=False)
-    ]
-
-    messages_dict = dict(enumerate(merged_messages))
+    messages_dict = dict(enumerate(messages_with_delimiters[1:]))
+    injected_indices = get_injected_indices(floating_prompts)
 
     messages_list = [messages_dict[index] for index in sorted(messages_dict.keys())]
     messages = [prompt_definitions, *grimoire_entries, *messages_list]
@@ -393,17 +386,17 @@ async def prompt_culling(api_type: str, prompt_entries: dict, max_context: int, 
     )
     current_tokens = sum(token_amounts)
 
-    max_index = max(messages_dict.keys()) - current_settings["preserved_messages"]
+    max_index = max(messages_dict.keys()) - 2 * current_settings["preserved_messages"]
     messages_start_index = 0
     starting_grimoire_index = 0
     while current_tokens > max_context:
         if messages_start_index < max_index:
             if messages_start_index not in injected_indices:
                 messages_dict.pop(messages_start_index)
+                messages_dict.pop(messages_start_index + 1)
                 messages_list = [messages_dict[index] for index in sorted(messages_dict.keys())]
-                first_message_index = min(messages_dict.keys())
-                first_instruct = instruct_messages[first_message_index]
-                first_text = messages_text[first_message_index]
+                first_instruct = min(messages_dict.keys())
+                first_text = first_instruct + 1
 
                 if first_instruct == output_seq and first_output_seq:
                     messages_list[0] = f"{first_output_seq}{first_text}"
@@ -419,7 +412,7 @@ async def prompt_culling(api_type: str, prompt_entries: dict, max_context: int, 
                     messages, api_type, current_settings["main_api"]["url"], current_settings["main_api"]["auth_key"]
                 )
                 current_tokens = sum(token_amounts)
-            messages_start_index += 1
+            messages_start_index += 2
         elif starting_grimoire_index < grimoire_entries:
             starting_grimoire_index += 1
             messages = [prompt_definitions, *grimoire_entries[starting_grimoire_index:], *messages_list]
@@ -478,7 +471,7 @@ def get_injected_indices(floating_prompts: list[RequestMessage]) -> list[int]:
 
     for mes_index, message in enumerate(floating_prompts):
         if message.injected:
-            corresponding_index = (mes_index + 1) * 2
+            corresponding_index = mes_index * 2 + 1
             injected_prompt_indices.append(corresponding_index)
 
     return injected_prompt_indices
