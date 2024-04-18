@@ -113,24 +113,22 @@ def get_extra_info(generation_data: GenerationData) -> list[RequestMessage]:
     return floating_prompts
 
 
-def get_user(user_id: str | None, current_settings: dict) -> User:
-    with Session(db) as session:
-        if user_id and current_settings["multi_user_mode"]:
-            query = select(User).where(User.external_id == user_id)
-        else:
-            query = select(User).where(User.external_id == "DEFAULT_USER", User.id == 1)
-        result = session.scalars(query).one()
+def get_user(user_id: str | None, current_settings: dict, session: Session) -> User:
+    if user_id and current_settings["multi_user_mode"]:
+        query = select(User).where(User.external_id == user_id)
+    else:
+        query = select(User).where(User.external_id == "DEFAULT_USER", User.id == 1)
+    result = session.scalars(query).one()
     return result
 
 
-def get_chat(user: User, chat_id: str) -> Chat:
-    with Session(db) as session:
-        query = select(Chat).where(Chat.external_id == chat_id, Chat.user_id == user.id)
-        chat = session.scalars(query).first()
-        if chat is None:
-            chat = Chat(external_id=chat_id, user_id=user.id)
-            session.add(chat)
-            session.commit()
+def get_chat(user: User, chat_id: str, session: Session) -> Chat:
+    query = select(Chat).where(Chat.external_id == chat_id, Chat.user_id == user.id)
+    chat = session.scalars(query).first()
+    if chat is None:
+        chat = Chat(external_id=chat_id, user_id=user.id)
+        session.add(chat)
+        session.commit()
 
     return chat
 
@@ -178,8 +176,8 @@ async def process_prompt(
     else:
         chat_messages = all_messages
 
-    user = get_user(user_id, current_settings)
-    chat = get_chat(user, chat_id)
+    user = get_user(user_id, current_settings, db_session)
+    chat = get_chat(user, chat_id, db_session)
 
     with Session(db) as session:
         doc_time = timeit.default_timer()
