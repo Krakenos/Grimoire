@@ -376,7 +376,7 @@ async def prompt_culling(api_type: str, prompt_entries: dict, max_context: int, 
     input_suffix = current_settings["main_api"]["input_suffix"]
     output_suffix = current_settings["main_api"]["output_suffix"]
 
-    messages_dict = {index: message for index, message in enumerate(messages_with_delimiters[1:])}
+    messages_dict = dict(enumerate(messages_with_delimiters[1:]))
     injected_indices = get_injected_indices(floating_prompts)
 
     messages_list = [messages_dict[index] for index in sorted(messages_dict.keys())]
