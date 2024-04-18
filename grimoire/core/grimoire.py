@@ -11,7 +11,7 @@ from grimoire.api.request_models import GenerationData, Instruct
 from grimoire.api.request_models import Message as RequestMessage
 from grimoire.common.llm_helpers import count_context, token_count
 from grimoire.common.loggers import context_logger, general_logger
-from grimoire.common.utils import orm_get_or_create
+from grimoire.common.utils import orm_get_or_create, time_execution
 from grimoire.core.settings import settings
 from grimoire.core.tasks import summarize
 from grimoire.db.models import Chat, Knowledge, Message, User
@@ -29,6 +29,7 @@ nlp = spacy.load("en_core_web_trf")
 db = create_engine(settings["DB_ENGINE"])
 
 
+@time_execution
 def save_messages(messages: list, docs: list, chat: Chat, session: Session) -> list[int]:
     """
     Saves messages to and returns indices of new messages
@@ -64,6 +65,7 @@ def save_messages(messages: list, docs: list, chat: Chat, session: Session) -> l
     return new_messages_indices
 
 
+@time_execution
 def add_missing_docs(messages: list[tuple[int, type[Message]]], docs: list[Doc], session: Session) -> None:
     for index, message in messages:
         spacy_doc = docs[index]
@@ -75,6 +77,7 @@ def add_missing_docs(messages: list[tuple[int, type[Message]]], docs: list[Doc],
     session.commit()
 
 
+@time_execution
 def get_docs(messages: list[str], chat: Chat, session: Session) -> list[Doc]:
     docs = []
     processing_indices = []
@@ -141,6 +144,7 @@ async def process_prompt(
     user_id: str | None = None,
     current_settings: dict | None = None,
 ) -> str:
+    start_time = timeit.default_timer()
     if current_settings is None:
         current_settings = copy.deepcopy(settings)
 
@@ -183,11 +187,8 @@ async def process_prompt(
         general_logger.debug(f"Creating spacy docs {doc_end_time - doc_time} seconds")
         last_messages = chat_messages[:-1]  # exclude user prompt
         last_docs = docs[:-1]
-        start_time = timeit.default_timer()
         new_message_indices = save_messages(last_messages, last_docs, chat, session)
         save_named_entities(chat, last_docs, session)
-        end_time = timeit.default_timer()
-        general_logger.info(f"Save messages and entities: {end_time - start_time}s")
 
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
 
