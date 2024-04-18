@@ -139,10 +139,11 @@ async def process_prompt(
     prompt: str,
     chat_id: str,
     context_length: int,
+    db_session: Session,
     api_type: str | None = None,
     generation_data: GenerationData | None = None,
     user_id: str | None = None,
-    current_settings: dict | None = None,
+    current_settings: dict | None = None
 ) -> str:
     start_time = timeit.default_timer()
     if current_settings is None:

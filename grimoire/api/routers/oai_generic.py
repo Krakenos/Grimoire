@@ -52,10 +52,11 @@ async def completions(oai_request: OAIGeneration, request: Request, db: Session 
         prompt=oai_request.prompt,
         chat_id=oai_request.grimoire.chat_id,
         context_length=oai_request.truncation_length,
+        db_session=db,
         api_type=oai_request.api_type,
         generation_data=oai_request.grimoire.generation_data,
         user_id=oai_request.grimoire.user_id,
-        current_settings=current_settings,
+        current_settings=current_settings
     )
 
     passthrough_json["prompt"] = new_prompt
