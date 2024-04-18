@@ -1,5 +1,4 @@
 import asyncio
-import timeit
 from urllib.parse import urljoin
 
 import aiohttp
@@ -8,6 +7,7 @@ import requests
 from transformers import AutoTokenizer
 
 from grimoire.common.loggers import general_logger
+from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 
 
@@ -97,8 +97,8 @@ def get_cached_tokens(keys: list[str]) -> list[int | None]:
     return cached_tokens
 
 
+@time_execution
 async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None) -> list[int]:
-    tokenization_time_start = timeit.default_timer()
     unique_texts = list(set(batch))
     cache_keys = [f"llm_{api_type}_{api_url} {text}" for text in unique_texts]
     cached_tokens = get_cached_tokens(cache_keys)
@@ -123,8 +123,6 @@ async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=No
         cache_entries(new_keys, new_tokens)
     tokens = [tokens_dict[text] for text in batch]
 
-    tokenization_time_end = timeit.default_timer()
-    general_logger.debug(f"Tokenization time: {tokenization_time_end - tokenization_time_start} seconds")
     return tokens
 
 
