@@ -4,7 +4,7 @@ import timeit
 
 import spacy
 from spacy.tokens import Doc, DocBin
-from sqlalchemy import create_engine, desc, select
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from grimoire.api.request_models import GenerationData, Instruct
@@ -26,7 +26,6 @@ else:
     general_logger.info("Running spacy on CPU")
 
 nlp = spacy.load("en_core_web_trf")
-db = create_engine(settings["DB_ENGINE"])
 
 
 @time_execution
