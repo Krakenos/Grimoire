@@ -141,7 +141,7 @@ async def process_prompt(
     api_type: str | None = None,
     generation_data: GenerationData | None = None,
     user_id: str | None = None,
-    current_settings: dict | None = None
+    current_settings: dict | None = None,
 ) -> str:
     start_time = timeit.default_timer()
     if current_settings is None:
@@ -179,19 +179,20 @@ async def process_prompt(
     user = get_user(user_id, current_settings, db_session)
     chat = get_chat(user, chat_id, db_session)
 
-    with Session(db) as session:
-        doc_time = timeit.default_timer()
-        docs = get_docs(chat_messages, chat, session)
-        doc_end_time = timeit.default_timer()
-        general_logger.debug(f"Creating spacy docs {doc_end_time - doc_time} seconds")
-        last_messages = chat_messages[:-1]  # exclude user prompt
-        last_docs = docs[:-1]
-        new_message_indices = save_messages(last_messages, last_docs, chat, session)
-        save_named_entities(chat, last_docs, session)
+    doc_time = timeit.default_timer()
+    docs = get_docs(chat_messages, chat, db_session)
+    doc_end_time = timeit.default_timer()
+    general_logger.debug(f"Creating spacy docs {doc_end_time - doc_time} seconds")
+    last_messages = chat_messages[:-1]  # exclude user prompt
+    last_docs = docs[:-1]
+    new_message_indices = save_messages(last_messages, last_docs, chat, db_session)
+    save_named_entities(chat, last_docs, db_session)
 
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
 
-    new_prompt = await fill_context(prompt, floating_prompts, chat, docs, context_length, api_type, current_settings)
+    new_prompt = await fill_context(
+        prompt, floating_prompts, chat, db_session, docs, context_length, api_type, current_settings
+    )
 
     for doc in docs_to_summarize:
         for entity in set(doc.ents):
@@ -241,6 +242,7 @@ async def fill_context(
     prompt: str,
     floating_prompts: list[RequestMessage],
     chat: Chat,
+    db_session: Session,
     docs: list[Doc],
     context_size: int,
     api_type: str,
@@ -255,7 +257,7 @@ async def fill_context(
     messages_with_delimiters = re.split(pattern_with_delimiters, prompt)
     prompt_definitions = messages[0]  # first portion should always be instruction and char definitions
     unique_ents = get_ordered_entities(banned_labels, docs)
-    summaries = get_summaries(chat, unique_ents)
+    summaries = get_summaries(chat, unique_ents, db_session)
 
     prompt_entries = {
         "prompt_definitions": prompt_definitions,
@@ -435,22 +437,21 @@ def generate_grimoire_entries(max_grimoire_context: int, summaries: list[tuple[s
     return grimoire_entries
 
 
-def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]]) -> list[tuple[str, int, str]]:
+def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]], session: Session) -> list[tuple[str, int, str]]:
     summaries = []
-    with Session(db) as session:
-        for ent in unique_ents:
-            query = select(Knowledge).where(
-                Knowledge.entity.ilike(ent[0]),
-                Knowledge.entity_type == "NAMED ENTITY",
-                Knowledge.chat_id == chat.id,
-                Knowledge.summary.isnot(None),
-                Knowledge.token_count.isnot(None),
-                Knowledge.token_count != 0,
-            )
-            instance = session.scalars(query).first()
+    for ent in unique_ents:
+        query = select(Knowledge).where(
+            Knowledge.entity.ilike(ent[0]),
+            Knowledge.entity_type == "NAMED ENTITY",
+            Knowledge.chat_id == chat.id,
+            Knowledge.summary.isnot(None),
+            Knowledge.token_count.isnot(None),
+            Knowledge.token_count != 0,
+        )
+        instance = session.scalars(query).first()
 
-            if instance is not None:
-                summaries.append((instance.summary, instance.token_count, instance.entity))
+        if instance is not None:
+            summaries.append((instance.summary, instance.token_count, instance.entity))
 
     return summaries
 
