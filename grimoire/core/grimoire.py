@@ -228,7 +228,7 @@ def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
             )
             if not knowledge_entity:
                 knowledge_entity = Knowledge(
-                    entity=ent, entity_label=ent_label, entity_type="NAMED ENTITY", chat_id=chat.id
+                    entity=ent, entity_label=ent_label, entity_type="NAMED ENTITY", chat_id=chat.id, update_count=0
                 )
                 session.add(knowledge_entity)
             knowledge_entity.messages.append(db_message)
