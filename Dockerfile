@@ -1,14 +1,13 @@
-ARG PYTHON_VERSION=3.10.12
-
-FROM python:${PYTHON_VERSION}-slim as base
+FROM pytorch/pytorch:2.2.2-cuda12.1-cudnn8-runtime AS base
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
 FROM base AS deps
 COPY requirements.txt requirements.txt
-RUN pip install --upgrade pip && pip install -r requirements.txt
-RUN python -m spacy download en_core_web_trf
+RUN pip install --upgrade pip --no-cache && pip install -r requirements.txt --no-cache
+RUN python3 -m spacy download en_core_web_trf
 
 FROM deps AS test_deps
 COPY requirements_tests.txt requirements_tests.txt
