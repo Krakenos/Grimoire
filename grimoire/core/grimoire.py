@@ -5,7 +5,7 @@ import timeit
 import spacy
 from spacy.tokens import Doc, DocBin
 from sqlalchemy import desc, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload, with_loader_criteria
 
 from grimoire.api.request_models import GenerationData, Instruct
 from grimoire.api.request_models import Message as RequestMessage
@@ -105,6 +105,7 @@ def get_docs(messages: list[str], chat: Chat, session: Session) -> list[Doc]:
     return docs
 
 
+@time_execution
 def get_extra_info(generation_data: GenerationData) -> list[RequestMessage]:
     floating_prompts = []
     for message in generation_data.finalMesSend:
@@ -112,6 +113,7 @@ def get_extra_info(generation_data: GenerationData) -> list[RequestMessage]:
     return floating_prompts
 
 
+@time_execution
 def get_user(user_id: str | None, current_settings: dict, session: Session) -> User:
     if user_id and current_settings["multi_user_mode"]:
         query = select(User).where(User.external_id == user_id)
@@ -121,8 +123,13 @@ def get_user(user_id: str | None, current_settings: dict, session: Session) -> U
     return result
 
 
-def get_chat(user: User, chat_id: str, session: Session) -> Chat:
-    query = select(Chat).where(Chat.external_id == chat_id, Chat.user_id == user.id)
+@time_execution
+def get_chat(user: User, chat_id: str, current_messages: list[str], session: Session) -> Chat:
+    query = (
+        select(Chat)
+        .where(Chat.external_id == chat_id, Chat.user_id == user.id)
+        .options(selectinload(Chat.messages), with_loader_criteria(Message, Message.message.in_(current_messages)))
+    )
     chat = session.scalars(query).first()
     if chat is None:
         chat = Chat(external_id=chat_id, user_id=user.id)
@@ -176,7 +183,7 @@ async def process_prompt(
         chat_messages = all_messages
 
     user = get_user(user_id, current_settings, db_session)
-    chat = get_chat(user, chat_id, db_session)
+    chat = get_chat(user, chat_id, chat_messages, db_session)
 
     doc_time = timeit.default_timer()
     docs = get_docs(chat_messages, chat, db_session)
@@ -212,6 +219,7 @@ async def process_prompt(
     return new_prompt
 
 
+@time_execution
 def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
     banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME"]
     for doc in docs:
@@ -234,9 +242,10 @@ def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
             knowledge_entity.messages.append(db_message)
             knowledge_entity.update_count += 1
             session.add(knowledge_entity)
-    session.commit()
+            session.commit()
 
 
+@time_execution
 async def fill_context(
     prompt: str,
     floating_prompts: list[RequestMessage],
@@ -365,6 +374,7 @@ def chat_messages_culling(
     return context_overflow, messages_text, min_message_context
 
 
+@time_execution
 async def prompt_culling(api_type: str, prompt_entries: dict, max_context: int, current_settings: dict) -> str:
     prompt_definitions = prompt_entries["prompt_definitions"]
     grimoire_entries = prompt_entries["grimoire"]
