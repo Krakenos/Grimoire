@@ -65,14 +65,14 @@ def save_messages(messages: list, docs: list, chat: Chat, session: Session) -> l
 
 
 @time_execution
-def add_missing_docs(messages: list[tuple[int, type[Message]]], docs: list[Doc], session: Session) -> None:
-    for index, message in messages:
-        spacy_doc = docs[index]
+def add_missing_docs(message_indices: list[int], docs_dict: dict[str, Doc], chat: Chat, session: Session) -> None:
+    for message_index in message_indices:
+        doc = docs_dict[chat.messages[message_index].message]
         doc_bin = DocBin()
-        doc_bin.add(spacy_doc)
+        doc_bin.add(doc)
         bytes_data = doc_bin.to_bytes()
-        message.spacy_doc = bytes_data
-        session.add(message)
+        chat.messages[message_index].spacy_doc = bytes_data
+    session.add(chat)
     session.commit()
 
 
@@ -100,7 +100,9 @@ def get_docs(messages: list[str], chat: Chat, session: Session) -> list[Doc]:
     for message in messages:
         docs.append(docs_dict[message])
 
-    # add_missing_docs(messages_to_update, docs, session)
+    if messages_to_update:
+        add_missing_docs(messages_to_update, docs_dict, chat, session)
+
     return docs
 
 
