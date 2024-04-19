@@ -79,29 +79,28 @@ def add_missing_docs(messages: list[tuple[int, type[Message]]], docs: list[Doc],
 @time_execution
 def get_docs(messages: list[str], chat: Chat, session: Session) -> list[Doc]:
     docs = []
-    processing_indices = []
+    docs_dict = {}
     to_process = []
     messages_to_update = []
-    for index, message in enumerate(messages):
-        db_message = session.query(Message).filter_by(chat_id=chat.id, message=message).first()
-        if db_message is not None:
-            if db_message.spacy_doc is not None:
-                doc_bin = DocBin().from_bytes(db_message.spacy_doc)
-                spacy_doc = list(doc_bin.get_docs(nlp.vocab))[0]
-                docs.append((index, spacy_doc))
-            else:  # if something went wrong and message doesn't have doc
-                messages_to_update.append((index, db_message))
-                processing_indices.append(index)
-                to_process.append(message)
-        else:
-            processing_indices.append(index)
+    for index, message in enumerate(chat.messages):
+        if message.spacy_doc is not None:
+            doc_bin = DocBin().from_bytes(message.spacy_doc)
+            spacy_doc = list(doc_bin.get_docs(nlp.vocab))[0]
+            docs_dict[message.message] = spacy_doc
+        else:  # if something went wrong and message doesn't have doc
+            messages_to_update.append(index)
+
+    for message in messages:
+        if message not in docs_dict:
             to_process.append(message)
+
     new_docs = list(nlp.pipe(to_process))
-    new_docs = [(message_index, new_docs[index]) for index, message_index in enumerate(processing_indices)]
-    docs.extend(new_docs)
-    docs = sorted(docs, key=lambda x: x[0])
-    docs = [doc[1] for doc in docs]  # removing indices
-    add_missing_docs(messages_to_update, docs, session)
+    for text, doc in zip(to_process, new_docs, strict=False):
+        docs_dict[text] = doc
+    for message in messages:
+        docs.append(docs_dict[message])
+
+    # add_missing_docs(messages_to_update, docs, session)
     return docs
 
 
