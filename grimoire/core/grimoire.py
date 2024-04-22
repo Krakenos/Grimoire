@@ -4,7 +4,7 @@ import timeit
 
 import spacy
 from spacy.tokens import Doc, DocBin
-from sqlalchemy import desc, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload, with_loader_criteria
 
 from grimoire.api.request_models import GenerationData, Instruct
@@ -30,47 +30,38 @@ nlp = spacy.load("en_core_web_trf")
 
 @time_execution
 def save_messages(
-    messages: list[str], docs: list[Doc], docs_dict: dict[str, Doc], chat: Chat, session: Session
-) -> list[int]:
+    messages: list[str], docs_dict: dict[str, Doc], chat: Chat, session: Session
+) -> tuple[list[int], Chat]:
     """
     Saves messages to and returns indices of new messages
     :param messages:
-    :param docs:
     :param docs_dict:
     :param chat:
     :param session:
-    :return: indices of new messages
+    :return: indices of new messages and updated chat object
     """
-    indices = []
     new_messages_indices = []
     db_messages = [message.message for message in chat.messages]
     for index, message in enumerate(messages):
         if message not in db_messages:
-            indices.append(index)
+            new_messages_indices.append(index)
 
-    for message_index, message in enumerate(messages):
-        message_exists = session.query(Message.id).filter_by(message=message, chat_id=chat.id).first() is not None
-        if not message_exists:
-            chat_exists = session.query(Message.id).filter_by(chat_id=chat.id).first() is not None
-            if chat_exists:
-                latest_index = (
-                    session.query(Message.message_index)
-                    .filter_by(chat_id=chat.id)
-                    .order_by(desc(Message.message_index))
-                    .first()[0]
-                )
-                current_index = latest_index + 1
-            else:
-                current_index = 1
-            spacy_doc = docs[message_index]
-            doc_bin = DocBin()
-            doc_bin.add(spacy_doc)
-            bytes_data = doc_bin.to_bytes()
-            new_message = Message(message=message, chat_id=chat.id, message_index=current_index, spacy_doc=bytes_data)
-            new_messages_indices.append(message_index)
-            session.add(new_message)
+    message_number = max([message.message_index for message in db_messages])
+    message_number += 1
+
+    for index in new_messages_indices:
+        message_to_add = messages[index]
+        spacy_doc = docs_dict[message_to_add]
+        doc_bin = DocBin()
+        doc_bin.add(spacy_doc)
+        bytes_data = doc_bin.to_bytes()
+        Chat.messages.append(Message(message=message_to_add, message_index=message_number, spacy_doc=bytes_data))
+        message_number += 1
+
+    session.add(chat)
     session.commit()
-    return new_messages_indices
+
+    return new_messages_indices, chat
 
 
 @time_execution
@@ -201,7 +192,7 @@ async def process_prompt(
     general_logger.debug(f"Creating spacy docs {doc_end_time - doc_time} seconds")
     last_messages = chat_messages[:-1]  # exclude user prompt
     last_docs = docs[:-1]
-    new_message_indices = save_messages(last_messages, last_docs, docs_dict, chat, db_session)
+    new_message_indices, chat = save_messages(last_messages, docs_dict, chat, db_session)
     save_named_entities(chat, last_docs, db_session)
 
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
