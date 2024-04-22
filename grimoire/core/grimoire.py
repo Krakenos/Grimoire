@@ -11,7 +11,7 @@ from grimoire.api.request_models import GenerationData, Instruct
 from grimoire.api.request_models import Message as RequestMessage
 from grimoire.common.llm_helpers import count_context, token_count
 from grimoire.common.loggers import context_logger, general_logger
-from grimoire.common.utils import orm_get_or_create, time_execution
+from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 from grimoire.core.tasks import summarize
 from grimoire.db.models import Chat, Knowledge, Message, User
@@ -223,27 +223,43 @@ async def process_prompt(
 @time_execution
 def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
     banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME"]
+    message_indices = {message.message: index for index, message in enumerate(chat.messages)}
+    unique_ents = []
     for doc in docs:
-        db_message = orm_get_or_create(session, Message, message=doc.text)
         ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
-        unique_ents = list(set(ent_list))
-        for ent, ent_label in unique_ents:
-            knowledge_entity = (
-                session.query(Knowledge)
-                .filter(
-                    Knowledge.entity.ilike(ent), Knowledge.entity_type == "NAMED ENTITY", Knowledge.chat_id == chat.id
-                )
-                .first()
+        unique_ents.extend(list(set(ent_list)))
+    unique_ents = list(set(unique_ents))
+
+    unique_ent_names = list({ent_name.lower() for ent_name, _ in unique_ents})
+    query = select(Knowledge).where(
+        Knowledge.entity.lower().in_(unique_ent_names),
+        Knowledge.entity_type == "NAMED ENTITY",
+        Knowledge.chat_id == chat.id,
+    )
+    knowledge_entries = session.scalars(query)
+    db_entry_names = [entry.entity.lower() for entry in knowledge_entries]
+    new_knowledge = []
+    for ent, ent_label in unique_ents:
+        if ent.lower() not in db_entry_names:
+            knowledge_entity = Knowledge(
+                entity=ent, entity_label=ent_label, entity_type="NAMED ENTITY", chat_id=chat.id, update_count=0
             )
-            if not knowledge_entity:
-                knowledge_entity = Knowledge(
-                    entity=ent, entity_label=ent_label, entity_type="NAMED ENTITY", chat_id=chat.id, update_count=0
-                )
-                session.add(knowledge_entity)
-            knowledge_entity.messages.append(db_message)
-            knowledge_entity.update_count += 1
-            session.add(knowledge_entity)
-            session.commit()
+            new_knowledge.append(knowledge_entity)
+    session.add_all(new_knowledge)
+    session.commit()
+
+    knowledge_dict = {knowledge.entity: knowledge for knowledge in [*knowledge_entries, *new_knowledge]}
+
+    for doc in docs:
+        message_index = message_indices[doc.text]
+        ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
+        message_ents = list(set(ent_list))
+
+        for ent, ent_label in message_ents:
+            knowledge_dict[ent].messages.append(chat.messages[message_index])
+            knowledge_dict[ent].update_count += 1
+    session.add_all(knowledge_dict.values())
+    session.commit()
 
 
 @time_execution
