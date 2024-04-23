@@ -466,19 +466,19 @@ def generate_grimoire_entries(max_grimoire_context: int, summaries: list[tuple[s
 
 def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]], session: Session) -> list[tuple[str, int, str]]:
     summaries = []
-    for ent in unique_ents:
-        query = select(Knowledge).where(
-            Knowledge.entity.ilike(ent[0]),
-            Knowledge.entity_type == "NAMED ENTITY",
-            Knowledge.chat_id == chat.id,
-            Knowledge.summary.isnot(None),
-            Knowledge.token_count.isnot(None),
-            Knowledge.token_count != 0,
-        )
-        instance = session.scalars(query).first()
+    lower_ent_names = [name.lower() for name, _ in unique_ents]
+    query = select(Knowledge).where(
+        Knowledge.entity.lower().in_(lower_ent_names),
+        Knowledge.entity_type == "NAMED ENTITY",
+        Knowledge.chat_id == chat.id,
+        Knowledge.summary.isnot(None),
+        Knowledge.token_count.isnot(None),
+        Knowledge.token_count != 0,
+    )
+    knowledge_ents = session.scalars(query)
 
-        if instance is not None:
-            summaries.append((instance.summary, instance.token_count, instance.entity))
+    for instance in knowledge_ents:
+        summaries.append((instance.summary, instance.token_count, instance.entity))
 
     return summaries
 
