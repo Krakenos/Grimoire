@@ -11,7 +11,7 @@ from grimoire.api.request_models import GenerationData, Instruct
 from grimoire.api.request_models import Message as RequestMessage
 from grimoire.common.llm_helpers import count_context, token_count
 from grimoire.common.loggers import context_logger, general_logger
-from grimoire.common.utils import time_execution
+from grimoire.common.utils import async_time_execution, time_execution
 from grimoire.core.settings import settings
 from grimoire.core.tasks import summarize
 from grimoire.db.models import Chat, Knowledge, Message, User
@@ -266,7 +266,7 @@ def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
     session.commit()
 
 
-@time_execution
+@async_time_execution
 async def fill_context(
     prompt: str,
     floating_prompts: list[RequestMessage],
@@ -395,7 +395,7 @@ def chat_messages_culling(
     return context_overflow, messages_text, min_message_context
 
 
-@time_execution
+@async_time_execution
 async def prompt_culling(api_type: str, prompt_entries: dict, max_context: int, current_settings: dict) -> str:
     prompt_definitions = prompt_entries["prompt_definitions"]
     grimoire_entries = prompt_entries["grimoire"]
