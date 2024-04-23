@@ -260,8 +260,9 @@ def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
         message_ents = list(set(ent_list))
 
         for ent in message_ents:
-            knowledge_dict[ent].messages.append(chat.messages[message_index])
-            knowledge_dict[ent].update_count += 1
+            if chat.messages[message_index] not in knowledge_dict[ent].messages:
+                knowledge_dict[ent].messages.append(chat.messages[message_index])
+                knowledge_dict[ent].update_count += 1
     session.add_all(knowledge_dict.values())
     session.commit()
 
