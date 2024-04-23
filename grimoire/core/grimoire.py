@@ -46,7 +46,10 @@ def save_messages(
         if message not in db_messages:
             new_messages_indices.append(index)
 
-    message_number = max([message.message_index for message in db_messages])
+    if db_messages:
+        message_number = max([message.message_index for message in db_messages])
+    else:
+        message_number = 0
     message_number += 1
 
     for index in new_messages_indices:
@@ -55,7 +58,7 @@ def save_messages(
         doc_bin = DocBin()
         doc_bin.add(spacy_doc)
         bytes_data = doc_bin.to_bytes()
-        Chat.messages.append(Message(message=message_to_add, message_index=message_number, spacy_doc=bytes_data))
+        chat.messages.append(Message(message=message_to_add, message_index=message_number, spacy_doc=bytes_data))
         message_number += 1
 
     session.add(chat)
