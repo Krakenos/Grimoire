@@ -4,7 +4,7 @@ import timeit
 
 import spacy
 from spacy.tokens import Doc, DocBin
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, with_loader_criteria
 
 from grimoire.api.request_models import GenerationData, Instruct
@@ -47,7 +47,7 @@ def save_messages(
             new_messages_indices.append(index)
 
     if db_messages:
-        message_number = max([message.message_index for message in db_messages])
+        message_number = max([message.message_index for message in chat.messages])
     else:
         message_number = 0
     message_number += 1
@@ -236,11 +236,11 @@ def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
 
     unique_ent_names = list({ent_name.lower() for ent_name, _ in unique_ents})
     query = select(Knowledge).where(
-        Knowledge.entity.lower().in_(unique_ent_names),
+        func.lower(Knowledge.entity).in_(unique_ent_names),
         Knowledge.entity_type == "NAMED ENTITY",
         Knowledge.chat_id == chat.id,
     )
-    knowledge_entries = session.scalars(query)
+    knowledge_entries = session.scalars(query).all()
     db_entry_names = [entry.entity.lower() for entry in knowledge_entries]
     new_knowledge = []
     for ent, ent_label in unique_ents:
@@ -471,14 +471,14 @@ def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]], session: Sessi
     summaries = []
     lower_ent_names = [name.lower() for name, _ in unique_ents]
     query = select(Knowledge).where(
-        Knowledge.entity.lower().in_(lower_ent_names),
+        func.lower(Knowledge.entity).in_(lower_ent_names),
         Knowledge.entity_type == "NAMED ENTITY",
         Knowledge.chat_id == chat.id,
         Knowledge.summary.isnot(None),
         Knowledge.token_count.isnot(None),
         Knowledge.token_count != 0,
     )
-    knowledge_ents = session.scalars(query)
+    knowledge_ents = session.scalars(query).all()
 
     for instance in knowledge_ents:
         summaries.append((instance.summary, instance.token_count, instance.entity))
