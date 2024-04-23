@@ -43,7 +43,7 @@ async def generate(k_request: KAIGeneration, db: Session = Depends(get_db)):
         api_type="kobold",
         generation_data=k_request.grimoire.generation_data,
         user_id=k_request.grimoire.user_id,
-        current_settings=current_settings
+        current_settings=current_settings,
     )
     passthrough_url = urljoin(current_settings["main_api"]["url"], "/api/v1/generate")
     passthrough_json["prompt"] = new_prompt

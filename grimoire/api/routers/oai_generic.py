@@ -3,7 +3,7 @@ from urllib.parse import urljoin
 
 import requests
 import sseclient
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -56,7 +56,7 @@ async def completions(oai_request: OAIGeneration, request: Request, db: Session 
         api_type=oai_request.api_type,
         generation_data=oai_request.grimoire.generation_data,
         user_id=oai_request.grimoire.user_id,
-        current_settings=current_settings
+        current_settings=current_settings,
     )
 
     passthrough_json["prompt"] = new_prompt

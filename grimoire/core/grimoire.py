@@ -228,6 +228,7 @@ def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
     for doc in docs:
         ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
         unique_ents.extend(list(set(ent_list)))
+
     unique_ents = list(set(unique_ents))
 
     unique_ent_names = list({ent_name.lower() for ent_name, _ in unique_ents})
@@ -252,10 +253,10 @@ def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
 
     for doc in docs:
         message_index = message_indices[doc.text]
-        ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
+        ent_list = [str(ent) for ent in doc.ents if ent.label_ not in banned_labels]
         message_ents = list(set(ent_list))
 
-        for ent, ent_label in message_ents:
+        for ent in message_ents:
             knowledge_dict[ent].messages.append(chat.messages[message_index])
             knowledge_dict[ent].update_count += 1
     session.add_all(knowledge_dict.values())
