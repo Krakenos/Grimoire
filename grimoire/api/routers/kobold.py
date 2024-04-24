@@ -33,8 +33,13 @@ async def extra_version():
 async def generate(k_request: KAIGeneration, db: Session = Depends(get_db)):
     passthrough_json = k_request.model_dump()
     current_settings = copy.deepcopy(settings)
+
     if k_request.grimoire.instruct is not None:
         current_settings = update_instruct(k_request.grimoire.instruct)
+
+    if k_request.grimoire.redirect_url:
+        current_settings["main_api"]["url"] = k_request.grimoire.redirect_url
+
     new_prompt = await process_prompt(
         prompt=k_request.prompt,
         chat_id=k_request.grimoire.chat_id,
