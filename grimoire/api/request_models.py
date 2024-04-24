@@ -52,6 +52,7 @@ class Grimoire(BaseModel):
     user_id: str = None
     instruct: Instruct | None = None
     generation_data: GenerationData | None = None
+    redirect_url: str | None = None
 
 
 class KAIGeneration(BaseModel):
