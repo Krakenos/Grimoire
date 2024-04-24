@@ -55,6 +55,7 @@ class Chat(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     external_id: Mapped[str]
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
+    messages: Mapped[list["Message"]] = relationship()
 
 
 class User(Base):

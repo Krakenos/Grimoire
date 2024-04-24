@@ -4,14 +4,14 @@ import timeit
 
 import spacy
 from spacy.tokens import Doc, DocBin
-from sqlalchemy import create_engine, desc, select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, selectinload, with_loader_criteria
 
 from grimoire.api.request_models import GenerationData, Instruct
 from grimoire.api.request_models import Message as RequestMessage
 from grimoire.common.llm_helpers import count_context, token_count
 from grimoire.common.loggers import context_logger, general_logger
-from grimoire.common.utils import orm_get_or_create
+from grimoire.common.utils import async_time_execution, time_execution
 from grimoire.core.settings import settings
 from grimoire.core.tasks import summarize
 from grimoire.db.models import Chat, Knowledge, Message, User
@@ -26,83 +26,90 @@ else:
     general_logger.info("Running spacy on CPU")
 
 nlp = spacy.load("en_core_web_trf")
-db = create_engine(settings["DB_ENGINE"])
 
 
-def save_messages(messages: list, docs: list, chat: Chat, session: Session) -> list[int]:
+@time_execution
+def save_messages(
+    messages: list[str], docs_dict: dict[str, Doc], chat: Chat, session: Session
+) -> tuple[list[int], Chat]:
     """
     Saves messages to and returns indices of new messages
     :param messages:
-    :param docs:
+    :param docs_dict:
     :param chat:
     :param session:
-    :return: indices of new messages
+    :return: indices of new messages and updated chat object
     """
     new_messages_indices = []
-    for message_index, message in enumerate(messages):
-        message_exists = session.query(Message.id).filter_by(message=message, chat_id=chat.id).first() is not None
-        if not message_exists:
-            chat_exists = session.query(Message.id).filter_by(chat_id=chat.id).first() is not None
-            if chat_exists:
-                latest_index = (
-                    session.query(Message.message_index)
-                    .filter_by(chat_id=chat.id)
-                    .order_by(desc(Message.message_index))
-                    .first()[0]
-                )
-                current_index = latest_index + 1
-            else:
-                current_index = 1
-            spacy_doc = docs[message_index]
-            doc_bin = DocBin()
-            doc_bin.add(spacy_doc)
-            bytes_data = doc_bin.to_bytes()
-            new_message = Message(message=message, chat_id=chat.id, message_index=current_index, spacy_doc=bytes_data)
-            new_messages_indices.append(message_index)
-            session.add(new_message)
-    session.commit()
-    return new_messages_indices
+    db_messages = [message.message for message in chat.messages]
+    for index, message in enumerate(messages):
+        if message not in db_messages:
+            new_messages_indices.append(index)
 
+    if db_messages:
+        message_number = max([message.message_index for message in chat.messages])
+    else:
+        message_number = 0
+    message_number += 1
 
-def add_missing_docs(messages: list[tuple[int, type[Message]]], docs: list[Doc], session: Session) -> None:
-    for index, message in messages:
-        spacy_doc = docs[index]
+    for index in new_messages_indices:
+        message_to_add = messages[index]
+        spacy_doc = docs_dict[message_to_add]
         doc_bin = DocBin()
         doc_bin.add(spacy_doc)
         bytes_data = doc_bin.to_bytes()
-        message.spacy_doc = bytes_data
-        session.add(message)
+        chat.messages.append(Message(message=message_to_add, message_index=message_number, spacy_doc=bytes_data))
+        message_number += 1
+
+    session.add(chat)
+    session.commit()
+
+    return new_messages_indices, chat
+
+
+@time_execution
+def add_missing_docs(message_indices: list[int], docs_dict: dict[str, Doc], chat: Chat, session: Session) -> None:
+    for message_index in message_indices:
+        doc = docs_dict[chat.messages[message_index].message]
+        doc_bin = DocBin()
+        doc_bin.add(doc)
+        bytes_data = doc_bin.to_bytes()
+        chat.messages[message_index].spacy_doc = bytes_data
+    session.add(chat)
     session.commit()
 
 
-def get_docs(messages: list[str], chat: Chat, session: Session) -> list[Doc]:
+@time_execution
+def get_docs(messages: list[str], chat: Chat, session: Session) -> tuple[list[Doc], dict[str, Doc]]:
     docs = []
-    processing_indices = []
+    docs_dict = {}
     to_process = []
     messages_to_update = []
-    for index, message in enumerate(messages):
-        db_message = session.query(Message).filter_by(chat_id=chat.id, message=message).first()
-        if db_message is not None:
-            if db_message.spacy_doc is not None:
-                doc_bin = DocBin().from_bytes(db_message.spacy_doc)
-                spacy_doc = list(doc_bin.get_docs(nlp.vocab))[0]
-                docs.append((index, spacy_doc))
-            else:  # if something went wrong and message doesn't have doc
-                messages_to_update.append((index, db_message))
-                processing_indices.append(index)
-                to_process.append(message)
-        else:
-            processing_indices.append(index)
+    for index, message in enumerate(chat.messages):
+        if message.spacy_doc is not None:
+            doc_bin = DocBin().from_bytes(message.spacy_doc)
+            spacy_doc = list(doc_bin.get_docs(nlp.vocab))[0]
+            docs_dict[message.message] = spacy_doc
+        else:  # if something went wrong and message doesn't have doc
+            messages_to_update.append(index)
+
+    for message in messages:
+        if message not in docs_dict:
             to_process.append(message)
+
     new_docs = list(nlp.pipe(to_process))
-    new_docs = [(message_index, new_docs[index]) for index, message_index in enumerate(processing_indices)]
-    docs.extend(new_docs)
-    docs = sorted(docs, key=lambda x: x[0])
-    docs = [doc[1] for doc in docs]  # removing indices
-    add_missing_docs(messages_to_update, docs, session)
-    return docs
+    for text, doc in zip(to_process, new_docs, strict=False):
+        docs_dict[text] = doc
+    for message in messages:
+        docs.append(docs_dict[message])
+
+    if messages_to_update:
+        add_missing_docs(messages_to_update, docs_dict, chat, session)
+
+    return docs, docs_dict
 
 
+@time_execution
 def get_extra_info(generation_data: GenerationData) -> list[RequestMessage]:
     floating_prompts = []
     for message in generation_data.finalMesSend:
@@ -110,24 +117,28 @@ def get_extra_info(generation_data: GenerationData) -> list[RequestMessage]:
     return floating_prompts
 
 
-def get_user(user_id: str | None, current_settings: dict) -> User:
-    with Session(db) as session:
-        if user_id and current_settings["multi_user_mode"]:
-            query = select(User).where(User.external_id == user_id)
-        else:
-            query = select(User).where(User.external_id == "DEFAULT_USER", User.id == 1)
-        result = session.scalars(query).one()
+@time_execution
+def get_user(user_id: str | None, current_settings: dict, session: Session) -> User:
+    if user_id and current_settings["multi_user_mode"]:
+        query = select(User).where(User.external_id == user_id)
+    else:
+        query = select(User).where(User.external_id == "DEFAULT_USER", User.id == 1)
+    result = session.scalars(query).one()
     return result
 
 
-def get_chat(user: User, chat_id: str) -> Chat:
-    with Session(db) as session:
-        query = select(Chat).where(Chat.external_id == chat_id, Chat.user_id == user.id)
-        chat = session.scalars(query).first()
-        if chat is None:
-            chat = Chat(external_id=chat_id, user_id=user.id)
-            session.add(chat)
-            session.commit()
+@time_execution
+def get_chat(user: User, chat_id: str, current_messages: list[str], session: Session) -> Chat:
+    query = (
+        select(Chat)
+        .where(Chat.external_id == chat_id, Chat.user_id == user.id)
+        .options(selectinload(Chat.messages), with_loader_criteria(Message, Message.message.in_(current_messages)))
+    )
+    chat = session.scalars(query).first()
+    if chat is None:
+        chat = Chat(external_id=chat_id, user_id=user.id)
+        session.add(chat)
+        session.commit()
 
     return chat
 
@@ -136,11 +147,13 @@ async def process_prompt(
     prompt: str,
     chat_id: str,
     context_length: int,
+    db_session: Session,
     api_type: str | None = None,
     generation_data: GenerationData | None = None,
     user_id: str | None = None,
     current_settings: dict | None = None,
 ) -> str:
+    start_time = timeit.default_timer()
     if current_settings is None:
         current_settings = copy.deepcopy(settings)
 
@@ -173,25 +186,23 @@ async def process_prompt(
     else:
         chat_messages = all_messages
 
-    user = get_user(user_id, current_settings)
-    chat = get_chat(user, chat_id)
+    user = get_user(user_id, current_settings, db_session)
+    chat = get_chat(user, chat_id, chat_messages, db_session)
 
-    with Session(db) as session:
-        doc_time = timeit.default_timer()
-        docs = get_docs(chat_messages, chat, session)
-        doc_end_time = timeit.default_timer()
-        general_logger.debug(f"Creating spacy docs {doc_end_time - doc_time} seconds")
-        last_messages = chat_messages[:-1]  # exclude user prompt
-        last_docs = docs[:-1]
-        start_time = timeit.default_timer()
-        new_message_indices = save_messages(last_messages, last_docs, chat, session)
-        save_named_entities(chat, last_docs, session)
-        end_time = timeit.default_timer()
-        general_logger.info(f"Save messages and entities: {end_time - start_time}s")
+    doc_time = timeit.default_timer()
+    docs, docs_dict = get_docs(chat_messages, chat, db_session)
+    doc_end_time = timeit.default_timer()
+    general_logger.debug(f"Creating spacy docs {doc_end_time - doc_time} seconds")
+    last_messages = chat_messages[:-1]  # exclude user prompt
+    last_docs = docs[:-1]
+    new_message_indices, chat = save_messages(last_messages, docs_dict, chat, db_session)
+    save_named_entities(chat, last_docs, db_session)
 
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
 
-    new_prompt = await fill_context(prompt, floating_prompts, chat, docs, context_length, api_type, current_settings)
+    new_prompt = await fill_context(
+        prompt, floating_prompts, chat, db_session, docs, context_length, api_type, current_settings
+    )
 
     for doc in docs_to_summarize:
         for entity in set(doc.ents):
@@ -212,35 +223,56 @@ async def process_prompt(
     return new_prompt
 
 
+@time_execution
 def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
     banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME"]
+    message_indices = {message.message: index for index, message in enumerate(chat.messages)}
+    unique_ents = []
     for doc in docs:
-        db_message = orm_get_or_create(session, Message, message=doc.text)
         ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
-        unique_ents = list(set(ent_list))
-        for ent, ent_label in unique_ents:
-            knowledge_entity = (
-                session.query(Knowledge)
-                .filter(
-                    Knowledge.entity.ilike(ent), Knowledge.entity_type == "NAMED ENTITY", Knowledge.chat_id == chat.id
-                )
-                .first()
+        unique_ents.extend(list(set(ent_list)))
+
+    unique_ents = list(set(unique_ents))
+
+    unique_ent_names = list({ent_name.lower() for ent_name, _ in unique_ents})
+    query = select(Knowledge).where(
+        func.lower(Knowledge.entity).in_(unique_ent_names),
+        Knowledge.entity_type == "NAMED ENTITY",
+        Knowledge.chat_id == chat.id,
+    )
+    knowledge_entries = session.scalars(query).all()
+    db_entry_names = [entry.entity.lower() for entry in knowledge_entries]
+    new_knowledge = []
+    for ent, ent_label in unique_ents:
+        if ent.lower() not in db_entry_names:
+            knowledge_entity = Knowledge(
+                entity=ent, entity_label=ent_label, entity_type="NAMED ENTITY", chat_id=chat.id, update_count=0
             )
-            if not knowledge_entity:
-                knowledge_entity = Knowledge(
-                    entity=ent, entity_label=ent_label, entity_type="NAMED ENTITY", chat_id=chat.id
-                )
-                session.add(knowledge_entity)
-            knowledge_entity.messages.append(db_message)
-            knowledge_entity.update_count += 1
-            session.add(knowledge_entity)
+            new_knowledge.append(knowledge_entity)
+    session.add_all(new_knowledge)
+    session.commit()
+
+    knowledge_dict = {knowledge.entity: knowledge for knowledge in [*knowledge_entries, *new_knowledge]}
+
+    for doc in docs:
+        message_index = message_indices[doc.text]
+        ent_list = [str(ent) for ent in doc.ents if ent.label_ not in banned_labels]
+        message_ents = list(set(ent_list))
+
+        for ent in message_ents:
+            if chat.messages[message_index] not in knowledge_dict[ent].messages:
+                knowledge_dict[ent].messages.append(chat.messages[message_index])
+                knowledge_dict[ent].update_count += 1
+    session.add_all(knowledge_dict.values())
     session.commit()
 
 
+@async_time_execution
 async def fill_context(
     prompt: str,
     floating_prompts: list[RequestMessage],
     chat: Chat,
+    db_session: Session,
     docs: list[Doc],
     context_size: int,
     api_type: str,
@@ -255,7 +287,7 @@ async def fill_context(
     messages_with_delimiters = re.split(pattern_with_delimiters, prompt)
     prompt_definitions = messages[0]  # first portion should always be instruction and char definitions
     unique_ents = get_ordered_entities(banned_labels, docs)
-    summaries = get_summaries(chat, unique_ents)
+    summaries = get_summaries(chat, unique_ents, db_session)
 
     prompt_entries = {
         "prompt_definitions": prompt_definitions,
@@ -364,6 +396,7 @@ def chat_messages_culling(
     return context_overflow, messages_text, min_message_context
 
 
+@async_time_execution
 async def prompt_culling(api_type: str, prompt_entries: dict, max_context: int, current_settings: dict) -> str:
     prompt_definitions = prompt_entries["prompt_definitions"]
     grimoire_entries = prompt_entries["grimoire"]
@@ -435,22 +468,21 @@ def generate_grimoire_entries(max_grimoire_context: int, summaries: list[tuple[s
     return grimoire_entries
 
 
-def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]]) -> list[tuple[str, int, str]]:
+def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]], session: Session) -> list[tuple[str, int, str]]:
     summaries = []
-    with Session(db) as session:
-        for ent in unique_ents:
-            query = select(Knowledge).where(
-                Knowledge.entity.ilike(ent[0]),
-                Knowledge.entity_type == "NAMED ENTITY",
-                Knowledge.chat_id == chat.id,
-                Knowledge.summary.isnot(None),
-                Knowledge.token_count.isnot(None),
-                Knowledge.token_count != 0,
-            )
-            instance = session.scalars(query).first()
+    lower_ent_names = [name.lower() for name, _ in unique_ents]
+    query = select(Knowledge).where(
+        func.lower(Knowledge.entity).in_(lower_ent_names),
+        Knowledge.entity_type == "NAMED ENTITY",
+        Knowledge.chat_id == chat.id,
+        Knowledge.summary.isnot(None),
+        Knowledge.token_count.isnot(None),
+        Knowledge.token_count != 0,
+    )
+    knowledge_ents = session.scalars(query).all()
 
-            if instance is not None:
-                summaries.append((instance.summary, instance.token_count, instance.entity))
+    for instance in knowledge_ents:
+        summaries.append((instance.summary, instance.token_count, instance.entity))
 
     return summaries
 

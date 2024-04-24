@@ -35,3 +35,15 @@ def time_execution(func):
         return result
 
     return wrapper
+
+
+def async_time_execution(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        start_time = timeit.default_timer()
+        result = await func(*args, **kwargs)
+        end_time = timeit.default_timer()
+        general_logger.debug(f"Async function {func.__name__} took {end_time - start_time} seconds to execute.")
+        return result
+
+    return wrapper
