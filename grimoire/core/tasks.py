@@ -68,6 +68,8 @@ def summarize(
     db_engine: str,
     context_len: int = 4096,
     response_len: int = 300,
+    max_retries: int = 50,
+    retry_interval: int = 1,
 ) -> None:
     db = create_engine(db_engine)
     summarization_url = api_settings["url"]
@@ -106,7 +108,13 @@ def summarize(
         generation_params["stop"].extend(additional_stops)
         generation_params["stop_sequence"].extend(additional_stops)
         summary_text, request_json = generate_text(
-            prompt, generation_params, summarization_backend, summarization_url, summarization_auth
+            prompt,
+            generation_params,
+            summarization_backend,
+            summarization_url,
+            summarization_auth,
+            max_retries,
+            retry_interval,
         )
         summary_text = summary_text.replace("\n\n", "\n")
         knowledge_entry.summary = summary_text

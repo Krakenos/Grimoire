@@ -1,4 +1,5 @@
 import asyncio
+import time
 from urllib.parse import urljoin
 
 import aiohttp
@@ -182,7 +183,7 @@ def get_context_length(api_url: str) -> int:
 
 
 def get_model_name(api_url: str, api_key, api_type):
-    if api_type == "tabby":
+    if api_type.lower() == "tabby":
         model_endpoint = urljoin(api_url, "/v1/model")
         response = requests.get(model_endpoint, headers={"Authorization": f"Bearer {api_key}"})
         model_name = response.json()["id"]
@@ -193,20 +194,46 @@ def get_model_name(api_url: str, api_key, api_type):
     return model_name
 
 
-def generate_text(prompt: str, params: dict, api_type: str, api_url: str, api_key: str = None):
+def generate_text(
+    prompt: str,
+    params: dict,
+    api_type: str,
+    api_url: str,
+    api_key: str = None,
+    max_retries: int = 50,
+    retry_interval: int = 1,
+):
     if api_type.lower() in ("koboldai", "koboldcpp"):
         request_body = {"prompt": prompt}
         request_body.update(params)
         endpoint = urljoin(api_url, "/api/v1/generate")
-        response = requests.post(endpoint, json=request_body)
-        generated_text = response.json()["results"][0]["text"]
     else:
         request_body = {"prompt": prompt}
         model_name = get_model_name(api_url, api_key, api_type)
         request_body["model"] = model_name
         request_body.update(params)
         endpoint = urljoin(api_url, "/v1/completions")
+
+    response = None
+    for retry_num in range(max_retries + 1):
         response = requests.post(endpoint, json=request_body, headers={"Authorization": f"Bearer {api_key}"})
-        response_json = response.json()
-        generated_text = response_json["choices"][0]["text"]
+        if response.status_code == 200:
+            break
+        else:
+            general_logger.warning(
+                f"API returned status code {response.status_code}, "
+                f"retrying in {retry_interval}s ({retry_num}/{max_retries})"
+            )
+            time.sleep(retry_interval)
+
+    if response is None:
+        raise Exception("Could not generate text, request was not made to the api")
+    if response.status_code != 200:
+        raise Exception("Could not generate text, max retries exceeded")
+
+    if api_type.lower() in ("koboldai", "koboldcpp"):
+        generated_text = response.json()["results"][0]["text"]
+    else:
+        generated_text = response.json()["choices"][0]["text"]
+
     return generated_text, request_body
