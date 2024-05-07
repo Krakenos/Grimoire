@@ -214,6 +214,7 @@ def generate_text(
         request_body.update(params)
         endpoint = urljoin(api_url, "/v1/completions")
 
+    response = None
     for _ in range(max_retries + 1):
         response = requests.post(endpoint, json=request_body, headers={"Authorization": f"Bearer {api_key}"})
         if response.status_code == 200:
@@ -221,7 +222,10 @@ def generate_text(
         else:
             time.sleep(retry_interval)
 
-    response = requests.post(endpoint, json=request_body, headers={"Authorization": f"Bearer {api_key}"})
+    if response is None:
+        raise Exception("Could not generate text, request was not made to the api")
+    if response.status_code != 200:
+        raise Exception("Could not generate text, max retries exceeded")
 
     if api_type.lower() in ("koboldai", "koboldcpp"):
         generated_text = response.json()["results"][0]["text"]
