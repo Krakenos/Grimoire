@@ -215,11 +215,15 @@ def generate_text(
         endpoint = urljoin(api_url, "/v1/completions")
 
     response = None
-    for _ in range(max_retries + 1):
+    for retry_num in range(max_retries + 1):
         response = requests.post(endpoint, json=request_body, headers={"Authorization": f"Bearer {api_key}"})
         if response.status_code == 200:
             break
         else:
+            general_logger.warning(
+                f"API returned status code {response.status_code}, "
+                f"retrying in {retry_interval}s ({retry_num}/{max_retries})"
+            )
             time.sleep(retry_interval)
 
     if response is None:
