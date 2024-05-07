@@ -183,7 +183,7 @@ def get_context_length(api_url: str) -> int:
 
 
 def get_model_name(api_url: str, api_key, api_type):
-    if api_type == "tabby":
+    if api_type.lower() == "tabby":
         model_endpoint = urljoin(api_url, "/v1/model")
         response = requests.get(model_endpoint, headers={"Authorization": f"Bearer {api_key}"})
         model_name = response.json()["id"]
