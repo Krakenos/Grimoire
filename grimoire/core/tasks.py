@@ -68,6 +68,8 @@ def summarize(
     db_engine: str,
     context_len: int = 4096,
     response_len: int = 300,
+    max_retries: int = 50,
+    retry_interval: int = 1,
 ) -> None:
     db = create_engine(db_engine)
     summarization_url = api_settings["url"]
