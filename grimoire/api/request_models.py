@@ -82,3 +82,8 @@ class OAITokenize(BaseModel):
 # Tabby endpoint
 class OAITokenEncode(BaseModel):
     text: str
+
+
+class User(BaseModel):
+    id: int
+    external_id: str
