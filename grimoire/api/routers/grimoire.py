@@ -7,9 +7,10 @@ from grimoire.db.connection import get_db
 router = APIRouter(tags=["Grimoire specific endpoints"])
 
 
-@router.get("/users")
-def get_users():
-    pass
+@router.get("/users", response_model=list[request_models.User])
+def get_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    users = grimoire_utils.get_users(db, skip, limit)
+    return users
 
 
 @router.get("/users/{user_id}", response_model=request_models.User)
