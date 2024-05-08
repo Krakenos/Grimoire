@@ -46,7 +46,7 @@ def get_messages(user_id: int, chat_id: int, skip: int = 0, limit: int = 100, db
     return messages
 
 
-@router.get("/users/{user_id}/chats/{chat_id}/messages/{message_id}")
+@router.get("/users/{user_id}/chats/{chat_id}/messages/{message_id}", response_model=request_models.Message)
 def get_message(user_id: int, chat_id: int, message_id: int, db: Session = Depends(get_db)):
     db_message = grimoire_utils.get_message(db, user_id=user_id, chat_id=chat_id, message_id=message_id)
     if db_message is None:
@@ -60,13 +60,17 @@ def update_message():
 
 
 @router.get("/users/{user_id}/chats/{chat_id}/knowledge")
-def get_all_knowledge():
-    pass
+def get_all_knowledge(user_id: int, chat_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    knowledge = grimoire_utils.get_all_knowledge(db, user_id=user_id, chat_id=chat_id, skip=skip, limit=limit)
+    return knowledge
 
 
 @router.get("/users/{user_id}/chats/{chat_id}/knowledge/{knowledge_id}")
-def get_knowledge():
-    pass
+def get_knowledge(user_id: int, chat_id: int, knowledge_id: int, db: Session = Depends(get_db)):
+    db_knowledge = grimoire_utils.get_knowledge(db, user_id=user_id, chat_id=chat_id, knowledge_id=knowledge_id)
+    if db_knowledge is None:
+        raise HTTPException(status_code=404, detail="Knowledge not found")
+    return db_knowledge
 
 
 @router.put("/users/{user_id}/chats/{chat_id}/knowledge/{knowledge_id}")
