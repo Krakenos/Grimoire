@@ -35,9 +35,16 @@ def get_chat(user_id: int, chat_id: int, db: Session = Depends(get_db)):
     return db_chat
 
 
-@router.put("/users/{user_id}/chats/{chat_id}")
-def update_chat():
-    pass
+@router.put("/users/{user_id}/chats/{chat_id}", response_model=request_models.Chat)
+def update_chat(chat: request_models.Chat, user_id: int, chat_id: int, db: Session = Depends(get_db)):
+    db_chat = grimoire_utils.get_chat(db, user_id=user_id, chat_id=chat_id)
+    new_attributes = chat.model_dump(exclude_unset=True, exclude_none=True, exclude_defaults=True)
+    if db_chat is None:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    for key, value in new_attributes.items():
+        setattr(db_chat, key, value)
+    db.commit()
+    return db_chat
 
 
 @router.get("/users/{user_id}/chats/{chat_id}/messages", response_model=list[request_models.ChatMessage])
@@ -54,9 +61,18 @@ def get_message(user_id: int, chat_id: int, message_index: int, db: Session = De
     return db_message
 
 
-@router.put("/users/{user_id}/chats/{chat_id}/messages/{message_id}")
-def update_message():
-    pass
+@router.put("/users/{user_id}/chats/{chat_id}/messages/{message_id}", response_model=request_models.ChatMessage)
+def update_message(
+    message: request_models.ChatMessage, user_id: int, chat_id: int, message_index: int, db: Session = Depends(get_db)
+):
+    db_message = grimoire_utils.get_message(db, user_id=user_id, chat_id=chat_id, message_index=message_index)
+    new_attributes = message.model_dump(exclude_unset=True, exclude_none=True, exclude_defaults=True)
+    if db_message is None:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    for key, value in new_attributes.items():
+        setattr(db_message, key, value)
+    db.commit()
+    return db_message
 
 
 @router.get("/users/{user_id}/chats/{chat_id}/knowledge", response_model=list[request_models.Knowledge])
@@ -73,6 +89,15 @@ def get_knowledge(user_id: int, chat_id: int, knowledge_id: int, db: Session = D
     return db_knowledge
 
 
-@router.put("/users/{user_id}/chats/{chat_id}/knowledge/{knowledge_id}")
-def update_knowledge():
-    pass
+@router.put("/users/{user_id}/chats/{chat_id}/knowledge/{knowledge_id}", response_model=request_models.Knowledge)
+def update_knowledge(
+    knowledge: request_models.Knowledge, user_id: int, chat_id: int, knowledge_id: int, db: Session = Depends(get_db)
+):
+    db_knowledge = grimoire_utils.get_knowledge(db, user_id=user_id, chat_id=chat_id, knowledge_id=knowledge_id)
+    new_attributes = knowledge.model_dump(exclude_unset=True, exclude_none=True, exclude_defaults=True)
+    if db_knowledge is None:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    for key, value in new_attributes.items():
+        setattr(db_knowledge, key, value)
+    db.commit()
+    return db_knowledge
