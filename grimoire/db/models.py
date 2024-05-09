@@ -21,6 +21,7 @@ class Knowledge(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     chat_id: Mapped[int] = mapped_column(ForeignKey("chat.id"))
+    chat: Mapped["Chat"] = relationship(back_populates="knowledge")
     entity: Mapped[str]
     entity_type: Mapped[str | None]
     entity_label: Mapped[str | None]
@@ -40,6 +41,7 @@ class Message(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     chat_id: Mapped[int] = mapped_column(ForeignKey("chat.id"))
+    chat: Mapped["Chat"] = relationship(back_populates="messages")
     message_index: Mapped[int]
     summary: Mapped[str | None]
     message: Mapped[str]
@@ -56,6 +58,7 @@ class Chat(Base):
     external_id: Mapped[str]
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
     messages: Mapped[list["Message"]] = relationship()
+    knowledge: Mapped[list["Knowledge"]] = relationship()
 
 
 class User(Base):
