@@ -99,7 +99,7 @@ class Chat(BaseModel):
 class ChatMessage(BaseModel):
     id: int
     message_index: int
-    message: int
+    message: str
     created_date: datetime
 
 
