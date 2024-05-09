@@ -46,9 +46,9 @@ def get_messages(user_id: int, chat_id: int, skip: int = 0, limit: int = 100, db
     return messages
 
 
-@router.get("/users/{user_id}/chats/{chat_id}/messages/{message_id}", response_model=request_models.Message)
-def get_message(user_id: int, chat_id: int, message_id: int, db: Session = Depends(get_db)):
-    db_message = grimoire_utils.get_message(db, user_id=user_id, chat_id=chat_id, message_id=message_id)
+@router.get("/users/{user_id}/chats/{chat_id}/messages/{message_index}", response_model=request_models.Message)
+def get_message(user_id: int, chat_id: int, message_index: int, db: Session = Depends(get_db)):
+    db_message = grimoire_utils.get_message(db, user_id=user_id, chat_id=chat_id, message_index=message_index)
     if db_message is None:
         raise HTTPException(status_code=404, detail="Message not found")
     return db_message

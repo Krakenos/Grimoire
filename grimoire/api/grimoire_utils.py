@@ -36,8 +36,8 @@ def get_messages(db_session: Session, user_id: int, chat_id: int, skip: int = 0,
     return results
 
 
-def get_message(db_session: Session, user_id: int, chat_id: int, message_id: int) -> Message:
-    query = select(Message).where(Message.chat_id == chat_id, Message.id == message_id)
+def get_message(db_session: Session, user_id: int, chat_id: int, message_index: int) -> Message:
+    query = select(Message).where(Message.chat_id == chat_id, Message.id == message_index)
     results = db_session.scalar(query)
     return results
 
