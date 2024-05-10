@@ -24,7 +24,7 @@ def create_user(user: request_models.User, db: Session = Depends()):
 
 
 @router.post("/users/get_by_external_id", response_model=request_models.User)
-def get_by_external_id(external_id: request_models.ExternalId, db: Session = Depends(get_db)):
+def get_user_by_external(external_id: request_models.ExternalId, db: Session = Depends(get_db)):
     db_user = grimoire_utils.get_user_by_external(db, external_id.external_id)
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -43,6 +43,14 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
 def get_chats(user_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     chats = grimoire_utils.get_chats(db, user_id=user_id, skip=skip, limit=limit)
     return chats
+
+
+@router.post("/users/{user_id}/chats/get_by_external_id", response_model=request_models.Chat)
+def get_chat_by_external(user_id: int, external_id: request_models.ExternalId, db: Session = Depends(get_db)):
+    db_chat = grimoire_utils.get_chat_by_external(db, external_id.external_id, user_id)
+    if db_chat is None:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    return db_chat
 
 
 @router.get("/users/{user_id}/chats/{chat_id}", response_model=request_models.Chat)

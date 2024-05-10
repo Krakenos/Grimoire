@@ -85,3 +85,9 @@ def get_user_by_external(db_session: Session, external_id: str) -> User | None:
     query = select(User).where(User.external_id == external_id)
     result = db_session.scalar(query)
     return result
+
+
+def get_chat_by_external(db_session: Session, external_id: str, user_id: int) -> Chat | None:
+    query = select(Chat).where(Chat.external_id == external_id, Chat.user_id == user_id)
+    result = db_session.scalar(query)
+    return result
