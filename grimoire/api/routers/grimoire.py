@@ -80,6 +80,7 @@ def update_chat(chat: request_models.Chat, user_id: int, chat_id: int, db: Sessi
         raise HTTPException(status_code=404, detail="Chat not found")
     for key, value in new_attributes.items():
         setattr(db_chat, key, value)
+    db.add(db_chat)
     db.commit()
     return db_chat
 
@@ -118,6 +119,7 @@ def update_message(
         raise HTTPException(status_code=404, detail="Chat not found")
     for key, value in new_attributes.items():
         setattr(db_message, key, value)
+    db.add(db_message)
     db.commit()
     return db_message
 
@@ -156,6 +158,7 @@ def update_knowledge(
         raise HTTPException(status_code=404, detail="Chat not found")
     for key, value in new_attributes.items():
         setattr(db_knowledge, key, value)
+    db.add(db_knowledge)
     db.commit()
     return db_knowledge
 
