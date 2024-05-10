@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from grimoire.api import grimoire_utils, request_models
 from grimoire.db.connection import get_db
+from grimoire.db.models import User
 
 router = APIRouter(tags=["Grimoire specific endpoints"])
 
@@ -11,6 +12,15 @@ router = APIRouter(tags=["Grimoire specific endpoints"])
 def get_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     users = grimoire_utils.get_users(db, skip, limit)
     return users
+
+
+@router.post("/users", response_model=list[request_models.User])
+def create_user(user: request_models.User, db: Session = Depends()):
+    new_user = User(external_id=user.external_id)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
 
 
 @router.get("/users/{user_id}", response_model=request_models.User)
