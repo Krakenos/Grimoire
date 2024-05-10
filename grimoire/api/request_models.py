@@ -108,3 +108,7 @@ class Knowledge(BaseModel):
     entity: str
     summary: str
     updated_date: datetime
+
+
+class ExternalId(BaseModel):
+    external_id: str

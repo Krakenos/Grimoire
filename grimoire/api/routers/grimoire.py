@@ -23,6 +23,14 @@ def create_user(user: request_models.User, db: Session = Depends()):
     return new_user
 
 
+@router.post("/users/get_by_external_id", response_model=request_models.User)
+def get_by_external_id(external_id: request_models.ExternalId, db: Session = Depends(get_db)):
+    db_user = grimoire_utils.get_user_by_external(db, external_id.external_id)
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
+
+
 @router.get("/users/{user_id}", response_model=request_models.User)
 def get_user(user_id: int, db: Session = Depends(get_db)):
     db_user = grimoire_utils.get_user(db, user_id=user_id)

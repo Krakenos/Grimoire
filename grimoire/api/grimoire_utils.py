@@ -79,3 +79,9 @@ def get_knowledge(db_session: Session, user_id: int, chat_id: int, knowledge_id:
     )
     results = db_session.scalar(query)
     return results
+
+
+def get_user_by_external(db_session: Session, external_id: str) -> User | None:
+    query = select(User).where(User.external_id == external_id)
+    result = db_session.scalar(query)
+    return result
