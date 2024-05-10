@@ -14,8 +14,8 @@ def get_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return users
 
 
-@router.post("/users", response_model=list[request_models.User])
-def create_user(user: request_models.User, db: Session = Depends()):
+@router.post("/users", response_model=request_models.User)
+def create_user(user: request_models.User, db: Session = Depends(get_db)):
     new_user = User(external_id=user.external_id)
     db.add(new_user)
     db.commit()
