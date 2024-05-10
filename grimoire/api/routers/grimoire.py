@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.openapi.models import Response
 from sqlalchemy.orm import Session
 
 from grimoire.api import grimoire_utils, request_models
@@ -39,6 +40,16 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     return db_user
 
 
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db)):
+    db_user = grimoire_utils.get_user(db, user_id=user_id)
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    db.delete(db_user)
+    db.commit()
+    return Response(status_code=204)
+
+
 @router.get("/users/{user_id}/chats", response_model=list[request_models.Chat])
 def get_chats(user_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     chats = grimoire_utils.get_chats(db, user_id=user_id, skip=skip, limit=limit)
@@ -73,6 +84,16 @@ def update_chat(chat: request_models.Chat, user_id: int, chat_id: int, db: Sessi
     return db_chat
 
 
+@router.delete("/users/{user_id}/chats/{chat_id}")
+def delete_chat(user_id: int, chat_id: int, db: Session = Depends(get_db)):
+    db_chat = grimoire_utils.get_chat(db, user_id=user_id, chat_id=chat_id)
+    if db_chat is None:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    db.delete(db_chat)
+    db.commit()
+    return Response(status_code=204)
+
+
 @router.get("/users/{user_id}/chats/{chat_id}/messages", response_model=list[request_models.ChatMessage])
 def get_messages(user_id: int, chat_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     messages = grimoire_utils.get_messages(db, user_id=user_id, chat_id=chat_id, skip=skip, limit=limit)
@@ -101,6 +122,16 @@ def update_message(
     return db_message
 
 
+@router.delete("/users/{user_id}/chats/{chat_id}/messages/{message_index}")
+def delete_message(user_id: int, chat_id: int, message_index: int, db: Session = Depends(get_db)):
+    db_message = grimoire_utils.get_message(db, user_id=user_id, chat_id=chat_id, message_index=message_index)
+    if db_message is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+    db.delete(db_message)
+    db.commit()
+    return Response(status_code=204)
+
+
 @router.get("/users/{user_id}/chats/{chat_id}/knowledge", response_model=list[request_models.Knowledge])
 def get_all_knowledge(user_id: int, chat_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     knowledge = grimoire_utils.get_all_knowledge(db, user_id=user_id, chat_id=chat_id, skip=skip, limit=limit)
@@ -127,3 +158,13 @@ def update_knowledge(
         setattr(db_knowledge, key, value)
     db.commit()
     return db_knowledge
+
+
+@router.delete("/users/{user_id}/chats/{chat_id}/knowledge/{knowledge_id}")
+def delete_knowledge(user_id: int, chat_id: int, knowledge_id: int, db: Session = Depends(get_db)):
+    db_knowledge = grimoire_utils.get_knowledge(db, user_id=user_id, chat_id=chat_id, knowledge_id=knowledge_id)
+    if db_knowledge is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+    db.delete(db_knowledge)
+    db.commit()
+    return Response(status_code=204)
