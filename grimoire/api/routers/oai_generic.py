@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from grimoire.api.request_models import OAIGeneration, OAITokenEncode, OAITokenize
+from grimoire.api.schemas.oai_passthrough import OAIGeneration, OAITokenEncode, OAITokenize
 from grimoire.common.utils import get_passthrough
 from grimoire.core.grimoire import process_prompt, update_instruct
 from grimoire.core.settings import settings

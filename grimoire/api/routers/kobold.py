@@ -5,7 +5,7 @@ import requests
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from grimoire.api.request_models import KAIAbort, KAIGeneration, KAITokenCount
+from grimoire.api.schemas.kobold_passthrough import KAIAbort, KAIGeneration, KAITokenCount
 from grimoire.common.utils import get_passthrough
 from grimoire.core.grimoire import process_prompt, update_instruct
 from grimoire.core.settings import settings

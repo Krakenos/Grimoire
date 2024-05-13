@@ -7,8 +7,8 @@ from spacy.tokens import Doc, DocBin
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, with_loader_criteria
 
-from grimoire.api.request_models import GenerationData, Instruct
-from grimoire.api.request_models import Message as RequestMessage
+from grimoire.api.schemas.passthrough import GenerationData, Instruct
+from grimoire.api.schemas.passthrough import Message as RequestMessage
 from grimoire.common.llm_helpers import count_context, token_count
 from grimoire.common.loggers import context_logger, general_logger
 from grimoire.common.utils import async_time_execution, time_execution
