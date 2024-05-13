@@ -75,13 +75,9 @@ def get_chat(user_id: int, chat_id: int, db: Session = Depends(get_db)):
 @router.put("/users/{user_id}/chats/{chat_id}", response_model=request_models.Chat)
 def update_chat(chat: request_models.Chat, user_id: int, chat_id: int, db: Session = Depends(get_db)):
     db_chat = grimoire_utils.get_chat(db, user_id=user_id, chat_id=chat_id)
-    new_attributes = chat.model_dump(exclude_unset=True, exclude_none=True, exclude_defaults=True)
     if db_chat is None:
         raise HTTPException(status_code=404, detail="Chat not found")
-    for key, value in new_attributes.items():
-        setattr(db_chat, key, value)
-    db.add(db_chat)
-    db.commit()
+    db_chat = grimoire_utils.update_record(db, db_chat, chat)
     return db_chat
 
 
@@ -114,13 +110,9 @@ def update_message(
     message: request_models.ChatMessage, user_id: int, chat_id: int, message_index: int, db: Session = Depends(get_db)
 ):
     db_message = grimoire_utils.get_message(db, user_id=user_id, chat_id=chat_id, message_index=message_index)
-    new_attributes = message.model_dump(exclude_unset=True, exclude_none=True, exclude_defaults=True)
     if db_message is None:
         raise HTTPException(status_code=404, detail="Chat not found")
-    for key, value in new_attributes.items():
-        setattr(db_message, key, value)
-    db.add(db_message)
-    db.commit()
+    db_message = grimoire_utils.update_record(db, db_message, message)
     return db_message
 
 
@@ -153,13 +145,9 @@ def update_knowledge(
     knowledge: request_models.Knowledge, user_id: int, chat_id: int, knowledge_id: int, db: Session = Depends(get_db)
 ):
     db_knowledge = grimoire_utils.get_knowledge(db, user_id=user_id, chat_id=chat_id, knowledge_id=knowledge_id)
-    new_attributes = knowledge.model_dump(exclude_unset=True, exclude_none=True, exclude_defaults=True)
     if db_knowledge is None:
         raise HTTPException(status_code=404, detail="Chat not found")
-    for key, value in new_attributes.items():
-        setattr(db_knowledge, key, value)
-    db.add(db_knowledge)
-    db.commit()
+    db_knowledge = grimoire_utils.update_record(db, db_knowledge, knowledge)
     return db_knowledge
 
 
