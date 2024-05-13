@@ -19,6 +19,14 @@ def get_user(db_session: Session, user_id: int) -> User | None:
     return results
 
 
+def create_user(db: Session, external_id: str) -> User:
+    new_user = User(external_id=external_id)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+
 def get_chats(db_session: Session, user_id: int, skip: int = 0, limit: int = 100) -> Sequence[Chat]:
     query = select(Chat).where(Chat.user_id == user_id).offset(skip).limit(limit)
     results = db_session.scalars(query).all()

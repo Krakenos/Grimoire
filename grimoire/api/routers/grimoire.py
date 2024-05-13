@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 from grimoire.api.schemas.grimoire import Chat, ChatMessage, ExternalId, Knowledge, User
 from grimoire.common import api_utils
 from grimoire.db.connection import get_db
-from grimoire.db.models import User as DatabaseUser
 
 router = APIRouter(tags=["Grimoire specific endpoints"])
 
@@ -18,10 +17,7 @@ def get_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
 
 @router.post("/users", response_model=User)
 def create_user(user: User, db: Session = Depends(get_db)):
-    new_user = DatabaseUser(external_id=user.external_id)
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    new_user = api_utils.create_user(db, user.external_id)
     return new_user
 
 
