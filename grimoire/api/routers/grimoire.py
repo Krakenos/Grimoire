@@ -17,6 +17,9 @@ def get_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
 
 @router.post("/users", response_model=User)
 def create_user(user: User, db: Session = Depends(get_db)):
+    db_user = api_utils.get_user_by_external(db, user.external_id)
+    if db_user is not None:
+        raise HTTPException(status_code=400, detail="User already exists")
     new_user = api_utils.create_user(db, user.external_id)
     return new_user
 
