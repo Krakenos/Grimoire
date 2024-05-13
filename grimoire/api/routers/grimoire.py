@@ -2,21 +2,31 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.openapi.models import Response
 from sqlalchemy.orm import Session
 
-from grimoire.api.schemas.grimoire import Chat, ChatMessage, ExternalId, Knowledge, User
+from grimoire.api.schemas.grimoire import (
+    ChatIn,
+    ChatMessageIn,
+    ChatMessageOut,
+    ChatOut,
+    ExternalId,
+    KnowledgeIn,
+    KnowledgeOut,
+    UserIn,
+    UserOut,
+)
 from grimoire.common import api_utils
 from grimoire.db.connection import get_db
 
 router = APIRouter(tags=["Grimoire specific endpoints"])
 
 
-@router.get("/users", response_model=list[User])
+@router.get("/users", response_model=list[UserOut])
 def get_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     users = api_utils.get_users(db, skip, limit)
     return users
 
 
-@router.post("/users", response_model=User)
-def create_user(user: User, db: Session = Depends(get_db)):
+@router.post("/users", response_model=UserOut)
+def create_user(user: UserIn, db: Session = Depends(get_db)):
     db_user = api_utils.get_user_by_external(db, user.external_id)
     if db_user is not None:
         raise HTTPException(status_code=400, detail="User already exists")
@@ -24,7 +34,7 @@ def create_user(user: User, db: Session = Depends(get_db)):
     return new_user
 
 
-@router.post("/users/get_by_external_id", response_model=User)
+@router.post("/users/get_by_external_id", response_model=UserOut)
 def get_user_by_external(external_id: ExternalId, db: Session = Depends(get_db)):
     db_user = api_utils.get_user_by_external(db, external_id.external_id)
     if db_user is None:
@@ -32,7 +42,7 @@ def get_user_by_external(external_id: ExternalId, db: Session = Depends(get_db))
     return db_user
 
 
-@router.get("/users/{user_id}", response_model=User)
+@router.get("/users/{user_id}", response_model=UserOut)
 def get_user(user_id: int, db: Session = Depends(get_db)):
     db_user = api_utils.get_user(db, user_id=user_id)
     if db_user is None:
@@ -50,13 +60,13 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     return Response(status_code=204)
 
 
-@router.get("/users/{user_id}/chats", response_model=list[Chat])
+@router.get("/users/{user_id}/chats", response_model=list[ChatOut])
 def get_chats(user_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     chats = api_utils.get_chats(db, user_id=user_id, skip=skip, limit=limit)
     return chats
 
 
-@router.post("/users/{user_id}/chats/get_by_external_id", response_model=Chat)
+@router.post("/users/{user_id}/chats/get_by_external_id", response_model=ChatOut)
 def get_chat_by_external(user_id: int, external_id: ExternalId, db: Session = Depends(get_db)):
     db_chat = api_utils.get_chat_by_external(db, external_id.external_id, user_id)
     if db_chat is None:
@@ -64,7 +74,7 @@ def get_chat_by_external(user_id: int, external_id: ExternalId, db: Session = De
     return db_chat
 
 
-@router.get("/users/{user_id}/chats/{chat_id}", response_model=Chat)
+@router.get("/users/{user_id}/chats/{chat_id}", response_model=ChatOut)
 def get_chat(user_id: int, chat_id: int, db: Session = Depends(get_db)):
     db_chat = api_utils.get_chat(db, user_id=user_id, chat_id=chat_id)
     if db_chat is None:
@@ -72,8 +82,8 @@ def get_chat(user_id: int, chat_id: int, db: Session = Depends(get_db)):
     return db_chat
 
 
-@router.put("/users/{user_id}/chats/{chat_id}", response_model=Chat)
-def update_chat(chat: Chat, user_id: int, chat_id: int, db: Session = Depends(get_db)):
+@router.put("/users/{user_id}/chats/{chat_id}", response_model=ChatOut)
+def update_chat(chat: ChatIn, user_id: int, chat_id: int, db: Session = Depends(get_db)):
     db_chat = api_utils.get_chat(db, user_id=user_id, chat_id=chat_id)
     if db_chat is None:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -91,13 +101,13 @@ def delete_chat(user_id: int, chat_id: int, db: Session = Depends(get_db)):
     return Response(status_code=204)
 
 
-@router.get("/users/{user_id}/chats/{chat_id}/messages", response_model=list[ChatMessage])
+@router.get("/users/{user_id}/chats/{chat_id}/messages", response_model=list[ChatMessageOut])
 def get_messages(user_id: int, chat_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     messages = api_utils.get_messages(db, user_id=user_id, chat_id=chat_id, skip=skip, limit=limit)
     return messages
 
 
-@router.get("/users/{user_id}/chats/{chat_id}/messages/{message_index}", response_model=ChatMessage)
+@router.get("/users/{user_id}/chats/{chat_id}/messages/{message_index}", response_model=ChatMessageOut)
 def get_message(user_id: int, chat_id: int, message_index: int, db: Session = Depends(get_db)):
     db_message = api_utils.get_message(db, user_id=user_id, chat_id=chat_id, message_index=message_index)
     if db_message is None:
@@ -105,8 +115,10 @@ def get_message(user_id: int, chat_id: int, message_index: int, db: Session = De
     return db_message
 
 
-@router.put("/users/{user_id}/chats/{chat_id}/messages/{message_id}", response_model=ChatMessage)
-def update_message(message: ChatMessage, user_id: int, chat_id: int, message_index: int, db: Session = Depends(get_db)):
+@router.put("/users/{user_id}/chats/{chat_id}/messages/{message_id}", response_model=ChatMessageOut)
+def update_message(
+    message: ChatMessageIn, user_id: int, chat_id: int, message_index: int, db: Session = Depends(get_db)
+):
     db_message = api_utils.get_message(db, user_id=user_id, chat_id=chat_id, message_index=message_index)
     if db_message is None:
         raise HTTPException(status_code=404, detail="Chat not found")
@@ -124,13 +136,13 @@ def delete_message(user_id: int, chat_id: int, message_index: int, db: Session =
     return Response(status_code=204)
 
 
-@router.get("/users/{user_id}/chats/{chat_id}/knowledge", response_model=list[Knowledge])
+@router.get("/users/{user_id}/chats/{chat_id}/knowledge", response_model=list[KnowledgeOut])
 def get_all_knowledge(user_id: int, chat_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     knowledge = api_utils.get_all_knowledge(db, user_id=user_id, chat_id=chat_id, skip=skip, limit=limit)
     return knowledge
 
 
-@router.get("/users/{user_id}/chats/{chat_id}/knowledge/{knowledge_id}", response_model=Knowledge)
+@router.get("/users/{user_id}/chats/{chat_id}/knowledge/{knowledge_id}", response_model=KnowledgeOut)
 def get_knowledge(user_id: int, chat_id: int, knowledge_id: int, db: Session = Depends(get_db)):
     db_knowledge = api_utils.get_knowledge(db, user_id=user_id, chat_id=chat_id, knowledge_id=knowledge_id)
     if db_knowledge is None:
@@ -138,9 +150,9 @@ def get_knowledge(user_id: int, chat_id: int, knowledge_id: int, db: Session = D
     return db_knowledge
 
 
-@router.put("/users/{user_id}/chats/{chat_id}/knowledge/{knowledge_id}", response_model=Knowledge)
+@router.put("/users/{user_id}/chats/{chat_id}/knowledge/{knowledge_id}", response_model=KnowledgeOut)
 def update_knowledge(
-    knowledge: Knowledge, user_id: int, chat_id: int, knowledge_id: int, db: Session = Depends(get_db)
+    knowledge: KnowledgeIn, user_id: int, chat_id: int, knowledge_id: int, db: Session = Depends(get_db)
 ):
     db_knowledge = api_utils.get_knowledge(db, user_id=user_id, chat_id=chat_id, knowledge_id=knowledge_id)
     if db_knowledge is None:
