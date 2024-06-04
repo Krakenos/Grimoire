@@ -16,6 +16,7 @@ def make_summary_prompt(session, knowledge_entry, max_context: int, api_settings
     summarization_backend = api_settings["backend"]
     summarization_auth = api_settings["auth_key"]
     input_sequence = api_settings["input_sequence"]
+    input_suffix = api_settings["input_suffix"]
     output_sequence = api_settings["output_sequence"]
     chat_id = knowledge_entry.chat_id
     if knowledge_entry.summary:
@@ -48,6 +49,7 @@ def make_summary_prompt(session, knowledge_entry, max_context: int, api_settings
             messages=messages_text,
             bos_token=summarization_settings["bos_token"],
             input_sequence=input_sequence,
+            input_suffix=input_suffix,
             output_sequence=output_sequence,
         )
         new_tokens = count_context(new_prompt, summarization_backend, summarization_url, summarization_auth)
@@ -102,7 +104,8 @@ def summarize(
             api_settings["output_sequence"].strip(),
             api_settings["first_output_sequence"].strip(),
             api_settings["last_output_sequence"].strip(),
-            api_settings["separator_sequence"].strip(),
+            api_settings["input_suffix"].strip(),
+            api_settings["output_suffix"].strip(),
         ]
         additional_stops = [stop for stop in additional_stops if stop]
         generation_params["stop"].extend(additional_stops)
