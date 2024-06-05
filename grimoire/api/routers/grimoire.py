@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.openapi.models import Response
 from sqlalchemy.orm import Session
+from starlette import status
 
 from grimoire.api.schemas.grimoire import (
     ChatIn,
@@ -57,7 +58,7 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
     db.delete(db_user)
     db.commit()
-    return Response(status_code=204)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/users/{user_id}/chats", response_model=list[ChatOut])
@@ -98,7 +99,7 @@ def delete_chat(user_id: int, chat_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Chat not found")
     db.delete(db_chat)
     db.commit()
-    return Response(status_code=204)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/users/{user_id}/chats/{chat_id}/messages", response_model=list[ChatMessageOut])
@@ -115,7 +116,7 @@ def get_message(user_id: int, chat_id: int, message_index: int, db: Session = De
     return db_message
 
 
-@router.put("/users/{user_id}/chats/{chat_id}/messages/{message_id}", response_model=ChatMessageOut)
+@router.put("/users/{user_id}/chats/{chat_id}/messages/{message_index}", response_model=ChatMessageOut)
 def update_message(
     message: ChatMessageIn, user_id: int, chat_id: int, message_index: int, db: Session = Depends(get_db)
 ):
@@ -133,7 +134,7 @@ def delete_message(user_id: int, chat_id: int, message_index: int, db: Session =
         raise HTTPException(status_code=404, detail="Message not found")
     db.delete(db_message)
     db.commit()
-    return Response(status_code=204)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/users/{user_id}/chats/{chat_id}/knowledge", response_model=list[KnowledgeOut])
@@ -168,4 +169,4 @@ def delete_knowledge(user_id: int, chat_id: int, knowledge_id: int, db: Session 
         raise HTTPException(status_code=404, detail="Message not found")
     db.delete(db_knowledge)
     db.commit()
-    return Response(status_code=204)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
