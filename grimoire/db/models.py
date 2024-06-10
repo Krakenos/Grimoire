@@ -27,7 +27,7 @@ class Knowledge(Base):
     entity_label: Mapped[str | None]
     summary: Mapped[str | None]
     token_count: Mapped[int | None]
-    messages: Mapped[list["Message"]] = relationship(secondary=knowledge_message)
+    messages: Mapped[list["Message"]] = relationship(secondary=knowledge_message, back_populates="knowledge")
     updated_date: Mapped[datetime] = mapped_column(default=datetime.now)
     update_at: Mapped[int | None] = mapped_column(default=1)
     update_count: Mapped[int | None] = mapped_column(default=1)
@@ -49,6 +49,7 @@ class Message(Base):
     message_tokens: Mapped[int | None]
     created_date: Mapped[datetime] = mapped_column(default=datetime.now)
     spacy_doc: Mapped[bytes | None]
+    knowledge: Mapped[list["Knowledge"]] = relationship(secondary=knowledge_message, back_populates="messages")
 
 
 class Chat(Base):

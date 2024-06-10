@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.openapi.models import Response
 from sqlalchemy.orm import Session
 from starlette import status
+from starlette.responses import Response
 
 from grimoire.api.schemas.grimoire import (
     ChatIn,
@@ -56,8 +56,7 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     db_user = api_utils.get_user(db, user_id=user_id)
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    db.delete(db_user)
-    db.commit()
+    api_utils.delete_user(db, db_user)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -97,8 +96,7 @@ def delete_chat(user_id: int, chat_id: int, db: Session = Depends(get_db)):
     db_chat = api_utils.get_chat(db, user_id=user_id, chat_id=chat_id)
     if db_chat is None:
         raise HTTPException(status_code=404, detail="Chat not found")
-    db.delete(db_chat)
-    db.commit()
+    api_utils.delete_chat(db, db_chat)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

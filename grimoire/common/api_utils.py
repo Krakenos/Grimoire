@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from grimoire.db.models import Base, Chat, Knowledge, Message, User
@@ -109,3 +109,24 @@ def update_record(db: Session, db_object: Base, request_object: BaseModel) -> Ba
     db.add(db_object)
     db.commit()
     return db_object
+
+
+# TODO this is manual cleanup as a quick fix, check if this can be done properly with cascades
+def delete_chat(db_session: Session, chat: Chat) -> None:
+    for message in chat.messages:
+        db_session.delete(message)
+    db_session.commit()
+    db_session.refresh(chat)
+    stmt = delete(Knowledge).where(Knowledge.chat_id == chat.id)
+    db_session.execute(stmt)
+    db_session.refresh(chat)
+    db_session.delete(chat)
+    db_session.commit()
+
+
+def delete_user(db_session: Session, user: User) -> None:
+    for chat in user.chats:
+        delete_chat(db_session, chat)
+    db_session.refresh(user)
+    db_session.delete(user)
+    db_session.commit()
