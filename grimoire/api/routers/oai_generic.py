@@ -51,10 +51,11 @@ async def completions(oai_request: OAIGeneration, request: Request, db: Session 
     auth_key = current_settings["main_api"]["auth_key"]
     passthrough_json["api_server"] = current_settings["main_api"]["url"]
 
+    max_context = oai_request.truncation_length - oai_request.max_tokens
     new_prompt = await process_prompt(
         prompt=oai_request.prompt,
         chat_id=oai_request.grimoire.chat_id,
-        context_length=oai_request.truncation_length,
+        context_length=max_context,
         db_session=db,
         api_type=oai_request.api_type,
         generation_data=oai_request.grimoire.generation_data,
