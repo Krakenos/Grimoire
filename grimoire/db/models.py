@@ -21,12 +21,13 @@ class Knowledge(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     chat_id: Mapped[int] = mapped_column(ForeignKey("chat.id"))
+    chat: Mapped["Chat"] = relationship(back_populates="knowledge")
     entity: Mapped[str]
     entity_type: Mapped[str | None]
     entity_label: Mapped[str | None]
     summary: Mapped[str | None]
     token_count: Mapped[int | None]
-    messages: Mapped[list["Message"]] = relationship(secondary=knowledge_message)
+    messages: Mapped[list["Message"]] = relationship(secondary=knowledge_message, back_populates="knowledge")
     updated_date: Mapped[datetime] = mapped_column(default=datetime.now)
     update_at: Mapped[int | None] = mapped_column(default=1)
     update_count: Mapped[int | None] = mapped_column(default=1)
@@ -40,6 +41,7 @@ class Message(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     chat_id: Mapped[int] = mapped_column(ForeignKey("chat.id"))
+    chat: Mapped["Chat"] = relationship(back_populates="messages")
     message_index: Mapped[int]
     summary: Mapped[str | None]
     message: Mapped[str]
@@ -47,6 +49,7 @@ class Message(Base):
     message_tokens: Mapped[int | None]
     created_date: Mapped[datetime] = mapped_column(default=datetime.now)
     spacy_doc: Mapped[bytes | None]
+    knowledge: Mapped[list["Knowledge"]] = relationship(secondary=knowledge_message, back_populates="messages")
 
 
 class Chat(Base):
@@ -56,6 +59,7 @@ class Chat(Base):
     external_id: Mapped[str]
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
     messages: Mapped[list["Message"]] = relationship()
+    knowledge: Mapped[list["Knowledge"]] = relationship()
 
 
 class User(Base):

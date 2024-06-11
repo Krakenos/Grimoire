@@ -1,12 +1,4 @@
-from pydantic import BaseModel, ConfigDict, PositiveInt
-
-
-class KAITokenCount(BaseModel):
-    prompt: str
-
-
-class KAIAbort(BaseModel):
-    genkey: str
+from pydantic import BaseModel
 
 
 class Instruct(BaseModel):
@@ -53,32 +45,3 @@ class Grimoire(BaseModel):
     instruct: Instruct | None = None
     generation_data: GenerationData | None = None
     redirect_url: str | None = None
-
-
-class KAIGeneration(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    prompt: str
-    max_context_length: PositiveInt
-    max_length: PositiveInt
-    grimoire: Grimoire
-
-
-class OAIGeneration(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    prompt: str
-    max_tokens: PositiveInt
-    truncation_length: PositiveInt
-    stream: bool = False
-    api_type: str = "GenericOAI"
-    grimoire: Grimoire
-
-
-class OAITokenize(BaseModel):
-    prompt: str
-
-
-# Tabby endpoint
-class OAITokenEncode(BaseModel):
-    text: str

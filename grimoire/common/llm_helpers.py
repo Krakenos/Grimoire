@@ -231,9 +231,10 @@ def generate_text(
     if response.status_code != 200:
         raise Exception("Could not generate text, max retries exceeded")
 
+    response_json = response.json()
     if api_type.lower() in ("koboldai", "koboldcpp"):
-        generated_text = response.json()["results"][0]["text"]
+        generated_text = response_json["results"][0]["text"]
     else:
-        generated_text = response.json()["choices"][0]["text"]
+        generated_text = response_json["choices"][0]["text"]
 
     return generated_text, request_body
