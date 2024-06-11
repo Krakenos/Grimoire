@@ -68,8 +68,6 @@ def summarize(
     api_settings: dict,
     summarization_settings: dict,
     db_engine: str,
-    context_len: int = 4096,
-    response_len: int = 300,
     max_retries: int = 50,
     retry_interval: int = 1,
 ) -> None:
@@ -78,6 +76,8 @@ def summarize(
     summarization_backend = api_settings["backend"]
     summarization_auth = api_settings["auth_key"]
     limit_rate = summarization_settings["limit_rate"]
+    context_len = api_settings["context_length"]
+    response_len = summarization_settings["max_tokens"]
     with Session(db) as session:
         knowledge_entry = (
             session.query(Knowledge)
@@ -89,7 +89,8 @@ def summarize(
             general_logger.info("Skipping entry to summarize, messages amount below limit rate")
             return None
 
-        prompt = make_summary_prompt(session, knowledge_entry, context_len, api_settings, summarization_settings)
+        max_prompt_context = context_len-response_len
+        prompt = make_summary_prompt(session, knowledge_entry, max_prompt_context, api_settings, summarization_settings)
         if prompt is None:  # Edge case of having 1 message for summary, only may happen at start of chat
             return None
         generation_params = {
