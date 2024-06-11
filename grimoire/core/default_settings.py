@@ -48,6 +48,7 @@ defaults = {
         "prompt": "{previous_summary}\n{messages}\n{input_sequence}Describe {term}.{input_suffix}{output_sequence}",
         "limit_rate": 1,
         "bos_token": "<s>",
+        "max_tokens": 300,
         "params": {"min_p": 0.1, "rep_pen": 1.0, "temperature": 0.6, "stop": ["</s>"], "stop_sequence": ["</s>"]},
     },
 }
