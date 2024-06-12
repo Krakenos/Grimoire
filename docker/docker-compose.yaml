@@ -1,0 +1,46 @@
+services:
+  grimoire:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: run
+    container_name: grimoire
+    env_file: .env_template
+    ports:
+      - 5005:5005
+
+  redis:
+    image: redis
+    container_name: "redis"
+    ports:
+      - 6379:6379
+
+  postgres:
+    image: postgres
+    container_name: "postgres"
+    environment:
+      - POSTGRES_USER=grimoire
+      - POSTGRES_PASSWORD=secretpassword
+      - POSTGRES_DB=grimoire
+    ports:
+      - 5432:5432
+    volumes:
+      - db:/var/lib/postgresql/data
+
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: testing
+    command: [ "python", "-m", "unittest", "discover" ]
+
+  lint:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: testing
+    command: [ "ruff", "check", "." ]
+
+volumes:
+  db:
+    driver: local

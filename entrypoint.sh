@@ -2,6 +2,6 @@
 
 alembic upgrade head
 
-celery -A grimoire.core.tasks worker -l info -c 1 &
+celery -A grimoire.core.tasks worker -l info &
 
 python run.py

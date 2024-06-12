@@ -1,43 +1,54 @@
 defaults = {
-    'CELERY_BROKER_URL': 'redis://127.0.0.1:6379/0',
-    'DB_ENGINE': 'sqlite:///db.sqlite3',
-    'DEBUG': False,
-    'LOG_PROMPTS': False,
-    'single_api_mode': False,
-    'context_percentage': 0.25,
-    'main_api': {
-        'backend': 'GenericOAI',
-        'url': '',
-        'auth_key': '',
-        'input_sequence': '### Instruction:\n',
-        'output_sequence': '\n### Response:\n',
-        'first_output_sequence': '',
-        'last_output_sequence': '',
-        'separator_sequence': '',
-        'wrap': '',
-        'system_sequence_prefix': '',
-        'system_sequence_suffix': ''
+    "CELERY_BROKER_URL": "redis://127.0.0.1:6379/0",
+    "REDIS_HOST": "localhost",
+    "REDIS_PORT": 6379,
+    "CACHE_EXPIRE_TIME": 86400,
+    "DB_ENGINE": "postgresql+psycopg2://grimoire:secretpassword@127.0.0.1:5432/grimoire",
+    "DEBUG": False,
+    "LOG_PROMPTS": False,
+    "AUTH_KEY": "",
+    "single_api_mode": False,
+    "multi_user_mode": False,
+    "prefer_gpu": False,
+    "context_percentage": 0.25,
+    "preserved_messages": 2,
+    "main_api": {
+        "backend": "GenericOAI",
+        "url": "",
+        "auth_key": "",
+        "context_length": 4096,
+        "system_sequence": "",
+        "system_suffix": "",
+        "input_sequence": "### Instruction:\n",
+        "input_suffix": "",
+        "output_sequence": "\n### Response:\n",
+        "output_suffix": "",
+        "first_output_sequence": "",
+        "last_output_sequence": "",
+        "wrap": False,
+        "collapse_newlines": False,
     },
-    'side_api': {
-        'backend': 'GenericOAI',
-        'url': '',
-        'auth_key': '',
-        'input_sequence': '### Instruction:\n',
-        'output_sequence': '\n### Response:\n'
+    "side_api": {
+        "backend": "GenericOAI",
+        "url": "",
+        "auth_key": "",
+        "context_length": 4096,
+        "system_sequence": "",
+        "system_suffix": "",
+        "input_sequence": "### Instruction:\n",
+        "input_suffix": "",
+        "output_sequence": "\n### Response:\n",
+        "output_suffix": "",
+        "first_output_sequence": "",
+        "last_output_sequence": "",
+        "wrap": False,
+        "collapse_newlines": False,
     },
-    'summarization': {
-        'prompt': '{bos_token}{previous_summary}\n{messages}\n{input_sequence}Describe {term}.{output_sequence}',
-        'bos_token': '<s>',
-        'params': {
-            'min_p': 0.1,
-            'rep_pen': 1.0,
-            'temperature': 0.6,
-            'stop': [
-                '</s>'
-            ],
-            "stop_sequence": [
-                '</s>'
-            ]
-        }
-    }
+    "summarization": {
+        "prompt": "{previous_summary}\n{messages}\n{input_sequence}Describe {term}.{input_suffix}{output_sequence}",
+        "limit_rate": 1,
+        "bos_token": "<s>",
+        "max_tokens": 300,
+        "params": {"min_p": 0.1, "rep_pen": 1.0, "temperature": 0.6, "stop": ["</s>"], "stop_sequence": ["</s>"]},
+    },
 }

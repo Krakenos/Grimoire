@@ -1,4 +1,6 @@
+import copy
 import os
+import pathlib
 
 import yaml
 from dotenv import load_dotenv
@@ -24,8 +26,17 @@ def envvar_constructor(loader: yaml.Loader, node: yaml.ScalarNode):
 class SettingsLoader:
     @classmethod
     def settings_path(cls):
-        settings_file_name = os.environ.get('SETTINGS_FILE_NAME', 'settings.yaml')
-        config_path = os.environ.get('APP_CONFIG', settings_file_name)
+        proj_dir = os.environ.get("PYTHONPATH")
+
+        if proj_dir and proj_dir.startswith("/app"):  # Dockerfile
+            proj_path = pathlib.Path(proj_dir)
+        else:  # Other envs
+            proj_path = pathlib.Path(__file__).parents[2]
+
+        default_settings_path = proj_path / "config" / "settings.yaml"
+
+        config_path = os.environ.get("APP_CONFIG", default_settings_path.resolve())
+
         return config_path
 
     @classmethod
@@ -37,7 +48,7 @@ class SettingsLoader:
     @classmethod
     def make_config_loader(cls):
         loader = yaml.SafeLoader
-        loader.add_constructor('!env', envvar_constructor)
+        loader.add_constructor("!env", envvar_constructor)
         return loader
 
     @classmethod
@@ -47,9 +58,9 @@ class SettingsLoader:
 
 
 def merge_settings(settings_dict, overrides):
-    settings_dict = settings_dict.copy()
+    settings_dict = copy.deepcopy(settings_dict)
     for key, value in overrides.items():
-        if key in settings_dict and value not in ('', None):
+        if key in settings_dict and value not in ("", None):
             match value:
                 case dict():
                     settings_dict[key] = merge_settings(settings_dict[key], value)
@@ -58,9 +69,9 @@ def merge_settings(settings_dict, overrides):
     return settings_dict
 
 
-settings = defaults.copy()
+settings = copy.deepcopy(defaults)
 loaded_settings = SettingsLoader.load_config()
 settings = merge_settings(settings, loaded_settings)
 
-if settings['side_api']['url'] in ('', None):
-    settings['single_api_mode'] = True
+if settings["side_api"]["url"] in ("", None):
+    settings["single_api_mode"] = True
