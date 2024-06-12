@@ -28,8 +28,6 @@ def make_summary_prompt(session, knowledge_entry, max_context: int, api_settings
     for message_index in message_indices:
         chunk_indices.update([message_index - 1, message_index, message_index + 1])
     chunk_indices -= {-1, 0}
-    if len(chunk_indices) < 2:
-        return None
     final_indices = sorted(chunk_indices)
     query = (
         select(Message.message)
@@ -38,6 +36,8 @@ def make_summary_prompt(session, knowledge_entry, max_context: int, api_settings
     )
     query_results = session.execute(query).all()
     messages = [row[0] for row in query_results]
+    if len(messages) <= 1:
+        return None
     prompt = ""
     reversed_messages = []
     for message in messages[::-1]:
@@ -92,6 +92,7 @@ def summarize(
         max_prompt_context = context_len-response_len
         prompt = make_summary_prompt(session, knowledge_entry, max_prompt_context, api_settings, summarization_settings)
         if prompt is None:  # Edge case of having 1 message for summary, only may happen at start of chat
+            general_logger.info("Skipping entry to summarize, only 1 message for term exists")
             return None
         generation_params = {
             "max_length": response_len,
