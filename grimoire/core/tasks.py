@@ -89,7 +89,7 @@ def summarize(
             general_logger.info("Skipping entry to summarize, messages amount below limit rate")
             return None
 
-        max_prompt_context = context_len-response_len
+        max_prompt_context = context_len - response_len
         prompt = make_summary_prompt(session, knowledge_entry, max_prompt_context, api_settings, summarization_settings)
         if prompt is None:  # Edge case of having 1 message for summary, only may happen at start of chat
             general_logger.info("Skipping entry to summarize, only 1 message for term exists")
