@@ -1,19 +1,19 @@
 services:
   redis:
     image: redis
-    container_name: "redis"
+    container_name: "redis-grimoire"
     ports:
-      - 6379:6379
+      - 6370:6379
 
   postgres:
     image: postgres
-    container_name: "postgres"
+    container_name: "postgres-grimoire"
     environment:
       - POSTGRES_USER=grimoire
       - POSTGRES_PASSWORD=secretpassword
       - POSTGRES_DB=grimoire
     ports:
-      - 5432:5432
+      - 5430:5432
     volumes:
       - db:/var/lib/postgresql/data
 
