@@ -41,7 +41,8 @@ class GenerationData(BaseModel):
 
 class Grimoire(BaseModel):
     chat_id: str
-    user_id: str = None
+    user_id: str | None = None
     instruct: Instruct | None = None
     generation_data: GenerationData | None = None
     redirect_url: str | None = None
+    redirect_auth: str | None = None

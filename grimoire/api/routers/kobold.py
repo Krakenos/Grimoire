@@ -40,6 +40,9 @@ async def generate(k_request: KAIGeneration, db: Session = Depends(get_db)):
     if k_request.grimoire.redirect_url:
         current_settings["main_api"]["url"] = k_request.grimoire.redirect_url
 
+    if k_request.grimoire.redirect_auth:
+        current_settings["main_api"]["auth_key"] = k_request.grimoire.redirect_auth
+
     max_context = k_request.max_context_length - k_request.max_length
     new_prompt = await process_prompt(
         prompt=k_request.prompt,

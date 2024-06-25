@@ -47,6 +47,9 @@ async def completions(oai_request: OAIGeneration, request: Request, db: Session 
     if oai_request.grimoire.redirect_url is not None:
         current_settings["main_api"]["url"] = oai_request.grimoire.redirect_url
 
+    if oai_request.grimoire.redirect_auth is not None:
+        current_settings["main_api"]["auth_key"] = oai_request.grimoire.redirect_auth
+
     passthrough_url = urljoin(current_settings["main_api"]["url"], "/v1/completions")
     auth_key = current_settings["main_api"]["auth_key"]
     passthrough_json["api_server"] = current_settings["main_api"]["url"]
