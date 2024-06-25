@@ -2,8 +2,8 @@ from pydantic import BaseModel
 
 
 class Instruct(BaseModel):
-    enabled: bool
-    collapse_newlines: bool
+    enabled: bool = True
+    collapse_newlines: bool = False
     system_sequence: str
     system_suffix: str
     input_sequence: str
@@ -12,7 +12,7 @@ class Instruct(BaseModel):
     output_suffix: str
     first_output_sequence: str
     last_output_sequence: str
-    wrap: bool
+    wrap: bool = False
 
 
 class Message(BaseModel):
