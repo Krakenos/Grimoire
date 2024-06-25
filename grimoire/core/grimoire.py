@@ -123,7 +123,12 @@ def get_user(user_id: str | None, current_settings: dict, session: Session) -> U
         query = select(User).where(User.external_id == user_id)
     else:
         query = select(User).where(User.external_id == "DEFAULT_USER", User.id == 1)
-    result = session.scalars(query).one()
+    result = session.scalars(query).first()
+    if not result:
+        result = User(external_id=user_id)
+        session.add(result)
+        session.commit()
+        session.refresh(result)
     return result
 
 
