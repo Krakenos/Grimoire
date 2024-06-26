@@ -514,7 +514,7 @@ def get_injected_indices(floating_prompts: list[RequestMessage]) -> list[int]:
     return injected_prompt_indices
 
 
-def update_instruct(instruct_info: Instruct) -> dict:
+def update_instruct(instruct_info: Instruct, char_name: str | None = None, user_name: str | None = None) -> dict:
     new_settings = copy.deepcopy(settings)
     if instruct_info.wrap:
         input_seq = f"{instruct_info.input_sequence}\n"
@@ -522,6 +522,7 @@ def update_instruct(instruct_info: Instruct) -> dict:
     else:
         input_seq = instruct_info.input_sequence
         output_seq = instruct_info.output_sequence
+
     new_settings["main_api"]["system_sequence"] = instruct_info.system_sequence
     new_settings["main_api"]["system_suffix"] = instruct_info.system_suffix
     new_settings["main_api"]["input_sequence"] = input_seq
@@ -531,6 +532,17 @@ def update_instruct(instruct_info: Instruct) -> dict:
     new_settings["main_api"]["first_output_sequence"] = instruct_info.first_output_sequence
     new_settings["main_api"]["last_output_sequence"] = instruct_info.last_output_sequence
     new_settings["main_api"]["collapse_newlines"] = instruct_info.collapse_newlines
+
+    if "{{user}}" in new_settings["main_api"]["input_sequence"]:
+        new_settings["main_api"]["input_sequence"] = new_settings["main_api"]["input_sequence"].replace(
+            "{{user}}", user_name
+        )
+
+    if "{{char}}" in new_settings["main_api"]["output_sequence"]:
+        new_settings["main_api"]["output_sequence"] = new_settings["main_api"]["output_sequence"].replace(
+            "{{char}", char_name
+        )
+
     if instruct_info.collapse_newlines:
         for key, value in new_settings["main_api"].items():
             if key not in ["wrap", "backend", "url", "auth"] and isinstance(value, str):

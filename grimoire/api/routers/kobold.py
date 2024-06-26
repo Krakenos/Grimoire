@@ -35,7 +35,14 @@ async def generate(k_request: KAIGeneration, db: Session = Depends(get_db)):
     current_settings = copy.deepcopy(settings)
 
     if k_request.grimoire.instruct is not None:
-        current_settings = update_instruct(k_request.grimoire.instruct)
+        if k_request.grimoire.generation_data is not None:
+            current_settings = update_instruct(
+                k_request.grimoire.instruct,
+                k_request.grimoire.generation_data.char,
+                k_request.grimoire.generation_data.user,
+            )
+        else:
+            current_settings = update_instruct(k_request.grimoire.instruct)
 
     if k_request.grimoire.redirect_url:
         current_settings["main_api"]["url"] = k_request.grimoire.redirect_url

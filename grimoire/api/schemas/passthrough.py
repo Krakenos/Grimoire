@@ -22,21 +22,21 @@ class Message(BaseModel):
 
 
 class GenerationData(BaseModel):
-    description: str
-    personality: str
-    persona: str
-    scenario: str
+    description: str | None = None
+    personality: str | None = None
+    persona: str | None = None
+    scenario: str | None = None
     char: str
     user: str
-    worldInfoBefore: str
-    worldInfoAfter: str
-    beforeScenarioAnchor: str
-    afterScenarioAnchor: str
-    storyString: str
-    finalMesSend: list[Message]
-    main: str
-    jailbreak: str
-    naiPreamble: str
+    worldInfoBefore: str | None = None
+    worldInfoAfter: str | None = None
+    beforeScenarioAnchor: str | None = None
+    afterScenarioAnchor: str | None = None
+    storyString: str | None = None
+    finalMesSend: list[Message] | None = None
+    main: str | None = None
+    jailbreak: str | None = None
+    naiPreamble: str | None = None
 
 
 class Grimoire(BaseModel):

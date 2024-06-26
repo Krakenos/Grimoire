@@ -42,7 +42,14 @@ async def completions(oai_request: OAIGeneration, request: Request, db: Session 
     current_settings = copy.deepcopy(settings)
 
     if oai_request.grimoire.instruct is not None:
-        current_settings = update_instruct(oai_request.grimoire.instruct)
+        if oai_request.grimoire.generation_data is not None:
+            current_settings = update_instruct(
+                oai_request.grimoire.instruct,
+                oai_request.grimoire.generation_data.char,
+                oai_request.grimoire.generation_data.user,
+            )
+        else:
+            current_settings = update_instruct(oai_request.grimoire.instruct)
 
     if oai_request.grimoire.redirect_url is not None:
         current_settings["main_api"]["url"] = oai_request.grimoire.redirect_url
