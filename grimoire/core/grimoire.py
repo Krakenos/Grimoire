@@ -540,7 +540,7 @@ def update_instruct(instruct_info: Instruct, char_name: str | None = None, user_
 
     if "{{char}}" in new_settings["main_api"]["output_sequence"]:
         new_settings["main_api"]["output_sequence"] = new_settings["main_api"]["output_sequence"].replace(
-            "{{char}", char_name
+            "{{char}}", char_name
         )
 
     if instruct_info.collapse_newlines:
