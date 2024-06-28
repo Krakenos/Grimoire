@@ -110,10 +110,29 @@ def get_docs(messages: list[str], chat: Chat, session: Session) -> tuple[list[Do
 
 
 @time_execution
-def get_extra_info(generation_data: GenerationData) -> list[RequestMessage]:
+def get_extra_info(generation_data: GenerationData, messages: list[str]) -> list[RequestMessage] | None:
     floating_prompts = []
-    for message in generation_data.finalMesSend:
-        floating_prompts.append(message)
+    if generation_data.finalMesSend:
+        for message in generation_data.finalMesSend:
+            floating_prompts.append(message)
+    elif generation_data.authors_note and generation_data.authors_note.text:
+        an_index = len(messages) - generation_data.authors_note.depth
+        if an_index < 0:
+            an_index = 0
+        author_note = generation_data.authors_note.text.replace("{{char}}", generation_data.char)
+        author_note = author_note.replace("{{user}}", generation_data.user)
+        for index, mes in enumerate(messages):
+            if index == an_index and author_note in mes:
+                if author_note == mes:
+                    floating_prompts.append(RequestMessage(message=mes, injected=True))
+                else:
+                    mes_text = mes.replace(author_note, "")
+                    floating_prompts.append(RequestMessage(message=mes_text, injected=False))
+                    floating_prompts.append(RequestMessage(message=author_note, injected=True))
+            else:
+                floating_prompts.append(RequestMessage(message=mes, injected=False))
+    else:
+        return None
     return floating_prompts
 
 
@@ -175,14 +194,17 @@ async def process_prompt(
     else:
         summarization_api = current_settings["side_api"].copy()
 
-    if generation_data:
-        floating_prompts = get_extra_info(generation_data)
-
     pattern = instruct_regex(current_settings)
     split_prompt = re.split(pattern, prompt)
     split_prompt = [message.strip() for message in split_prompt]  # remove trailing newlines
-    all_messages = split_prompt[1:-1]  # includes injected entries at depth like WI and AN
+    chat_start_index = 1
+    if split_prompt[0] == "":
+        chat_start_index = 2
+    all_messages = split_prompt[chat_start_index:-1]  # includes injected entries at depth like WI and AN
     chat_messages = []
+
+    if generation_data:
+        floating_prompts = get_extra_info(generation_data, all_messages)
 
     if floating_prompts:
         for mes_index, message in enumerate(all_messages):

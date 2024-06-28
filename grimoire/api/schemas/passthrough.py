@@ -17,8 +17,13 @@ class Instruct(BaseModel):
 
 class Message(BaseModel):
     message: str
-    extensionPrompts: list[str]
+    extensionPrompts: list[str] | None = None
     injected: bool
+
+
+class AuthorsNote(BaseModel):
+    text: str
+    depth: int
 
 
 class GenerationData(BaseModel):
@@ -37,6 +42,7 @@ class GenerationData(BaseModel):
     main: str | None = None
     jailbreak: str | None = None
     naiPreamble: str | None = None
+    authors_note: AuthorsNote | None = None
 
 
 class Grimoire(BaseModel):
