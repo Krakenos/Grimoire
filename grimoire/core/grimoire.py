@@ -110,7 +110,9 @@ def get_docs(messages: list[str], chat: Chat, session: Session) -> tuple[list[Do
 
 
 @time_execution
-def get_extra_info(generation_data: GenerationData, messages: list[str]) -> list[RequestMessage] | None:
+def get_extra_info(
+    generation_data: GenerationData, messages: list[str], attached_an=False
+) -> list[RequestMessage] | None:
     floating_prompts = []
     if generation_data.finalMesSend:
         for message in generation_data.finalMesSend:
@@ -123,12 +125,7 @@ def get_extra_info(generation_data: GenerationData, messages: list[str]) -> list
         author_note = author_note.replace("{{user}}", generation_data.user)
         for index, mes in enumerate(messages):
             if index == an_index and author_note in mes:
-                if author_note == mes:
-                    floating_prompts.append(RequestMessage(message=mes, injected=True))
-                else:
-                    mes_text = mes.replace(author_note, "")
-                    floating_prompts.append(RequestMessage(message=mes_text, injected=False))
-                    floating_prompts.append(RequestMessage(message=author_note, injected=True))
+                floating_prompts.append(RequestMessage(message=mes, injected=True))
             else:
                 floating_prompts.append(RequestMessage(message=mes, injected=False))
     else:
@@ -198,13 +195,32 @@ async def process_prompt(
     split_prompt = re.split(pattern, prompt)
     split_prompt = [message.strip() for message in split_prompt]  # remove trailing newlines
     chat_start_index = 1
+
     if split_prompt[0] == "":
-        chat_start_index = 2
+        split_prompt = split_prompt[1:]
+
+    attached_an = False
+
+    # Split author's note if it's attached to the message
+    if (
+        current_settings["main_api"]["system_sequence"] == ""
+        and generation_data.authors_note
+        and generation_data.authors_note.text
+    ):
+        an_message_index = len(split_prompt) - generation_data.authors_note.depth
+        an_text = generation_data.authors_note.text.replace("{{char}}", generation_data.char)
+        an_text = an_text.replace("{{user}}", generation_data.user)
+        if an_message_index < 0:
+            an_message_index = 0
+        split_prompt[an_message_index] = split_prompt[an_message_index].replace(an_text, "")
+        split_prompt.insert(an_message_index + 1, an_text)
+        attached_an = True
+
     all_messages = split_prompt[chat_start_index:-1]  # includes injected entries at depth like WI and AN
     chat_messages = []
 
     if generation_data:
-        floating_prompts = get_extra_info(generation_data, all_messages)
+        floating_prompts = get_extra_info(generation_data, all_messages, attached_an)
 
     if floating_prompts:
         for mes_index, message in enumerate(all_messages):
@@ -228,7 +244,7 @@ async def process_prompt(
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
 
     new_prompt = await fill_context(
-        prompt, floating_prompts, chat, db_session, docs, context_length, api_type, current_settings
+        prompt, floating_prompts, chat, db_session, docs, context_length, api_type, current_settings, generation_data
     )
 
     for doc in docs_to_summarize:
@@ -304,6 +320,7 @@ async def fill_context(
     context_size: int,
     api_type: str,
     current_settings: dict,
+    generation_data: GenerationData,
 ) -> str:
     max_context = context_size
     max_grimoire_context = max_context * current_settings["context_percentage"]
@@ -312,6 +329,25 @@ async def fill_context(
     pattern_with_delimiters = f"({pattern})"
     messages = re.split(pattern, prompt)
     messages_with_delimiters = re.split(pattern_with_delimiters, prompt)
+
+    if (
+        current_settings["main_api"]["system_sequence"] == ""
+        and generation_data.authors_note
+        and generation_data.authors_note.text
+    ):
+        an_message_index = len(messages) - generation_data.authors_note.depth
+        an_text = generation_data.authors_note.text.replace("{{char}}", generation_data.char)
+        an_text = an_text.replace("{{user}}", generation_data.user)
+        if an_message_index < 0:
+            an_message_index = 0
+        messages[an_message_index] = messages[an_message_index].replace(an_text, "")
+        messages.insert(an_message_index + 1, an_text)
+        messages_with_delimiters[an_message_index * 2] = messages_with_delimiters[an_message_index * 2].replace(
+            an_text, ""
+        )
+        messages_with_delimiters.insert(an_message_index * 2 + 1, "")
+        messages_with_delimiters.insert(an_message_index * 2 + 2, an_text)
+
     prompt_definitions = messages[0]  # first portion should always be instruction and char definitions
     unique_ents = get_ordered_entities(banned_labels, docs)
     summaries = get_summaries(chat, unique_ents, db_session)
@@ -333,6 +369,7 @@ async def fill_context(
     return final_prompt
 
 
+# Old culling method, probably safe to remove
 def grimoire_entries_culling(
     api_type: str,
     definitions_context_len: int,
@@ -365,6 +402,7 @@ def grimoire_entries_culling(
     return grimoire_text
 
 
+# Old culling method, probably safe to remove
 def chat_messages_culling(
     api_type: str,
     injected_prompt_indices: list[int],
@@ -437,7 +475,10 @@ async def prompt_culling(api_type: str, prompt_entries: dict, max_context: int, 
     output_suffix = current_settings["main_api"]["output_suffix"]
 
     messages_dict = dict(enumerate(messages_with_delimiters[1:]))
-    injected_indices = get_injected_indices(floating_prompts)
+
+    injected_indices = []
+    if floating_prompts:
+        injected_indices = get_injected_indices(floating_prompts)
 
     messages_list = [messages_dict[index] for index in sorted(messages_dict.keys())]
     messages = [prompt_definitions, *grimoire_entries, *messages_list]
@@ -538,6 +579,13 @@ def get_injected_indices(floating_prompts: list[RequestMessage]) -> list[int]:
 
 def update_instruct(instruct_info: Instruct, char_name: str | None = None, user_name: str | None = None) -> dict:
     new_settings = copy.deepcopy(settings)
+    sys_suffix = instruct_info.system_suffix
+    input_suffix = instruct_info.input_suffix
+    output_suffix = instruct_info.output_suffix
+    if instruct_info.trailing_newline:
+        sys_suffix = f"{sys_suffix}\n"
+        input_suffix = f"{input_suffix}\n"
+        output_suffix = f"{output_suffix}\n"
     if instruct_info.wrap:
         input_seq = f"{instruct_info.input_sequence}\n"
         output_seq = f"\n{instruct_info.output_sequence}\n"
@@ -546,11 +594,11 @@ def update_instruct(instruct_info: Instruct, char_name: str | None = None, user_
         output_seq = instruct_info.output_sequence
 
     new_settings["main_api"]["system_sequence"] = instruct_info.system_sequence
-    new_settings["main_api"]["system_suffix"] = instruct_info.system_suffix
+    new_settings["main_api"]["system_suffix"] = sys_suffix
     new_settings["main_api"]["input_sequence"] = input_seq
-    new_settings["main_api"]["input_suffix"] = instruct_info.input_suffix
+    new_settings["main_api"]["input_suffix"] = input_suffix
     new_settings["main_api"]["output_sequence"] = output_seq
-    new_settings["main_api"]["output_suffix"] = instruct_info.output_suffix
+    new_settings["main_api"]["output_suffix"] = output_suffix
     new_settings["main_api"]["first_output_sequence"] = instruct_info.first_output_sequence
     new_settings["main_api"]["last_output_sequence"] = instruct_info.last_output_sequence
     new_settings["main_api"]["collapse_newlines"] = instruct_info.collapse_newlines

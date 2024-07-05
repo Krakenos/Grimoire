@@ -13,6 +13,7 @@ class Instruct(BaseModel):
     first_output_sequence: str
     last_output_sequence: str
     wrap: bool = False
+    trailing_newline: bool = False
 
 
 class Message(BaseModel):
