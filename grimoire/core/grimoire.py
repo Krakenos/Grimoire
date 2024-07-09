@@ -42,14 +42,15 @@ def save_messages(
     """
     new_messages_indices = []
     db_messages = [message.message for message in chat.messages]
+    message_number = 0
     for index, message in enumerate(messages):
         if message not in db_messages:
             new_messages_indices.append(index)
 
     if db_messages:
-        message_number = max([message.message_index for message in chat.messages])
-    else:
-        message_number = 0
+        query = select(func.max(Message.message_index)).where(Message.chat_id == chat.id)
+        message_number = session.execute(query).one()[0]
+
     message_number += 1
 
     for index in new_messages_indices:
@@ -63,6 +64,7 @@ def save_messages(
 
     session.add(chat)
     session.commit()
+    session.refresh(chat)
 
     return new_messages_indices, chat
 
@@ -207,12 +209,12 @@ async def process_prompt(
         and generation_data.authors_note
         and generation_data.authors_note.text
     ):
-        an_message_index = len(split_prompt) - generation_data.authors_note.depth
+        an_message_index = len(split_prompt) - generation_data.authors_note.depth - 1
         an_text = generation_data.authors_note.text.replace("{{char}}", generation_data.char)
         an_text = an_text.replace("{{user}}", generation_data.user)
         if an_message_index < 0:
             an_message_index = 0
-        split_prompt[an_message_index] = split_prompt[an_message_index].replace(an_text, "")
+        split_prompt[an_message_index] = split_prompt[an_message_index].replace(f"\n{an_text}", "")
         split_prompt.insert(an_message_index + 1, an_text)
         attached_an = True
 
@@ -335,18 +337,18 @@ async def fill_context(
         and generation_data.authors_note
         and generation_data.authors_note.text
     ):
-        an_message_index = len(messages) - generation_data.authors_note.depth
+        an_message_index = len(messages) - generation_data.authors_note.depth - 1
         an_text = generation_data.authors_note.text.replace("{{char}}", generation_data.char)
         an_text = an_text.replace("{{user}}", generation_data.user)
         if an_message_index < 0:
             an_message_index = 0
-        messages[an_message_index] = messages[an_message_index].replace(an_text, "")
-        messages.insert(an_message_index + 1, an_text)
+        messages[an_message_index] = messages[an_message_index].replace(f"\n{an_text}", "")
         messages_with_delimiters[an_message_index * 2] = messages_with_delimiters[an_message_index * 2].replace(
-            an_text, ""
+            f"\n{an_text}", ""
         )
-        messages_with_delimiters.insert(an_message_index * 2 + 1, "")
+        messages_with_delimiters.insert(an_message_index * 2 + 1, "\n")
         messages_with_delimiters.insert(an_message_index * 2 + 2, an_text)
+        messages.insert(an_message_index + 1, an_text)
 
     prompt_definitions = messages[0]  # first portion should always be instruction and char definitions
     unique_ents = get_ordered_entities(banned_labels, docs)
@@ -602,6 +604,7 @@ def update_instruct(instruct_info: Instruct, char_name: str | None = None, user_
     new_settings["main_api"]["first_output_sequence"] = instruct_info.first_output_sequence
     new_settings["main_api"]["last_output_sequence"] = instruct_info.last_output_sequence
     new_settings["main_api"]["collapse_newlines"] = instruct_info.collapse_newlines
+    new_settings["main_api"]["trailing_newline"] = instruct_info.trailing_newline
 
     if "{{user}}" in new_settings["main_api"]["input_sequence"]:
         new_settings["main_api"]["input_sequence"] = new_settings["main_api"]["input_sequence"].replace(

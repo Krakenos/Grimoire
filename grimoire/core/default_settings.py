@@ -27,6 +27,7 @@ defaults = {
         "last_output_sequence": "",
         "wrap": False,
         "collapse_newlines": False,
+        "trailing_newline": False,
     },
     "side_api": {
         "backend": "GenericOAI",
@@ -43,6 +44,7 @@ defaults = {
         "last_output_sequence": "",
         "wrap": False,
         "collapse_newlines": False,
+        "trailing_newline": False,
     },
     "summarization": {
         "prompt": "{previous_summary}\n{messages}\n{input_sequence}Describe {term}.{input_suffix}{output_sequence}",
