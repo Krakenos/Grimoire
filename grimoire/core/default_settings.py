@@ -6,6 +6,7 @@ defaults = {
     "DB_ENGINE": "postgresql+psycopg2://grimoire:secretpassword@127.0.0.1:5432/grimoire",
     "DEBUG": False,
     "LOG_PROMPTS": False,
+    "LOG_FILES": False,
     "AUTH_KEY": "",
     "single_api_mode": False,
     "multi_user_mode": False,

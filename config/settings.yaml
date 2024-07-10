@@ -5,6 +5,7 @@ CACHE_EXPIRE_TIME: 86400
 DB_ENGINE: 'postgresql+psycopg2://grimoire:secretpassword@127.0.0.1:5430/grimoire'
 DEBUG: False
 LOG_PROMPTS: False
+LOG_FILES: False
 AUTH_KEY: ''
 single_api_mode: False
 multi_user_mode: False
