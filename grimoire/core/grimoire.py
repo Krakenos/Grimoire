@@ -112,6 +112,35 @@ def get_docs(messages: list[str], chat: Chat, session: Session) -> tuple[list[Do
 
 
 @time_execution
+def get_named_entities(
+    messages: list[str], chat: Chat
+) -> tuple[list[list[tuple[str, str]]], dict[str, list[tuple[str, str]]]]:
+    entity_list = []
+    entity_dict = {}
+    to_process = []
+    for message in chat.messages:
+        if message.spacy_named_entities:
+            named_entities = [(ent.entity_name, ent.entity_label) for ent in message.spacy_named_entities]
+            entity_dict[message.message] = named_entities
+        else:
+            entity_dict[message.message] = []
+
+    for message in messages:
+        if message not in entity_dict:
+            to_process.append(message)
+
+    new_docs = list(nlp.pipe(to_process))
+
+    for text, doc in zip(to_process, new_docs, strict=False):
+        entities = [(ent.text, ent.label_) for ent in doc.ents]
+        entity_dict[text] = entities
+    for message in messages:
+        entity_list.append(entity_dict[message])
+
+    return entity_list, entity_dict
+
+
+@time_execution
 def get_extra_info(
     generation_data: GenerationData, messages: list[str], attached_an=False
 ) -> list[RequestMessage] | None:
