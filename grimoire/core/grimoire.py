@@ -1,6 +1,7 @@
 import copy
 import re
 import timeit
+from dataclasses import dataclass
 
 import spacy
 from spacy.tokens import Doc, DocBin
@@ -14,7 +15,14 @@ from grimoire.common.loggers import context_logger, general_logger
 from grimoire.common.utils import async_time_execution, time_execution
 from grimoire.core.settings import settings
 from grimoire.core.tasks import summarize
-from grimoire.db.models import Chat, Knowledge, Message, User
+from grimoire.db.models import Chat, Knowledge, Message, SpacyNamedEntity, User
+
+
+@dataclass(frozen=True, eq=True)
+class NamedEntity:
+    name: str
+    label: str
+
 
 if settings["prefer_gpu"]:
     gpu_check = spacy.prefer_gpu()
@@ -30,12 +38,12 @@ nlp = spacy.load("en_core_web_trf")
 
 @time_execution
 def save_messages(
-    messages: list[str], docs_dict: dict[str, Doc], chat: Chat, session: Session
+    messages: list[str], entity_dict: dict[str, list[NamedEntity]], chat: Chat, session: Session
 ) -> tuple[list[int], Chat]:
     """
     Saves messages to and returns indices of new messages
     :param messages:
-    :param docs_dict:
+    :param entity_dict:
     :param chat:
     :param session:
     :return: indices of new messages and updated chat object
@@ -55,11 +63,17 @@ def save_messages(
 
     for index in new_messages_indices:
         message_to_add = messages[index]
-        spacy_doc = docs_dict[message_to_add]
-        doc_bin = DocBin()
-        doc_bin.add(spacy_doc)
-        bytes_data = doc_bin.to_bytes()
-        chat.messages.append(Message(message=message_to_add, message_index=message_number, spacy_doc=bytes_data))
+        named_entities = entity_dict[message_to_add]
+        db_named_entities = [
+            SpacyNamedEntity(entity_name=named_ent.name, entity_label=named_ent.label) for named_ent in named_entities
+        ]
+        chat.messages.append(
+            Message(
+                message=message_to_add,
+                message_index=message_number,
+                spacy_named_entities=db_named_entities
+            )
+        )
         message_number += 1
 
     session.add(chat)
@@ -112,15 +126,15 @@ def get_docs(messages: list[str], chat: Chat, session: Session) -> tuple[list[Do
 
 
 @time_execution
-def get_named_entities(
-    messages: list[str], chat: Chat
-) -> tuple[list[list[tuple[str, str]]], dict[str, list[tuple[str, str]]]]:
+def get_named_entities(messages: list[str], chat: Chat) -> tuple[list[list[NamedEntity]], dict[str, list[NamedEntity]]]:
     entity_list = []
     entity_dict = {}
     to_process = []
     for message in chat.messages:
         if message.spacy_named_entities:
-            named_entities = [(ent.entity_name, ent.entity_label) for ent in message.spacy_named_entities]
+            named_entities = [
+                NamedEntity(name=ent.entity_name, label=ent.entity_label) for ent in message.spacy_named_entities
+            ]
             entity_dict[message.message] = named_entities
         else:
             entity_dict[message.message] = []
@@ -132,7 +146,7 @@ def get_named_entities(
     new_docs = list(nlp.pipe(to_process))
 
     for text, doc in zip(to_process, new_docs, strict=False):
-        entities = [(ent.text, ent.label_) for ent in doc.ents]
+        entities = [NamedEntity(ent.text, ent.label_) for ent in doc.ents]
         entity_dict[text] = entities
     for message in messages:
         entity_list.append(entity_dict[message])
@@ -264,12 +278,13 @@ async def process_prompt(
     chat = get_chat(user, chat_id, chat_messages, db_session)
 
     doc_time = timeit.default_timer()
-    docs, docs_dict = get_docs(chat_messages, chat, db_session)
+    # docs, docs_dict = get_docs(chat_messages, chat, db_session)
+    entity_list, entity_dict = get_named_entities(chat_messages, chat)
     doc_end_time = timeit.default_timer()
     general_logger.debug(f"Creating spacy docs {doc_end_time - doc_time} seconds")
     last_messages = chat_messages[:-1]  # exclude user prompt
-    last_docs = docs[:-1]
-    new_message_indices, chat = save_messages(last_messages, docs_dict, chat, db_session)
+    last_entities = entity_list[:-1]
+    new_message_indices, chat = save_messages(last_messages, entity_dict, chat, db_session)
     save_named_entities(chat, last_docs, db_session)
 
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
