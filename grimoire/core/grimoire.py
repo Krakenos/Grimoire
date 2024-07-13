@@ -2,6 +2,7 @@ import copy
 import re
 import timeit
 from dataclasses import dataclass
+from itertools import chain
 
 import spacy
 from spacy.tokens import Doc, DocBin
@@ -68,11 +69,7 @@ def save_messages(
             SpacyNamedEntity(entity_name=named_ent.name, entity_label=named_ent.label) for named_ent in named_entities
         ]
         chat.messages.append(
-            Message(
-                message=message_to_add,
-                message_index=message_number,
-                spacy_named_entities=db_named_entities
-            )
+            Message(message=message_to_add, message_index=message_number, spacy_named_entities=db_named_entities)
         )
         message_number += 1
 
@@ -285,7 +282,7 @@ async def process_prompt(
     last_messages = chat_messages[:-1]  # exclude user prompt
     last_entities = entity_list[:-1]
     new_message_indices, chat = save_messages(last_messages, entity_dict, chat, db_session)
-    save_named_entities(chat, last_docs, db_session)
+    save_named_entities(chat, entity_list, entity_dict, db_session)
 
     docs_to_summarize = [last_docs[index] for index in new_message_indices]
 
@@ -313,17 +310,14 @@ async def process_prompt(
 
 
 @time_execution
-def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
+def save_named_entities(
+    chat: Chat, entity_list: list[list[NamedEntity]], entity_dict: dict[str, list[get_named_entities]], session: Session
+) -> None:
     banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME"]
-    message_indices = {message.message: index for index, message in enumerate(chat.messages)}
-    unique_ents = []
-    for doc in docs:
-        ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
-        unique_ents.extend(list(set(ent_list)))
 
-    unique_ents = list(set(unique_ents))
+    unique_ents: list[NamedEntity] = list(set(chain(*entity_list)))
 
-    unique_ent_names = list({ent_name.lower() for ent_name, _ in unique_ents})
+    unique_ent_names = list({ent.name.lower() for ent in unique_ents})
     query = select(Knowledge).where(
         func.lower(Knowledge.entity).in_(unique_ent_names),
         Knowledge.entity_type == "NAMED ENTITY",
@@ -332,10 +326,10 @@ def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
     knowledge_entries = session.scalars(query).all()
     db_entry_names = [entry.entity.lower() for entry in knowledge_entries]
     new_knowledge = []
-    for ent, ent_label in unique_ents:
-        if ent.lower() not in db_entry_names:
+    for ent in unique_ents:
+        if ent.name.lower() not in db_entry_names:
             knowledge_entity = Knowledge(
-                entity=ent, entity_label=ent_label, entity_type="NAMED ENTITY", chat_id=chat.id, update_count=0
+                entity=ent.name, entity_label=ent.label, entity_type="NAMED ENTITY", chat_id=chat.id, update_count=0
             )
             new_knowledge.append(knowledge_entity)
     session.add_all(new_knowledge)
@@ -343,14 +337,13 @@ def save_named_entities(chat: Chat, docs: list[Doc], session: Session) -> None:
 
     knowledge_dict = {knowledge.entity: knowledge for knowledge in [*knowledge_entries, *new_knowledge]}
 
-    for doc in docs:
-        message_index = message_indices[doc.text]
-        ent_list = [str(ent) for ent in doc.ents if ent.label_ not in banned_labels]
-        message_ents = list(set(ent_list))
-
-        for ent in message_ents:
-            if chat.messages[message_index] not in knowledge_dict[ent].messages:
-                knowledge_dict[ent].messages.append(chat.messages[message_index])
+    # Link new messages to knowledge and update counter
+    for db_message in chat.messages:
+        message_ents = entity_dict[db_message.text]
+        ent_names: list[str] = list({ent.name for ent in message_ents if ent.label not in banned_labels})
+        for ent in ent_names:
+            if db_message not in knowledge_dict[ent].messages:
+                knowledge_dict[ent].messages.append(db_message)
                 knowledge_dict[ent].update_count += 1
     session.add_all(knowledge_dict.values())
     session.commit()
