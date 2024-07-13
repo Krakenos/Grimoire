@@ -57,7 +57,7 @@ class SpacyNamedEntity(Base):
     __tablename__ = "spacy_named_entities"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    chat_id: Mapped[int] = mapped_column(ForeignKey("message.id"))
+    message_id: Mapped[int] = mapped_column(ForeignKey("message.id"))
     entity_name: Mapped[str]
     entity_label: Mapped[str]
 
