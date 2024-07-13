@@ -284,19 +284,19 @@ async def process_prompt(
     new_message_indices, chat = save_messages(last_messages, entity_dict, chat, db_session)
     save_named_entities(chat, entity_list, entity_dict, db_session)
 
-    docs_to_summarize = [last_docs[index] for index in new_message_indices]
+    entities_to_summarize = [last_entities[index] for index in new_message_indices]
 
     new_prompt = await fill_context(
         prompt, floating_prompts, chat, db_session, docs, context_length, api_type, current_settings, generation_data
     )
 
-    for doc in docs_to_summarize:
-        for entity in set(doc.ents):
-            if entity.label_ not in banned_labels:
-                general_logger.debug(f"{entity.text}, {entity.label_}, {spacy.explain(entity.label_)}")
+    for entities in entities_to_summarize:
+        for entity in set(entities):
+            if entity.label not in banned_labels:
+                general_logger.debug(f"{entity.name}, {entity.label}, {spacy.explain(entity.label)}")
                 summarize.delay(
-                    entity.text.lower(),
-                    entity.label_,
+                    entity.name.lower(),
+                    entity.label,
                     chat.id,
                     summarization_api,
                     current_settings["summarization"],
