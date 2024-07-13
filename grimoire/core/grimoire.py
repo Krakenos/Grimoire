@@ -287,7 +287,15 @@ async def process_prompt(
     entities_to_summarize = [last_entities[index] for index in new_message_indices]
 
     new_prompt = await fill_context(
-        prompt, floating_prompts, chat, db_session, docs, context_length, api_type, current_settings, generation_data
+        prompt,
+        floating_prompts,
+        chat,
+        db_session,
+        entity_list,
+        context_length,
+        api_type,
+        current_settings,
+        generation_data,
     )
 
     for entities in entities_to_summarize:
@@ -355,7 +363,7 @@ async def fill_context(
     floating_prompts: list[RequestMessage],
     chat: Chat,
     db_session: Session,
-    docs: list[Doc],
+    entity_list: list[list[NamedEntity]],
     context_size: int,
     api_type: str,
     current_settings: dict,
@@ -388,7 +396,7 @@ async def fill_context(
         messages.insert(an_message_index + 1, an_text)
 
     prompt_definitions = messages[0]  # first portion should always be instruction and char definitions
-    unique_ents = get_ordered_entities(banned_labels, docs)
+    unique_ents = get_ordered_entities(banned_labels, entity_list)
     summaries = get_summaries(chat, unique_ents, db_session)
 
     prompt_entries = {
@@ -594,11 +602,11 @@ def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]], session: Sessi
     return summaries
 
 
-def get_ordered_entities(banned_labels: list[str], docs: list[Doc]) -> list[tuple[str, str]]:
+def get_ordered_entities(banned_labels: list[str], entity_list: list[list[NamedEntity]]) -> list[tuple[str, str]]:
     full_ent_list = []
 
-    for doc in docs:
-        ent_list = [(str(ent), ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
+    for entities in entity_list:
+        ent_list = [(ent.name, ent.label) for ent in entities if ent.label not in banned_labels]
         full_ent_list += ent_list
 
     unique_ents = list(dict.fromkeys(full_ent_list[::-1]))  # unique ents ordered from bottom of context
