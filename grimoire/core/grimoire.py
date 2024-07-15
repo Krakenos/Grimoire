@@ -127,6 +127,7 @@ def get_named_entities(messages: list[str], chat: Chat) -> tuple[list[list[Named
     entity_list = []
     entity_dict = {}
     to_process = []
+    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME"]
     for message in chat.messages:
         if message.spacy_named_entities:
             named_entities = [
@@ -143,7 +144,7 @@ def get_named_entities(messages: list[str], chat: Chat) -> tuple[list[list[Named
     new_docs = list(nlp.pipe(to_process))
 
     for text, doc in zip(to_process, new_docs, strict=False):
-        entities = [NamedEntity(ent.text, ent.label_) for ent in doc.ents]
+        entities = [NamedEntity(ent.text, ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
         entity_dict[text] = entities
     for message in messages:
         entity_list.append(entity_dict[message])
@@ -223,7 +224,6 @@ async def process_prompt(
     if api_type is None:
         api_type = current_settings["main_api"]["backend"]
 
-    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME"]
     floating_prompts = None
 
     if current_settings["single_api_mode"]:
@@ -278,7 +278,7 @@ async def process_prompt(
     # docs, docs_dict = get_docs(chat_messages, chat, db_session)
     entity_list, entity_dict = get_named_entities(chat_messages, chat)
     doc_end_time = timeit.default_timer()
-    general_logger.debug(f"Creating spacy docs {doc_end_time - doc_time} seconds")
+    general_logger.debug(f"Getting named entities {doc_end_time - doc_time} seconds")
     last_messages = chat_messages[:-1]  # exclude user prompt
     last_entities = entity_list[:-1]
     new_message_indices, chat = save_messages(last_messages, entity_dict, chat, db_session)
@@ -300,16 +300,15 @@ async def process_prompt(
 
     for entities in entities_to_summarize:
         for entity in set(entities):
-            if entity.label not in banned_labels:
-                general_logger.debug(f"{entity.name}, {entity.label}, {spacy.explain(entity.label)}")
-                summarize.delay(
-                    entity.name.lower(),
-                    entity.label,
-                    chat.id,
-                    summarization_api,
-                    current_settings["summarization"],
-                    current_settings["DB_ENGINE"],
-                )
+            general_logger.debug(f"{entity.name}, {entity.label}, {spacy.explain(entity.label)}")
+            summarize.delay(
+                entity.name.lower(),
+                entity.label,
+                chat.id,
+                summarization_api,
+                current_settings["summarization"],
+                current_settings["DB_ENGINE"],
+            )
 
     end_time = timeit.default_timer()
     general_logger.info(f"Prompt processing time: {end_time - start_time}s")
@@ -319,10 +318,8 @@ async def process_prompt(
 
 @time_execution
 def save_named_entities(
-    chat: Chat, entity_list: list[list[NamedEntity]], entity_dict: dict[str, list[get_named_entities]], session: Session
+    chat: Chat, entity_list: list[list[NamedEntity]], entity_dict: dict[str, list[NamedEntity]], session: Session
 ) -> None:
-    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME"]
-
     unique_ents: list[NamedEntity] = list(set(chain(*entity_list)))
 
     unique_ent_names = list({ent.name.lower() for ent in unique_ents})
@@ -348,7 +345,7 @@ def save_named_entities(
     # Link new messages to knowledge and update counter
     for db_message in chat.messages:
         message_ents = entity_dict[db_message.message]
-        ent_names: list[str] = list({ent.name for ent in message_ents if ent.label not in banned_labels})
+        ent_names: list[str] = list({ent.name for ent in message_ents})
         for ent in ent_names:
             if db_message not in knowledge_dict[ent].messages:
                 knowledge_dict[ent].messages.append(db_message)
@@ -371,7 +368,6 @@ async def fill_context(
 ) -> str:
     max_context = context_size
     max_grimoire_context = max_context * current_settings["context_percentage"]
-    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME"]
     pattern = instruct_regex(current_settings)
     pattern_with_delimiters = f"({pattern})"
     messages = re.split(pattern, prompt)
@@ -396,7 +392,7 @@ async def fill_context(
         messages.insert(an_message_index + 1, an_text)
 
     prompt_definitions = messages[0]  # first portion should always be instruction and char definitions
-    unique_ents = get_ordered_entities(banned_labels, entity_list)
+    unique_ents = get_ordered_entities(entity_list)
     summaries = get_summaries(chat, unique_ents, db_session)
 
     prompt_entries = {
@@ -602,11 +598,11 @@ def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]], session: Sessi
     return summaries
 
 
-def get_ordered_entities(banned_labels: list[str], entity_list: list[list[NamedEntity]]) -> list[tuple[str, str]]:
+def get_ordered_entities(entity_list: list[list[NamedEntity]]) -> list[tuple[str, str]]:
     full_ent_list = []
 
     for entities in entity_list:
-        ent_list = [(ent.name, ent.label) for ent in entities if ent.label not in banned_labels]
+        ent_list = [(ent.name, ent.label) for ent in entities]
         full_ent_list += ent_list
 
     unique_ents = list(dict.fromkeys(full_ent_list[::-1]))  # unique ents ordered from bottom of context
