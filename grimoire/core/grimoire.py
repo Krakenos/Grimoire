@@ -347,7 +347,7 @@ def save_named_entities(
 
     # Link new messages to knowledge and update counter
     for db_message in chat.messages:
-        message_ents = entity_dict[db_message.text]
+        message_ents = entity_dict[db_message.message]
         ent_names: list[str] = list({ent.name for ent in message_ents if ent.label not in banned_labels})
         for ent in ent_names:
             if db_message not in knowledge_dict[ent].messages:
