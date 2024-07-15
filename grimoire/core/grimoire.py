@@ -92,35 +92,6 @@ def add_missing_docs(message_indices: list[int], docs_dict: dict[str, Doc], chat
     session.commit()
 
 
-@time_execution
-def get_docs(messages: list[str], chat: Chat, session: Session) -> tuple[list[Doc], dict[str, Doc]]:
-    docs = []
-    docs_dict = {}
-    to_process = []
-    messages_to_update = []
-    for index, message in enumerate(chat.messages):
-        if message.spacy_doc is not None:
-            doc_bin = DocBin().from_bytes(message.spacy_doc)
-            spacy_doc = list(doc_bin.get_docs(nlp.vocab))[0]
-            docs_dict[message.message] = spacy_doc
-        else:  # if something went wrong and message doesn't have doc
-            messages_to_update.append(index)
-
-    for message in messages:
-        if message not in docs_dict:
-            to_process.append(message)
-
-    new_docs = list(nlp.pipe(to_process))
-    for text, doc in zip(to_process, new_docs, strict=False):
-        docs_dict[text] = doc
-    for message in messages:
-        docs.append(docs_dict[message])
-
-    if messages_to_update:
-        add_missing_docs(messages_to_update, docs_dict, chat, session)
-
-    return docs, docs_dict
-
 
 @time_execution
 def get_named_entities(messages: list[str], chat: Chat) -> tuple[list[list[NamedEntity]], dict[str, list[NamedEntity]]]:
@@ -275,7 +246,6 @@ async def process_prompt(
     chat = get_chat(user, chat_id, chat_messages, db_session)
 
     doc_time = timeit.default_timer()
-    # docs, docs_dict = get_docs(chat_messages, chat, db_session)
     entity_list, entity_dict = get_named_entities(chat_messages, chat)
     doc_end_time = timeit.default_timer()
     general_logger.debug(f"Getting named entities {doc_end_time - doc_time} seconds")
@@ -411,97 +381,6 @@ async def fill_context(
 
     return final_prompt
 
-
-# Old culling method, probably safe to remove
-def grimoire_entries_culling(
-    api_type: str,
-    definitions_context_len: int,
-    grimoire_text: str,
-    grimoire_text_len: int,
-    max_context: int,
-    min_message_context: int,
-    current_settings: dict,
-) -> str | None:
-    starting_grimoire_index = 0
-    max_grimoire_context = max_context - definitions_context_len - min_message_context
-    grimoire_entry_list = grimoire_text.splitlines()
-    max_grimoire_index = len(grimoire_entry_list) - 1
-
-    # This should never happen unless there is some bug in frontend, and it sent prompt that's above context window
-    if max_grimoire_context < 0:
-        general_logger.error("Prompt is above declared max context.")
-        return None
-
-    while max_grimoire_context < grimoire_text_len and starting_grimoire_index < max_grimoire_index:
-        starting_grimoire_index += 1
-        grimoire_text = "\n".join(grimoire_entry_list[starting_grimoire_index:])
-        grimoire_text_len = count_context(
-            text=grimoire_text,
-            api_type=api_type,
-            api_url=current_settings["main_api"]["url"],
-            api_auth=current_settings["main_api"]["auth_key"],
-        )
-
-    return grimoire_text
-
-
-# Old culling method, probably safe to remove
-def chat_messages_culling(
-    api_type: str,
-    injected_prompt_indices: list[int],
-    max_chat_context: int,
-    messages_with_delimiters: list[str],
-    current_settings: dict,
-) -> tuple[bool, str, int]:
-    first_instruct_index = 1
-    messages_text = "".join(messages_with_delimiters[first_instruct_index:])
-    messages_len = count_context(
-        text=messages_text,
-        api_type=api_type,
-        api_url=current_settings["main_api"]["url"],
-        api_auth=current_settings["main_api"]["auth_key"],
-    )
-    messages_to_merge = dict(enumerate(messages_with_delimiters))
-    messages_to_merge.pop(0)
-    context_overflow = False
-    max_index = max(messages_to_merge.keys()) - current_settings["preserved_messages"] * 2
-    min_message_context = 0
-
-    while messages_len > max_chat_context:
-        first_message_index = first_instruct_index + 1
-        first_instruct_index += 2
-
-        if first_message_index in injected_prompt_indices:
-            continue
-
-        if first_instruct_index > max_index:
-            context_overflow = True
-            min_message_context = messages_len
-            break
-
-        messages_to_merge.pop(first_instruct_index)  # pop the instruct part
-        messages_to_merge.pop(first_message_index)  # pop actual message content
-
-        messages_list = [messages_to_merge[index] for index in sorted(messages_to_merge.keys())]
-        first_instruct = messages_list[0]
-        first_output_seq = current_settings["main_api"]["first_output_sequence"]
-        output_seq = current_settings["main_api"]["output_sequence"]
-        separator_seq = current_settings["main_api"]["separator_sequence"]
-
-        if first_instruct == output_seq and first_output_seq:
-            messages_list[0] = first_output_seq
-        elif separator_seq in first_instruct:
-            messages_list[0] = first_instruct.replace(separator_seq, "")
-
-        messages_text = "".join(messages_list)
-        messages_len = count_context(
-            text=messages_text,
-            api_type=api_type,
-            api_url=current_settings["main_api"]["url"],
-            api_auth=current_settings["main_api"]["auth_key"],
-        )
-
-    return context_overflow, messages_text, min_message_context
 
 
 @async_time_execution
