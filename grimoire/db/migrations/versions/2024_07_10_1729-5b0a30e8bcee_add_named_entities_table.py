@@ -27,7 +27,7 @@ def upgrade() -> None:
         sa.Column("entity_name", sa.String(), nullable=False),
         sa.Column("entity_label", sa.String(), nullable=False),
         sa.ForeignKeyConstraint(
-            ["chat_id"],
+            ["message_id"],
             ["message.id"],
         ),
         sa.PrimaryKeyConstraint("id"),
