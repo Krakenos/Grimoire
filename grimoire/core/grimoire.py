@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, selectinload, with_loader_criteria
 
 from grimoire.api.schemas.passthrough import GenerationData, Instruct
 from grimoire.api.schemas.passthrough import Message as RequestMessage
-from grimoire.common.llm_helpers import count_context, token_count
+from grimoire.common.llm_helpers import token_count
 from grimoire.common.loggers import context_logger, general_logger
 from grimoire.common.utils import async_time_execution, time_execution
 from grimoire.core.settings import settings
@@ -90,7 +90,6 @@ def add_missing_docs(message_indices: list[int], docs_dict: dict[str, Doc], chat
         chat.messages[message_index].spacy_doc = bytes_data
     session.add(chat)
     session.commit()
-
 
 
 @time_execution
@@ -380,7 +379,6 @@ async def fill_context(
     final_prompt = await prompt_culling(api_type, prompt_entries, context_size, current_settings)
 
     return final_prompt
-
 
 
 @async_time_execution
