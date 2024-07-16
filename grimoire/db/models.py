@@ -48,8 +48,17 @@ class Message(Base):
     summary_tokens: Mapped[int | None]
     message_tokens: Mapped[int | None]
     created_date: Mapped[datetime] = mapped_column(default=datetime.now)
-    spacy_doc: Mapped[bytes | None]
+    spacy_named_entities: Mapped[list["SpacyNamedEntity"]] = relationship()
     knowledge: Mapped[list["Knowledge"]] = relationship(secondary=knowledge_message, back_populates="messages")
+
+
+class SpacyNamedEntity(Base):
+    __tablename__ = "spacy_named_entities"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("message.id"))
+    entity_name: Mapped[str]
+    entity_label: Mapped[str]
 
 
 class Chat(Base):
