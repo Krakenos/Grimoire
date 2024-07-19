@@ -611,7 +611,7 @@ def process_request(external_chat_id: str, chat_texts: list[str], db_session, ex
 
     unique_ents = get_ordered_entities(entity_list)
     summaries = get_summaries(chat, unique_ents, db_session)
-    summaries = [KnowledgeData(text=summary[0], relevance=index) for index, summary in enumerate(summaries, 1)]
+    summaries = [KnowledgeData(text=summary[0], relevancy=index) for index, summary in enumerate(summaries, 1)]
     end_time = timeit.default_timer()
     general_logger.info(f"Request processing time: {end_time - start_time}s")
     return summaries
