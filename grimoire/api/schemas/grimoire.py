@@ -48,3 +48,21 @@ class KnowledgeIn(BaseModel):
 
 class ExternalId(BaseModel):
     external_id: str
+
+
+class ChatDataMessage(BaseModel):
+    external_id: str | None = None
+    sender_name: str
+    text: str
+
+
+class ChatData(BaseModel):
+    external_chat_id: str
+    external_user_id: str | None = None
+    max_tokens: int | None = None
+    messages: list[ChatDataMessage]
+
+
+class KnowledgeData(BaseModel):
+    text: str
+    relevancy: int

@@ -9,6 +9,7 @@ from spacy.tokens import Doc, DocBin
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, with_loader_criteria
 
+from grimoire.api.schemas.grimoire import KnowledgeData
 from grimoire.api.schemas.passthrough import GenerationData, Instruct
 from grimoire.api.schemas.passthrough import Message as RequestMessage
 from grimoire.common.llm_helpers import token_count
@@ -147,8 +148,8 @@ def get_extra_info(
 
 
 @time_execution
-def get_user(user_id: str | None, current_settings: dict, session: Session) -> User:
-    if user_id and current_settings["multi_user_mode"]:
+def get_user(user_id: str | None, session: Session) -> User:
+    if user_id:
         query = select(User).where(User.external_id == user_id)
     else:
         query = select(User).where(User.external_id == "DEFAULT_USER", User.id == 1)
@@ -241,7 +242,7 @@ async def process_prompt(
     else:
         chat_messages = all_messages
 
-    user = get_user(user_id, current_settings, db_session)
+    user = get_user(user_id, db_session)
     chat = get_chat(user, chat_id, chat_messages, db_session)
 
     doc_time = timeit.default_timer()
@@ -452,7 +453,7 @@ def generate_grimoire_entries(max_grimoire_context: int, summaries: list[tuple[s
         summaries.pop()
         grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
 
-    grimoire_entries = [f"[ {summary[2]}: {summary[0]} ]\n" for summary in summaries]
+    grimoire_entries = [f"{summary[0]}\n" for summary in summaries]
     return grimoire_entries
 
 
@@ -576,3 +577,59 @@ def instruct_regex(current_settings: dict) -> str:
     if current_settings["main_api"]["collapse_newlines"]:
         pattern = re.sub(r"(\\\n)+", "\\\n", pattern)
     return pattern
+
+
+def process_request(
+    external_chat_id: str,
+    chat_texts: list[str],
+    db_session,
+    external_user_id: str | None = None,
+    token_limit: int | None = None,
+):
+    start_time = timeit.default_timer()
+    excluded_messages = 4
+
+    user = get_user(external_user_id, db_session)
+    chat = get_chat(user, external_chat_id, chat_texts, db_session)
+
+    doc_time = timeit.default_timer()
+    entity_list, entity_dict = get_named_entities(chat_texts, chat)
+    doc_end_time = timeit.default_timer()
+    general_logger.debug(f"Getting named entities {doc_end_time - doc_time} seconds")
+    last_messages = chat_texts[:-excluded_messages]  # exclude last few messages from saving
+    last_entities = entity_list[:-excluded_messages]
+    new_message_indices, chat = save_messages(last_messages, entity_dict, chat, db_session)
+    save_named_entities(chat, entity_list, entity_dict, db_session)
+
+    entities_to_summarize = [last_entities[index] for index in new_message_indices]
+
+    for entities in entities_to_summarize:
+        for entity in set(entities):
+            general_logger.debug(f"{entity.name}, {entity.label}, {spacy.explain(entity.label)}")
+            summarize.delay(
+                entity.name.lower(),
+                entity.label,
+                chat.id,
+                settings["side_api"],
+                settings["summarization"],
+                settings["DB_ENGINE"],
+            )
+
+    unique_ents = get_ordered_entities(entity_list)
+    summaries = get_summaries(chat, unique_ents, db_session)
+
+    knowledge_data = []
+    if token_limit:
+        current_tokens = 0
+        for index, summary in enumerate(summaries, 1):
+            current_tokens += summary[1]
+            if current_tokens < token_limit:
+                knowledge_data.append(KnowledgeData(text=summary[0], relevancy=index))
+            else:
+                break
+    else:
+        knowledge_data = [KnowledgeData(text=summary[0], relevancy=index) for index, summary in enumerate(summaries, 1)]
+
+    end_time = timeit.default_timer()
+    general_logger.info(f"Request processing time: {end_time - start_time}s")
+    return knowledge_data

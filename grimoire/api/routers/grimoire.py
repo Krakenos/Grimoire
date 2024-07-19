@@ -4,17 +4,20 @@ from starlette import status
 from starlette.responses import Response
 
 from grimoire.api.schemas.grimoire import (
+    ChatData,
     ChatIn,
     ChatMessageIn,
     ChatMessageOut,
     ChatOut,
     ExternalId,
+    KnowledgeData,
     KnowledgeIn,
     KnowledgeOut,
     UserIn,
     UserOut,
 )
 from grimoire.common import api_utils
+from grimoire.core.grimoire import process_request
 from grimoire.db.connection import get_db
 
 router = APIRouter(tags=["Grimoire specific endpoints"])
@@ -168,3 +171,9 @@ def delete_knowledge(user_id: int, chat_id: int, knowledge_id: int, db: Session 
     db.delete(db_knowledge)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/get_data", response_model=list[KnowledgeData])
+def get_data(chat_data: ChatData, db: Session = Depends(get_db)):
+    chat_texts = [message.text for message in chat_data.messages]
+    return process_request(chat_data.external_chat_id, chat_texts, db, chat_data.external_user_id, chat_data.max_tokens)
