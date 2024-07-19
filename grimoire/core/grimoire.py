@@ -579,7 +579,7 @@ def instruct_regex(current_settings: dict) -> str:
     return pattern
 
 
-def process_request(external_chat_id: str, chat_texts: list[str], db_session, external_user_id: str | None = None):
+def process_request(external_chat_id: str, chat_texts: list[str], db_session, external_user_id: str | None = None, token_limit: int | None = None):
     start_time = timeit.default_timer()
     excluded_messages = 4
 
@@ -611,7 +611,19 @@ def process_request(external_chat_id: str, chat_texts: list[str], db_session, ex
 
     unique_ents = get_ordered_entities(entity_list)
     summaries = get_summaries(chat, unique_ents, db_session)
-    summaries = [KnowledgeData(text=summary[0], relevancy=index) for index, summary in enumerate(summaries, 1)]
+
+    knowledge_data = []
+    if token_limit:
+        current_tokens = 0
+        for index, summary in enumerate(summaries, 1):
+            current_tokens += summary[1]
+            if current_tokens < token_limit:
+                knowledge_data.append(KnowledgeData(text=summary[0], relevancy=index))
+            else:
+                break
+    else:
+        knowledge_data = [KnowledgeData(text=summary[0], relevancy=index) for index, summary in enumerate(summaries, 1)]
+
     end_time = timeit.default_timer()
     general_logger.info(f"Request processing time: {end_time - start_time}s")
-    return summaries
+    return knowledge_data
