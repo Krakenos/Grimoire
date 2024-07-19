@@ -65,4 +65,4 @@ class ChatData(BaseModel):
 
 class KnowledgeData(BaseModel):
     text: str
-    relevancy: int
+    relevance: int

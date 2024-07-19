@@ -101,11 +101,11 @@ This will run messages through the pipeline, save them, queue new summaries, and
 [
   {
     "text": "Some summary 1",
-    "relevancy": 1
+    "relevance": 1
   },
   {
     "text": "Some summary 2",
-    "relevancy": 2
+    "relevance": 2
   }
 ]
 ```

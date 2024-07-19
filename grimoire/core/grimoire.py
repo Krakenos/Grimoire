@@ -624,11 +624,11 @@ def process_request(
         for index, summary in enumerate(summaries, 1):
             current_tokens += summary[1]
             if current_tokens < token_limit:
-                knowledge_data.append(KnowledgeData(text=summary[0], relevancy=index))
+                knowledge_data.append(KnowledgeData(text=summary[0], relevance=index))
             else:
                 break
     else:
-        knowledge_data = [KnowledgeData(text=summary[0], relevancy=index) for index, summary in enumerate(summaries, 1)]
+        knowledge_data = [KnowledgeData(text=summary[0], relevance=index) for index, summary in enumerate(summaries, 1)]
 
     end_time = timeit.default_timer()
     general_logger.info(f"Request processing time: {end_time - start_time}s")
