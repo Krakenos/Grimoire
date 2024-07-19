@@ -579,7 +579,13 @@ def instruct_regex(current_settings: dict) -> str:
     return pattern
 
 
-def process_request(external_chat_id: str, chat_texts: list[str], db_session, external_user_id: str | None = None, token_limit: int | None = None):
+def process_request(
+    external_chat_id: str,
+    chat_texts: list[str],
+    db_session,
+    external_user_id: str | None = None,
+    token_limit: int | None = None,
+):
     start_time = timeit.default_timer()
     excluded_messages = 4
 
