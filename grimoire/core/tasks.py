@@ -122,6 +122,7 @@ def summarize(
             retry_interval,
         )
         summary_text = summary_text.replace("\n\n", "\n")
+        summary_text = f"[ {knowledge_entry.entity}: {summary_text} ]"
         knowledge_entry.summary = summary_text
         knowledge_entry.token_count = count_context(
             summary_text, summarization_backend, summarization_url, summarization_auth
