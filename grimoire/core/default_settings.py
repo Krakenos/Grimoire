@@ -8,6 +8,7 @@ defaults = {
     "LOG_PROMPTS": False,
     "LOG_FILES": False,
     "AUTH_KEY": "",
+    "ENCRYPTION_KEY": "",
     "single_api_mode": False,
     "multi_user_mode": False,
     "prefer_gpu": False,
