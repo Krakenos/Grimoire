@@ -18,6 +18,7 @@ from grimoire.common.utils import async_time_execution, time_execution
 from grimoire.core.settings import settings
 from grimoire.core.tasks import summarize
 from grimoire.db.models import Chat, Knowledge, Message, SpacyNamedEntity, User
+from grimoire.db.queries import get_knowledge_entities
 
 
 @dataclass(frozen=True, eq=True)
@@ -293,12 +294,8 @@ def save_named_entities(
     unique_ents: list[NamedEntity] = list(set(chain(*entity_list)))
 
     unique_ent_names = list({ent.name.lower() for ent in unique_ents})
-    query = select(Knowledge).where(
-        func.lower(Knowledge.entity).in_(unique_ent_names),
-        Knowledge.entity_type == "NAMED ENTITY",
-        Knowledge.chat_id == chat.id,
-    )
-    knowledge_entries = session.scalars(query).all()
+
+    knowledge_entries = get_knowledge_entities(unique_ent_names, chat.id, session)
     db_entry_names = [entry.entity.lower() for entry in knowledge_entries]
     new_knowledge = []
     for ent in unique_ents:
@@ -460,18 +457,13 @@ def generate_grimoire_entries(max_grimoire_context: int, summaries: list[tuple[s
 def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]], session: Session) -> list[tuple[str, int, str]]:
     summaries = []
     lower_ent_names = [name.lower() for name, _ in unique_ents]
-    query = select(Knowledge).where(
-        func.lower(Knowledge.entity).in_(lower_ent_names),
-        Knowledge.entity_type == "NAMED ENTITY",
-        Knowledge.chat_id == chat.id,
-        Knowledge.summary.isnot(None),
-        Knowledge.token_count.isnot(None),
-        Knowledge.token_count != 0,
-    )
-    knowledge_ents = session.scalars(query).all()
-
-    for instance in knowledge_ents:
-        summaries.append((instance.summary, instance.token_count, instance.entity))
+    knowledge_ents = get_knowledge_entities(lower_ent_names, chat.id, session)
+    knowledge_dict = {
+        knowledge_ent.entity.lower(): knowledge_ent for knowledge_ent in knowledge_ents if knowledge_ent.summary
+    }
+    ordered_knowledge_ents = [knowledge_dict[ent_name] for ent_name in lower_ent_names if ent_name in knowledge_dict]
+    for knowledge_entity in ordered_knowledge_ents:
+        summaries.append((knowledge_entity.summary, knowledge_entity.token_count, knowledge_entity.entity))
 
     return summaries
 
