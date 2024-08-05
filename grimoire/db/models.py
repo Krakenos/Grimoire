@@ -1,7 +1,13 @@
 from datetime import datetime
 
-from sqlalchemy import Column, ForeignKey, Table
+from sqlalchemy import Column, ForeignKey, Table, Unicode
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy_utils import StringEncryptedType
+from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
+
+from grimoire.core.settings import settings
+
+encryption_key = settings["ENCRYPTION_KEY"]
 
 
 class Base(DeclarativeBase):
@@ -22,10 +28,10 @@ class Knowledge(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     chat_id: Mapped[int] = mapped_column(ForeignKey("chat.id"))
     chat: Mapped["Chat"] = relationship(back_populates="knowledge")
-    entity: Mapped[str]
+    entity = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=False)
     entity_type: Mapped[str | None]
     entity_label: Mapped[str | None]
-    summary: Mapped[str | None]
+    summary = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"))
     token_count: Mapped[int | None]
     messages: Mapped[list["Message"]] = relationship(secondary=knowledge_message, back_populates="knowledge")
     updated_date: Mapped[datetime] = mapped_column(default=datetime.now)
@@ -43,8 +49,8 @@ class Message(Base):
     chat_id: Mapped[int] = mapped_column(ForeignKey("chat.id"))
     chat: Mapped["Chat"] = relationship(back_populates="messages")
     message_index: Mapped[int]
-    summary: Mapped[str | None]
-    message: Mapped[str]
+    summary = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"))
+    message = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=False)
     summary_tokens: Mapped[int | None]
     message_tokens: Mapped[int | None]
     created_date: Mapped[datetime] = mapped_column(default=datetime.now)
@@ -57,7 +63,7 @@ class SpacyNamedEntity(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     message_id: Mapped[int] = mapped_column(ForeignKey("message.id"))
-    entity_name: Mapped[str]
+    entity_name = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=False)
     entity_label: Mapped[str]
 
 

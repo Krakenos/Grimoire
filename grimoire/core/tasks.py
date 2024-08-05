@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 from grimoire.common.llm_helpers import count_context, generate_text
 from grimoire.common.loggers import general_logger, summary_logger
 from grimoire.core.settings import settings
-from grimoire.db.models import Knowledge, Message
+from grimoire.db.models import Message
+from grimoire.db.queries import get_knowledge_entity
 
 celery_app = Celery("tasks", broker=settings["CELERY_BROKER_URL"])
 
@@ -79,11 +80,7 @@ def summarize(
     context_len = api_settings["context_length"]
     response_len = summarization_settings["max_tokens"]
     with Session(db) as session:
-        knowledge_entry = (
-            session.query(Knowledge)
-            .filter(Knowledge.entity.ilike(term), Knowledge.entity_type == "NAMED ENTITY", Knowledge.chat_id == chat_id)
-            .first()
-        )
+        knowledge_entry = get_knowledge_entity(term, chat_id, session)
 
         if knowledge_entry.update_count < limit_rate:  # Don't summarize if it's below the limit
             general_logger.info("Skipping entry to summarize, messages amount below limit rate")
