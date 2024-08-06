@@ -52,3 +52,7 @@ summarization:
   bos_token: '<s>'
   max_tokens: 300
   params': {'min_p': 0.1, 'rep_pen': 1.0, 'temperature': 0.6, 'stop': ['</s>'], 'stop_sequence': ['</s>']}
+
+secondary_database:
+  enabled: False
+  db_engine: 'postgresql+psycopg2://user:password@database_url:5430/database_name'
