@@ -176,4 +176,12 @@ def delete_knowledge(user_id: int, chat_id: int, knowledge_id: int, db: Session 
 @router.post("/get_data", response_model=list[KnowledgeData])
 def get_data(chat_data: ChatData, db: Session = Depends(get_db)):
     chat_texts = [message.text for message in chat_data.messages]
-    return process_request(chat_data.external_chat_id, chat_texts, db, chat_data.external_user_id, chat_data.max_tokens)
+    messages_external_ids = [message.external_id for message in chat_data.messages]
+    return process_request(
+        chat_data.external_chat_id,
+        chat_texts,
+        messages_external_ids,
+        db,
+        chat_data.external_user_id,
+        chat_data.max_tokens,
+    )

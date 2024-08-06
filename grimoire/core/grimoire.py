@@ -164,12 +164,25 @@ def get_user(user_id: str | None, session: Session) -> User:
 
 
 @time_execution
-def get_chat(user: User, chat_id: str, current_messages: list[str], session: Session) -> Chat:
+def get_chat(
+    user: User, chat_id: str, current_messages: list[str], messages_external_ids: list[str], session: Session
+) -> Chat:
     query = (
         select(Chat)
         .where(Chat.external_id == chat_id, Chat.user_id == user.id)
         .options(selectinload(Chat.messages), with_loader_criteria(Message, Message.message.in_(current_messages)))
     )
+
+    if settings["secondary_database"]["enabled"]:
+        query = (
+            select(Chat)
+            .where(Chat.external_id == chat_id, Chat.user_id == user.id)
+            .options(
+                selectinload(Chat.messages),
+                with_loader_criteria(Message, Message.external_id.in_(messages_external_ids)),
+            )
+        )
+
     chat = session.scalars(query).first()
     if chat is None:
         chat = Chat(external_id=chat_id, user_id=user.id)
@@ -574,6 +587,7 @@ def instruct_regex(current_settings: dict) -> str:
 def process_request(
     external_chat_id: str,
     chat_texts: list[str],
+    messages_external_ids: list[str],
     db_session,
     external_user_id: str | None = None,
     token_limit: int | None = None,
@@ -582,7 +596,7 @@ def process_request(
     excluded_messages = 4
 
     user = get_user(external_user_id, db_session)
-    chat = get_chat(user, external_chat_id, chat_texts, db_session)
+    chat = get_chat(user, external_chat_id, messages_external_ids, chat_texts, db_session)
 
     doc_time = timeit.default_timer()
     entity_list, entity_dict = get_named_entities(chat_texts, chat)
