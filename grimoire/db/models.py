@@ -46,7 +46,7 @@ class Message(Base):
     __tablename__ = "message"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    external_id: Mapped[int | None]
+    external_id: Mapped[str | None]
     chat_id: Mapped[int] = mapped_column(ForeignKey("chat.id"))
     chat: Mapped["Chat"] = relationship(back_populates="messages")
     message_index: Mapped[int]
