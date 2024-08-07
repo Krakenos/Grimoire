@@ -95,19 +95,34 @@ def add_missing_docs(message_indices: list[int], docs_dict: dict[str, Doc], chat
 
 
 @time_execution
-def get_named_entities(messages: list[str], chat: Chat) -> tuple[list[list[NamedEntity]], dict[str, list[NamedEntity]]]:
+def get_named_entities(
+    messages: list[str], messages_external_ids: list[str], chat: Chat
+) -> tuple[list[list[NamedEntity]], dict[str, list[NamedEntity]]]:
     entity_list = []
     entity_dict = {}
     to_process = []
     banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME"]
+    external_id_map = {}
+
+    if settings["secondary_database"]["enabled"]:
+        for message, external_id in zip(messages, messages_external_ids, strict=True):
+            external_id_map[external_id] = message
+
     for message in chat.messages:
+        named_entities = []
         if message.spacy_named_entities:
             named_entities = [
                 NamedEntity(name=ent.entity_name, label=ent.entity_label) for ent in message.spacy_named_entities
             ]
+
+        entity_dict[message.message] = named_entities
+
+        if message.external_id and external_id_map:
+            entity_dict[external_id_map[message.external_id]] = named_entities
+        elif message.message:
             entity_dict[message.message] = named_entities
         else:
-            entity_dict[message.message] = []
+            raise ValueError("No external id or message provided")
 
     for message in messages:
         if message not in entity_dict:
@@ -115,7 +130,7 @@ def get_named_entities(messages: list[str], chat: Chat) -> tuple[list[list[Named
 
     new_docs = list(nlp.pipe(to_process))
 
-    for text, doc in zip(to_process, new_docs, strict=False):
+    for text, doc in zip(to_process, new_docs, strict=True):
         entities = [NamedEntity(ent.text, ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
         entity_dict[text] = entities
     for message in messages:
@@ -599,7 +614,7 @@ def process_request(
     chat = get_chat(user, external_chat_id, messages_external_ids, chat_texts, db_session)
 
     doc_time = timeit.default_timer()
-    entity_list, entity_dict = get_named_entities(chat_texts, chat)
+    entity_list, entity_dict = get_named_entities(chat_texts, messages_external_ids, chat)
     doc_end_time = timeit.default_timer()
     general_logger.debug(f"Getting named entities {doc_end_time - doc_time} seconds")
     last_messages = chat_texts[:-excluded_messages]  # exclude last few messages from saving
