@@ -41,45 +41,87 @@ nlp = spacy.load("en_core_web_trf")
 
 @time_execution
 def save_messages(
-    messages: list[str], entity_dict: dict[str, list[NamedEntity]], chat: Chat, session: Session
+    messages: list[str],
+    messages_external_ids: list[str],
+    entity_dict: dict[str, list[NamedEntity]],
+    chat: Chat,
+    session: Session,
 ) -> tuple[list[int], Chat]:
     """
     Saves messages to and returns indices of new messages
     :param messages:
+    :param messages_external_ids:
     :param entity_dict:
     :param chat:
     :param session:
     :return: indices of new messages and updated chat object
     """
     new_messages_indices = []
-    db_messages = [message.message for message in chat.messages]
-    message_number = 0
-    for index, message in enumerate(messages):
-        if message not in db_messages:
-            new_messages_indices.append(index)
+    if settings["secondary_database"]["enabled"]:
+        db_external_ids = [message.external_id for message in chat.messages]
+        message_number = 0
+        for index, external_id in enumerate(messages_external_ids):
+            if external_id not in db_external_ids:
+                new_messages_indices.append(index)
 
-    if db_messages:
-        query = select(func.max(Message.message_index)).where(Message.chat_id == chat.id)
-        message_number = session.execute(query).one()[0]
+        if chat.messages:
+            query = select(func.max(Message.message_index)).where(Message.chat_id == chat.id)
+            message_number = session.execute(query).one()[0]
 
-    message_number += 1
-
-    for index in new_messages_indices:
-        message_to_add = messages[index]
-        named_entities = entity_dict[message_to_add]
-        db_named_entities = [
-            SpacyNamedEntity(entity_name=named_ent.name, entity_label=named_ent.label) for named_ent in named_entities
-        ]
-        chat.messages.append(
-            Message(message=message_to_add, message_index=message_number, spacy_named_entities=db_named_entities)
-        )
         message_number += 1
 
-    session.add(chat)
-    session.commit()
-    session.refresh(chat)
+        for index in new_messages_indices:
+            message_to_add = messages[index]
+            named_entities = entity_dict[message_to_add]
+            db_named_entities = [
+                SpacyNamedEntity(entity_name=named_ent.name, entity_label=named_ent.label)
+                for named_ent in named_entities
+            ]
+            chat.messages.append(
+                Message(
+                    external_id=messages_external_ids[index],
+                    message_index=message_number,
+                    spacy_named_entities=db_named_entities,
+                )
+            )
+            message_number += 1
 
-    return new_messages_indices, chat
+        session.add(chat)
+        session.commit()
+        session.refresh(chat)
+
+        return new_messages_indices, chat
+
+    else:
+        db_messages = [message.message for message in chat.messages]
+        message_number = 0
+        for index, message in enumerate(messages):
+            if message not in db_messages:
+                new_messages_indices.append(index)
+
+        if db_messages:
+            query = select(func.max(Message.message_index)).where(Message.chat_id == chat.id)
+            message_number = session.execute(query).one()[0]
+
+        message_number += 1
+
+        for index in new_messages_indices:
+            message_to_add = messages[index]
+            named_entities = entity_dict[message_to_add]
+            db_named_entities = [
+                SpacyNamedEntity(entity_name=named_ent.name, entity_label=named_ent.label)
+                for named_ent in named_entities
+            ]
+            chat.messages.append(
+                Message(message=message_to_add, message_index=message_number, spacy_named_entities=db_named_entities)
+            )
+            message_number += 1
+
+        session.add(chat)
+        session.commit()
+        session.refresh(chat)
+
+        return new_messages_indices, chat
 
 
 @time_execution
@@ -618,8 +660,9 @@ def process_request(
     doc_end_time = timeit.default_timer()
     general_logger.debug(f"Getting named entities {doc_end_time - doc_time} seconds")
     last_messages = chat_texts[:-excluded_messages]  # exclude last few messages from saving
+    last_external_ids = messages_external_ids[:-excluded_messages]
     last_entities = entity_list[:-excluded_messages]
-    new_message_indices, chat = save_messages(last_messages, entity_dict, chat, db_session)
+    new_message_indices, chat = save_messages(last_messages, last_external_ids, entity_dict, chat, db_session)
     save_named_entities(chat, entity_list, entity_dict, db_session)
 
     entities_to_summarize = [last_entities[index] for index in new_message_indices]
