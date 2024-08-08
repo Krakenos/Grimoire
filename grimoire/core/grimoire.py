@@ -359,7 +359,11 @@ async def process_prompt(
 
 @time_execution
 def save_named_entities(
-    chat: Chat, entity_list: list[list[NamedEntity]], entity_dict: dict[str, list[NamedEntity]], session: Session
+    chat: Chat,
+    entity_list: list[list[NamedEntity]],
+    entity_dict: dict[str, list[NamedEntity]],
+    external_id_map: dict[str, str],
+    session: Session,
 ) -> None:
     unique_ents: list[NamedEntity] = list(set(chain(*entity_list)))
 
@@ -380,15 +384,26 @@ def save_named_entities(
     knowledge_dict = {knowledge.entity: knowledge for knowledge in [*knowledge_entries, *new_knowledge]}
 
     # Link new messages to knowledge and update counter
-    for db_message in chat.messages:
-        message_ents = entity_dict[db_message.message]
-        ent_names: list[str] = list({ent.name for ent in message_ents})
-        for ent in ent_names:
-            if db_message not in knowledge_dict[ent].messages:
-                knowledge_dict[ent].messages.append(db_message)
-                knowledge_dict[ent].update_count += 1
-    session.add_all(knowledge_dict.values())
-    session.commit()
+    if settings["secondary_database"]["enabled"]:
+        for db_message in chat.messages:
+            message_ents = entity_dict[external_id_map[db_message.external_id]]
+            ent_names: list[str] = list({ent.name for ent in message_ents})
+            for ent in ent_names:
+                if db_message not in knowledge_dict[ent].messages:
+                    knowledge_dict[ent].messages.append(db_message)
+                    knowledge_dict[ent].update_count += 1
+        session.add_all(knowledge_dict.values())
+        session.commit()
+    else:
+        for db_message in chat.messages:
+            message_ents = entity_dict[db_message.message]
+            ent_names: list[str] = list({ent.name for ent in message_ents})
+            for ent in ent_names:
+                if db_message not in knowledge_dict[ent].messages:
+                    knowledge_dict[ent].messages.append(db_message)
+                    knowledge_dict[ent].update_count += 1
+        session.add_all(knowledge_dict.values())
+        session.commit()
 
 
 @async_time_execution
@@ -655,6 +670,11 @@ def process_request(
     user = get_user(external_user_id, db_session)
     chat = get_chat(user, external_chat_id, messages_external_ids, chat_texts, db_session)
 
+    external_message_map = {}
+
+    if settings["secondary_database"]["enabled"]:
+        external_message_map = dict(zip(messages_external_ids, chat_texts, strict=True))
+
     doc_time = timeit.default_timer()
     entity_list, entity_dict = get_named_entities(chat_texts, messages_external_ids, chat)
     doc_end_time = timeit.default_timer()
@@ -663,7 +683,7 @@ def process_request(
     last_external_ids = messages_external_ids[:-excluded_messages]
     last_entities = entity_list[:-excluded_messages]
     new_message_indices, chat = save_messages(last_messages, last_external_ids, entity_dict, chat, db_session)
-    save_named_entities(chat, entity_list, entity_dict, db_session)
+    save_named_entities(chat, entity_list, entity_dict, external_message_map, db_session)
 
     entities_to_summarize = [last_entities[index] for index in new_message_indices]
 
