@@ -56,3 +56,5 @@ summarization:
 secondary_database:
   enabled: False
   db_engine: 'postgresql+psycopg2://user:password@database_url:5430/database_name'
+  message_encryption: 'aesgcm'
+  encryption_key: !env MESSAGE_ENCRYPTION_KEY

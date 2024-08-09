@@ -55,5 +55,5 @@ defaults = {
         "max_tokens": 300,
         "params": {"min_p": 0.1, "rep_pen": 1.0, "temperature": 0.6, "stop": ["</s>"], "stop_sequence": ["</s>"]},
     },
-    "secondary_database": {"enabled": False, "db_engine": ""},
+    "secondary_database": {"enabled": False, "db_engine": "", "message_encryption": "aesgcm", "encryption_key": ""},
 }
