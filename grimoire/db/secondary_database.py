@@ -1,3 +1,4 @@
+import base64
 from collections import defaultdict
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -7,8 +8,8 @@ from grimoire.core.settings import settings
 
 secondary_db_engine = None
 
-if settings["secondary_db"]["enabled"]:
-    secondary_db_engine = create_engine(settings["secondary_db"]["db_engine"])
+if settings["secondary_database"]["enabled"]:
+    secondary_db_engine = create_engine(settings["secondary_database"]["db_engine"])
 
 
 def get_messages_from_external_db(message_ids: list[str]) -> list[str | None]:
@@ -26,14 +27,14 @@ def get_messages_from_external_db(message_ids: list[str]) -> list[str | None]:
     )
 
     with secondary_db_engine.connect() as conn:
-        message_rows = conn.execute(message_query, {"message_ids": message_ids})
-        swipe_rows = conn.execute(swipes_query, {"message_ids": message_ids})
+        message_rows = conn.execute(message_query, {"message_ids": tuple(message_ids)})
+        swipe_rows = conn.execute(swipes_query, {"message_ids": tuple(message_ids)})
 
         for row in swipe_rows:
-            messages_content[row[1]].append(row[2])
+            messages_content[str(row[1])].append(str(row[2]))
 
         for row in message_rows:
-            swipe_indices[row[0]] = row[2]
+            swipe_indices[str(row[0])] = int(row[2])
 
     encrypted_messages = [
         messages_content[message_id][swipe_indices[message_id]] if messages_content[message_id] != [] else None
@@ -45,12 +46,13 @@ def get_messages_from_external_db(message_ids: list[str]) -> list[str | None]:
 
 def decrypt_messages(encrypted_texts: list[str | None]) -> list[str | None]:
     key = settings["secondary_database"]["encryption_key"]
+    key = key.encode()
     nonce_size = 12
     aesgcm = AESGCM(key)
     decrypted_texts = []
     for encrypted_text in encrypted_texts:
         if encrypted_text is not None:
-            bytes_text = str.encode(encrypted_text)
+            bytes_text = base64.b64decode(encrypted_text)
             nonce = bytes_text[:nonce_size]
             encrypted_message = bytes_text[nonce_size:]
             decrypted_message = aesgcm.decrypt(nonce, encrypted_message, None)
