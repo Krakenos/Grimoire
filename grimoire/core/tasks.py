@@ -14,7 +14,12 @@ celery_app = Celery("tasks", broker=settings["CELERY_BROKER_URL"])
 
 
 def make_summary_prompt(
-    session, knowledge_entry, max_context: int, api_settings, summarization_settings, secondary_db=False
+    session,
+    knowledge_entry,
+    max_context: int,
+    api_settings,
+    summarization_settings,
+    secondary_database_settings,
 ) -> str | None:
     summarization_url = api_settings["url"]
     summarization_backend = api_settings["backend"]
@@ -22,6 +27,10 @@ def make_summary_prompt(
     input_sequence = api_settings["input_sequence"]
     input_suffix = api_settings["input_suffix"]
     output_sequence = api_settings["output_sequence"]
+    secondary_database = secondary_database_settings["enabled"]
+    secondary_database_url = secondary_database_settings["db_engine"]
+    secondary_database_encryption_method = secondary_database_settings["message_encryption"]
+    secondary_database_encryption_key = secondary_database_settings["encryption_key"]
     chat_id = knowledge_entry.chat_id
     if knowledge_entry.summary:
         summary = knowledge_entry.summary
@@ -33,7 +42,7 @@ def make_summary_prompt(
         chunk_indices.update([message_index - 1, message_index, message_index + 1])
     chunk_indices -= {-1, 0}
     final_indices = sorted(chunk_indices)
-    if secondary_db:
+    if secondary_database:
         query = (
             select(Message.external_id)
             .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
@@ -41,7 +50,12 @@ def make_summary_prompt(
         )
         query_results = session.execute(query).all()
         external_ids = [row[0] for row in query_results]
-        messages = get_messages_from_external_db(external_ids)
+        messages = get_messages_from_external_db(
+            external_ids,
+            secondary_database_url,
+            secondary_database_encryption_method,
+            secondary_database_encryption_key,
+        )
         messages = [message for message in messages if message is not None]
     else:
         query = (
@@ -94,7 +108,7 @@ def summarize(
     limit_rate = summarization_settings["limit_rate"]
     context_len = api_settings["context_length"]
     response_len = summarization_settings["max_tokens"]
-    secondary_database = secondary_database_settings["enabled"]
+
     with Session(db) as session:
         knowledge_entry = get_knowledge_entity(term, chat_id, session)
 
@@ -104,7 +118,12 @@ def summarize(
 
         max_prompt_context = context_len - response_len
         prompt = make_summary_prompt(
-            session, knowledge_entry, max_prompt_context, api_settings, summarization_settings, secondary_database
+            session,
+            knowledge_entry,
+            max_prompt_context,
+            api_settings,
+            summarization_settings,
+            secondary_database_settings,
         )
         if prompt is None:  # Edge case of having 1 message for summary, only may happen at start of chat
             general_logger.info("Skipping entry to summarize, only 1 message for term exists")

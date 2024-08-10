@@ -4,22 +4,16 @@ from collections import defaultdict
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import create_engine, text
 
-from grimoire.core.settings import settings
 
-secondary_db_engine = None
-
-if settings["secondary_database"]["enabled"]:
-    secondary_db_engine = create_engine(settings["secondary_database"]["db_engine"])
-
-
-def get_messages_from_external_db(message_ids: list[str]) -> list[str | None]:
-    if secondary_db_engine is None:
-        raise Exception("Secondary database engine not initialized")
+def get_messages_from_external_db(
+    message_ids: list[str], database_url: str, encryption_method: str, encryption_key: str
+) -> list[str | None]:
+    secondary_db_engine = create_engine(database_url)
 
     messages_content = defaultdict(lambda: [])
     swipe_indices = {}
 
-    message_query = text("SELECT id, messages, swipes_index FROM chat_messages WHERE id in :message_ids")
+    message_query = text("SELECT id, swipes_index FROM chat_messages WHERE id in :message_ids")
     swipes_query = text(
         "SELECT id, chat_message_id, content "
         "FROM message_swipes "
@@ -34,30 +28,34 @@ def get_messages_from_external_db(message_ids: list[str]) -> list[str | None]:
             messages_content[str(row[1])].append(str(row[2]))
 
         for row in message_rows:
-            swipe_indices[str(row[0])] = int(row[2])
+            swipe_indices[str(row[0])] = int(row[1])
 
     encrypted_messages = [
         messages_content[message_id][swipe_indices[message_id]] if messages_content[message_id] != [] else None
         for message_id in message_ids
     ]
-    messages = decrypt_messages(encrypted_messages)
+    messages = decrypt_messages(encrypted_messages, encryption_key, encryption_method)
     return messages
 
 
-def decrypt_messages(encrypted_texts: list[str | None]) -> list[str | None]:
-    key = settings["secondary_database"]["encryption_key"]
-    key = key.encode()
+def decrypt_messages(
+    encrypted_texts: list[str | None], encryption_key: str = "", encryption_method: str = "aesgcm"
+) -> list[str | None]:
+    key = encryption_key.encode()
     nonce_size = 12
     aesgcm = AESGCM(key)
     decrypted_texts = []
-    for encrypted_text in encrypted_texts:
-        if encrypted_text is not None:
-            bytes_text = base64.b64decode(encrypted_text)
-            nonce = bytes_text[:nonce_size]
-            encrypted_message = bytes_text[nonce_size:]
-            decrypted_message = aesgcm.decrypt(nonce, encrypted_message, None)
-            message = decrypted_message.decode()
-            decrypted_texts.append(message)
-        else:
-            decrypted_texts.append(None)
+    if encryption_method == "aesgcm":
+        for encrypted_text in encrypted_texts:
+            if encrypted_text is not None:
+                bytes_text = base64.b64decode(encrypted_text)
+                nonce = bytes_text[:nonce_size]
+                encrypted_message = bytes_text[nonce_size:]
+                decrypted_message = aesgcm.decrypt(nonce, encrypted_message, None)
+                message = decrypted_message.decode()
+                decrypted_texts.append(message)
+            else:
+                decrypted_texts.append(None)
+    else:
+        raise NotImplementedError
     return decrypted_texts
