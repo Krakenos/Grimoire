@@ -8,17 +8,29 @@ from grimoire.common.loggers import general_logger, summary_logger
 from grimoire.core.settings import settings
 from grimoire.db.models import Message
 from grimoire.db.queries import get_knowledge_entity
+from grimoire.db.secondary_database import get_messages_from_external_db
 
 celery_app = Celery("tasks", broker=settings["CELERY_BROKER_URL"])
 
 
-def make_summary_prompt(session, knowledge_entry, max_context: int, api_settings, summarization_settings) -> str | None:
+def make_summary_prompt(
+    session,
+    knowledge_entry,
+    max_context: int,
+    api_settings,
+    summarization_settings,
+    secondary_database_settings,
+) -> str | None:
     summarization_url = api_settings["url"]
     summarization_backend = api_settings["backend"]
     summarization_auth = api_settings["auth_key"]
     input_sequence = api_settings["input_sequence"]
     input_suffix = api_settings["input_suffix"]
     output_sequence = api_settings["output_sequence"]
+    secondary_database = secondary_database_settings["enabled"]
+    secondary_database_url = secondary_database_settings["db_engine"]
+    secondary_database_encryption_method = secondary_database_settings["message_encryption"]
+    secondary_database_encryption_key = secondary_database_settings["encryption_key"]
     chat_id = knowledge_entry.chat_id
     if knowledge_entry.summary:
         summary = knowledge_entry.summary
@@ -30,13 +42,29 @@ def make_summary_prompt(session, knowledge_entry, max_context: int, api_settings
         chunk_indices.update([message_index - 1, message_index, message_index + 1])
     chunk_indices -= {-1, 0}
     final_indices = sorted(chunk_indices)
-    query = (
-        select(Message.message)
-        .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
-        .order_by(Message.message_index)
-    )
-    query_results = session.execute(query).all()
-    messages = [row[0] for row in query_results]
+    if secondary_database:
+        query = (
+            select(Message.external_id)
+            .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
+            .order_by(Message.message_index)
+        )
+        query_results = session.execute(query).all()
+        external_ids = [row[0] for row in query_results]
+        messages = get_messages_from_external_db(
+            external_ids,
+            secondary_database_url,
+            secondary_database_encryption_method,
+            secondary_database_encryption_key,
+        )
+        messages = [message for message in messages if message is not None]
+    else:
+        query = (
+            select(Message.message)
+            .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
+            .order_by(Message.message_index)
+        )
+        query_results = session.execute(query).all()
+        messages = [row[0] for row in query_results]
     if len(messages) <= 1:
         return None
     prompt = ""
@@ -68,6 +96,7 @@ def summarize(
     chat_id: int,
     api_settings: dict,
     summarization_settings: dict,
+    secondary_database_settings: dict,
     db_engine: str,
     max_retries: int = 50,
     retry_interval: int = 1,
@@ -79,6 +108,7 @@ def summarize(
     limit_rate = summarization_settings["limit_rate"]
     context_len = api_settings["context_length"]
     response_len = summarization_settings["max_tokens"]
+
     with Session(db) as session:
         knowledge_entry = get_knowledge_entity(term, chat_id, session)
 
@@ -87,7 +117,14 @@ def summarize(
             return None
 
         max_prompt_context = context_len - response_len
-        prompt = make_summary_prompt(session, knowledge_entry, max_prompt_context, api_settings, summarization_settings)
+        prompt = make_summary_prompt(
+            session,
+            knowledge_entry,
+            max_prompt_context,
+            api_settings,
+            summarization_settings,
+            secondary_database_settings,
+        )
         if prompt is None:  # Edge case of having 1 message for summary, only may happen at start of chat
             general_logger.info("Skipping entry to summarize, only 1 message for term exists")
             return None

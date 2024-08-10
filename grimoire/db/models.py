@@ -46,13 +46,11 @@ class Message(Base):
     __tablename__ = "message"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    external_id: Mapped[str | None]
     chat_id: Mapped[int] = mapped_column(ForeignKey("chat.id"))
     chat: Mapped["Chat"] = relationship(back_populates="messages")
     message_index: Mapped[int]
-    summary = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"))
-    message = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=False)
-    summary_tokens: Mapped[int | None]
-    message_tokens: Mapped[int | None]
+    message = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=True)
     created_date: Mapped[datetime] = mapped_column(default=datetime.now)
     spacy_named_entities: Mapped[list["SpacyNamedEntity"]] = relationship()
     knowledge: Mapped[list["Knowledge"]] = relationship(secondary=knowledge_message, back_populates="messages")
