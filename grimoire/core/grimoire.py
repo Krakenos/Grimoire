@@ -668,7 +668,7 @@ def process_request(
     excluded_messages = 4
 
     user = get_user(external_user_id, db_session)
-    chat = get_chat(user, external_chat_id, messages_external_ids, chat_texts, db_session)
+    chat = get_chat(user, external_chat_id, chat_texts, messages_external_ids, db_session)
 
     external_message_map = {}
 
@@ -696,6 +696,7 @@ def process_request(
                 chat.id,
                 settings["side_api"],
                 settings["summarization"],
+                settings["secondary_database"],
                 settings["DB_ENGINE"],
             )
 
