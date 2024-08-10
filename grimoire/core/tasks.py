@@ -42,6 +42,7 @@ def make_summary_prompt(
         query_results = session.execute(query).all()
         external_ids = [row[0] for row in query_results]
         messages = get_messages_from_external_db(external_ids)
+        messages = [message for message in messages if message is not None]
     else:
         query = (
             select(Message.message)
