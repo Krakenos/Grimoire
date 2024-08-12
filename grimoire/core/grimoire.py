@@ -1,10 +1,15 @@
 import copy
 import re
 import timeit
+from collections import defaultdict
 from dataclasses import dataclass
 from itertools import chain
 
+import numpy as np
 import spacy
+from rapidfuzz import fuzz
+from rapidfuzz import process as fuzz_process
+from rapidfuzz import utils as fuzz_utils
 from spacy.tokens import Doc, DocBin
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, with_loader_criteria
@@ -355,6 +360,28 @@ async def process_prompt(
     general_logger.info(f"Prompt processing time: {end_time - start_time}s")
     context_logger.debug(f"Old prompt: \n{prompt}\n\nNew prompt: \n{new_prompt}")
     return new_prompt
+
+
+def filter_similar_entities(entity_names: list[str]):
+    result_matrix = fuzz_process.cdist(
+        entity_names,
+        entity_names,
+        scorer=fuzz.WRatio,
+        processor=fuzz_utils.default_process,
+        score_cutoff=settings["match_distance"],
+    )
+    found_score_cords = np.argwhere(result_matrix)
+    relation_dict = defaultdict(lambda: [])
+    results = {}
+    for cords in found_score_cords:
+        x = cords[0]
+        y = cords[1]
+        relation_dict[entity_names[x]].append((entity_names[y], result_matrix[x][y]))
+
+    for key, value in relation_dict.items():
+        if len(value) == 1:
+            results[key] = value[0][0]
+    return results
 
 
 @time_execution
