@@ -23,7 +23,7 @@ def get_knowledge_entity(term: str, chat_id: int, session: Session) -> Knowledge
     return knowledge_dict[ent_name]
 
 
-def get_knowledge_entities(terms: list[str], chat_id: int, session: Session) -> list[Knowledge]:
+def get_knowledge_entities(terms: list[str], chat_id: int, session: Session) -> list[Knowledge | None]:
     query = select(Knowledge).where(Knowledge.entity_type == "NAMED ENTITY", Knowledge.chat_id == chat_id)
     query_results = session.scalars(query).all()
     results = []
@@ -36,7 +36,9 @@ def get_knowledge_entities(terms: list[str], chat_id: int, session: Session) -> 
             processor=utils.default_process,
             score_cutoff=settings["match_distance"],
         )
-        if found_entry is not None:
+        if found_entry is None:
+            results.append(None)
+        else:
             ent_name, _, _ = found_entry
             results.append(knowledge_dict[ent_name])
     return results
