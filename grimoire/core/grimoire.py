@@ -540,16 +540,11 @@ def generate_grimoire_entries(max_grimoire_context: int, summaries: list[tuple[s
 
 
 def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]], session: Session) -> list[tuple[str, int, str]]:
-    summaries = []
-    lower_ent_names = [name.lower() for name, _ in unique_ents]
-    knowledge_ents = get_knowledge_entities(lower_ent_names, chat.id, session)
-    knowledge_dict = {
-        knowledge_ent.entity.lower(): knowledge_ent for knowledge_ent in knowledge_ents if knowledge_ent.summary
-    }
-    ordered_knowledge_ents = [knowledge_dict[ent_name] for ent_name in lower_ent_names if ent_name in knowledge_dict]
-    for knowledge_entity in ordered_knowledge_ents:
-        summaries.append((knowledge_entity.summary, knowledge_entity.token_count, knowledge_entity.entity))
-
+    ent_names = [name for name, _ in unique_ents]
+    knowledge_ents = get_knowledge_entities(ent_names, chat.id, session)
+    summaries = [
+        (ent.summary, ent.token_count, ent.entity) for ent in knowledge_ents if ent is not None and ent.summary
+    ]
     return summaries
 
 
