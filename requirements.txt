@@ -19,3 +19,4 @@ uvicorn~=0.23.2
 redis~=5.0.3
 rapidfuzz~=3.9.6
 starlette~=0.37.2
+numpy~=1.26.4
