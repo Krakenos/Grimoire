@@ -362,7 +362,7 @@ async def process_prompt(
     return new_prompt
 
 
-def filter_similar_entities(entity_names: list[str]):
+def filter_similar_entities(entity_names: list[str]) -> dict[str, str]:
     result_matrix = fuzz_process.cdist(
         entity_names,
         entity_names,
@@ -378,9 +378,21 @@ def filter_similar_entities(entity_names: list[str]):
         y = cords[1]
         relation_dict[entity_names[x]].append((entity_names[y], result_matrix[x][y]))
 
-    for key, value in relation_dict.items():
-        if len(value) == 1:
-            results[key] = value[0][0]
+    entity_groups = set()
+    entity_mean_score = {}
+    for entity, related_entities in relation_dict.items():
+        if len(related_entities) > 1:
+            entity_mean_score[entity] = np.mean([ent[1] for ent in related_entities])
+            related_names = [ent[0] for ent in related_entities]
+            entity_groups.add(frozenset([entity, *related_names]))
+        else:
+            results[entity] = related_entities[0][0]
+    for entity_group in entity_groups:
+        mean_scores = [(entity, entity_mean_score[entity]) for entity in entity_group]
+        sorted_mean_scores = sorted(mean_scores, key=lambda x: x[1], reverse=True)
+        top_name, _ = sorted_mean_scores[0]
+        for entity in entity_group:
+            results[entity] = top_name
     return results
 
 
