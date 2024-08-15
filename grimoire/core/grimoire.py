@@ -405,44 +405,48 @@ def save_named_entities(
     session: Session,
 ) -> None:
     unique_ents: list[NamedEntity] = list(set(chain(*entity_list)))
-
-    unique_ent_names = list({ent.name.lower() for ent in unique_ents})
-
-    knowledge_entries = get_knowledge_entities(unique_ent_names, chat.id, session)
-    db_entry_names = [entry.entity.lower() for entry in knowledge_entries]
+    unique_ent_names = list({ent.name for ent in unique_ents})
+    ent_labels = {ent.name: ent.label for ent in unique_ents}
+    similarity_dict = filter_similar_entities(unique_ent_names)
+    filtered_ent_names = list(similarity_dict.values())
+    knowledge_entries = get_knowledge_entities(filtered_ent_names, chat.id, session)
+    db_entry_names = [entry.entity for entry in knowledge_entries]
     new_knowledge = []
-    for ent in unique_ents:
-        if ent.name.lower() not in db_entry_names:
+
+    for ent_name, db_object in zip(filtered_ent_names, db_entry_names, strict=True):
+        if db_object is None:
             knowledge_entity = Knowledge(
-                entity=ent.name, entity_label=ent.label, entity_type="NAMED ENTITY", chat_id=chat.id, update_count=0
+                entity=ent_name,
+                entity_label=ent_labels[ent_name],
+                entity_type="NAMED ENTITY",
+                chat_id=chat.id,
+                update_count=0,
             )
             new_knowledge.append(knowledge_entity)
+
     session.add_all(new_knowledge)
     session.commit()
 
     knowledge_dict = {knowledge.entity: knowledge for knowledge in [*knowledge_entries, *new_knowledge]}
 
     # Link new messages to knowledge and update counter
-    if settings["secondary_database"]["enabled"]:
-        for db_message in chat.messages:
-            message_ents = entity_dict[external_id_map[db_message.external_id]]
-            ent_names: list[str] = list({ent.name for ent in message_ents})
-            for ent in ent_names:
-                if db_message not in knowledge_dict[ent].messages:
-                    knowledge_dict[ent].messages.append(db_message)
-                    knowledge_dict[ent].update_count += 1
-        session.add_all(knowledge_dict.values())
-        session.commit()
-    else:
-        for db_message in chat.messages:
-            message_ents = entity_dict[db_message.message]
-            ent_names: list[str] = list({ent.name for ent in message_ents})
-            for ent in ent_names:
-                if db_message not in knowledge_dict[ent].messages:
-                    knowledge_dict[ent].messages.append(db_message)
-                    knowledge_dict[ent].update_count += 1
-        session.add_all(knowledge_dict.values())
-        session.commit()
+    for db_message in chat.messages:
+        if settings["secondary_database"]["enabled"]:
+            message_identifier = external_id_map[db_message.external_id]
+        else:
+            message_identifier = db_message.message
+
+        message_ents = entity_dict[message_identifier]
+        ent_names: list[str] = list({ent.name for ent in message_ents})
+
+        for ent in ent_names:
+            coresponding_entity = similarity_dict[ent]
+            if db_message not in knowledge_dict[coresponding_entity].messages:
+                knowledge_dict[coresponding_entity].messages.append(db_message)
+                knowledge_dict[coresponding_entity].update_count += 1
+
+    session.add_all(knowledge_dict.values())
+    session.commit()
 
 
 @async_time_execution
