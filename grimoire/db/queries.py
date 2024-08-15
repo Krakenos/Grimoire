@@ -7,20 +7,7 @@ from grimoire.db.models import Knowledge
 
 
 def get_knowledge_entity(term: str, chat_id: int, session: Session) -> Knowledge | None:
-    query = select(Knowledge).where(Knowledge.entity_type == "NAMED ENTITY", Knowledge.chat_id == chat_id)
-    query_results = session.scalars(query).all()
-    knowledge_dict = {knowledge_obj.entity: knowledge_obj for knowledge_obj in query_results}
-    found_entry = process.extractOne(
-        term,
-        list(knowledge_dict),
-        scorer=fuzz.WRatio,
-        processor=utils.default_process,
-        score_cutoff=settings["match_distance"],
-    )
-    if found_entry is None:
-        return None
-    ent_name, _, _ = found_entry
-    return knowledge_dict[ent_name]
+    return get_knowledge_entities([term], chat_id, session)[0]
 
 
 def get_knowledge_entities(terms: list[str], chat_id: int, session: Session) -> list[Knowledge | None]:
