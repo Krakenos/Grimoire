@@ -34,8 +34,8 @@ def make_summary_prompt(
     secondary_database_encryption_key = secondary_database_settings["encryption_key"]
     chat_id = knowledge_entry.chat_id
 
-    if knowledge_entry.summary:
-        summary = knowledge_entry.summary
+    if knowledge_entry.summary_entry:
+        summary = knowledge_entry.summary_entry
     else:
         summary = ""
 
@@ -195,10 +195,11 @@ def summarize(
             retry_interval,
         )
         summary_text = summary_text.replace("\n\n", "\n")
-        summary_text = f"[ {knowledge_entry.entity}: {summary_text} ]"
+        summary_entry_text = f"[ {knowledge_entry.entity}: {summary_text} ]"
         knowledge_entry.summary = summary_text
+        knowledge_entry.summary = summary_entry_text
         knowledge_entry.token_count = count_context(
-            summary_text, summarization_backend, summarization_url, summarization_auth
+            summary_entry_text, summarization_backend, summarization_url, summarization_auth
         )
         knowledge_entry.update_count = 1
         summary_logger.debug(f"({knowledge_entry.token_count} tokens){term} ({label}): {summary_text}\n{request_json}")
