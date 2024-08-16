@@ -11,7 +11,7 @@ ENCRYPTION_KEY: !env ENCRYPTION_KEY
 prefer_gpu: False
 match_distance: 80
 
-side_api:
+summarization_api:
   backend: GenericOAI
   url: !env SIDE_API_URL
   auth_key: !env SIDE_API_AUTH

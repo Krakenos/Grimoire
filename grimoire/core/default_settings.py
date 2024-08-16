@@ -11,7 +11,7 @@ defaults = {
     "ENCRYPTION_KEY": "",
     "prefer_gpu": False,
     "match_distance": 80,
-    "side_api": {
+    "summarization_api": {
         "backend": "GenericOAI",
         "url": "",
         "auth_key": "",

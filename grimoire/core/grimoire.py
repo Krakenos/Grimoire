@@ -374,7 +374,7 @@ def process_request(
                 entity.name.lower(),
                 entity.label,
                 chat.id,
-                settings["side_api"],
+                settings["summarization_api"],
                 settings["summarization"],
                 settings["secondary_database"],
                 settings["DB_ENGINE"],
