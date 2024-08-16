@@ -144,8 +144,6 @@ def get_named_entities(
                 NamedEntity(name=ent.entity_name, label=ent.entity_label) for ent in message.spacy_named_entities
             ]
 
-        entity_dict[message.message] = named_entities
-
         if message.external_id and external_id_map:
             entity_dict[external_id_map[message.external_id]] = named_entities
         elif message.message:
