@@ -330,6 +330,7 @@ def process_request(
     chat_texts: list[str],
     messages_external_ids: list[str],
     db_session,
+    include_names: bool = True,
     external_user_id: str | None = None,
     token_limit: int | None = None,
 ):
