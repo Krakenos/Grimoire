@@ -305,17 +305,6 @@ def save_named_entities(
     session.commit()
 
 
-def generate_grimoire_entries(max_grimoire_context: int, summaries: list[tuple[str, int, str]]) -> list[str]:
-    grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
-
-    while grimoire_estimated_tokens > max_grimoire_context:
-        summaries.pop()
-        grimoire_estimated_tokens = sum([summary_tuple[1] for summary_tuple in summaries])
-
-    grimoire_entries = [f"{summary[0]}\n" for summary in summaries]
-    return grimoire_entries
-
-
 def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]], session: Session) -> list[tuple[str, int, str]]:
     ent_names = [name for name, _ in unique_ents]
     knowledge_ents = get_knowledge_entities(ent_names, chat.id, session)
