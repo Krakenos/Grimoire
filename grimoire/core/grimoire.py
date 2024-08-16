@@ -1,10 +1,15 @@
 import copy
 import re
 import timeit
+from collections import defaultdict
 from dataclasses import dataclass
 from itertools import chain
 
+import numpy as np
 import spacy
+from rapidfuzz import fuzz
+from rapidfuzz import process as fuzz_process
+from rapidfuzz import utils as fuzz_utils
 from spacy.tokens import Doc, DocBin
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, with_loader_criteria
@@ -143,7 +148,7 @@ def get_named_entities(
     entity_list = []
     entity_dict = {}
     to_process = []
-    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME"]
+    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME", "QUANTITY"]
     external_id_map = {}
 
     if settings["secondary_database"]["enabled"]:
@@ -357,6 +362,45 @@ async def process_prompt(
     return new_prompt
 
 
+def filter_similar_entities(entity_names: list[str]) -> dict[str, str]:
+    result_matrix = fuzz_process.cdist(
+        entity_names,
+        entity_names,
+        scorer=fuzz.WRatio,
+        processor=fuzz_utils.default_process,
+        score_cutoff=settings["match_distance"],
+    )
+    found_score_cords = np.argwhere(result_matrix)
+    relation_dict = defaultdict(lambda: [])
+    results = {}
+
+    for cords in found_score_cords:
+        x = cords[0]
+        y = cords[1]
+        relation_dict[entity_names[x]].append((entity_names[y], result_matrix[x][y]))
+
+    entity_groups = set()
+    entity_mean_score = {}
+
+    for entity, related_entities in relation_dict.items():
+        if len(related_entities) > 1:
+            entity_mean_score[entity] = np.mean([ent[1] for ent in related_entities])
+            related_names = [ent[0] for ent in related_entities]
+            entity_groups.add(frozenset([entity, *related_names]))
+        else:
+            results[entity] = related_entities[0][0]
+
+    for entity_group in entity_groups:
+        mean_scores = [(entity, entity_mean_score[entity]) for entity in entity_group]
+        # sorts by highest score, then longest entity, then lexically
+        sorted_entities = sorted(mean_scores, key=lambda x: (-x[1], -len(x[0]), x[0]))
+        top_name, _ = sorted_entities[0]
+
+        for entity in entity_group:
+            results[entity] = top_name
+    return results
+
+
 @time_execution
 def save_named_entities(
     chat: Chat,
@@ -366,44 +410,49 @@ def save_named_entities(
     session: Session,
 ) -> None:
     unique_ents: list[NamedEntity] = list(set(chain(*entity_list)))
-
-    unique_ent_names = list({ent.name.lower() for ent in unique_ents})
-
-    knowledge_entries = get_knowledge_entities(unique_ent_names, chat.id, session)
-    db_entry_names = [entry.entity.lower() for entry in knowledge_entries]
+    unique_ent_names = list({ent.name for ent in unique_ents})
+    ent_labels = {ent.name: ent.label for ent in unique_ents}
+    similarity_dict = filter_similar_entities(unique_ent_names)
+    filtered_ent_names = list(similarity_dict.values())
+    knowledge_entries = get_knowledge_entities(filtered_ent_names, chat.id, session)
+    found_knowledge_entries = [entry for entry in knowledge_entries if entry is not None]
+    db_entry_names = [entry.entity if entry is not None else None for entry in knowledge_entries]
     new_knowledge = []
-    for ent in unique_ents:
-        if ent.name.lower() not in db_entry_names:
+
+    for ent_name, db_object in zip(filtered_ent_names, db_entry_names, strict=True):
+        if db_object is None:
             knowledge_entity = Knowledge(
-                entity=ent.name, entity_label=ent.label, entity_type="NAMED ENTITY", chat_id=chat.id, update_count=0
+                entity=ent_name,
+                entity_label=ent_labels[ent_name],
+                entity_type="NAMED ENTITY",
+                chat_id=chat.id,
+                update_count=0,
             )
             new_knowledge.append(knowledge_entity)
+
     session.add_all(new_knowledge)
     session.commit()
 
-    knowledge_dict = {knowledge.entity: knowledge for knowledge in [*knowledge_entries, *new_knowledge]}
+    knowledge_dict = {knowledge.entity: knowledge for knowledge in [*found_knowledge_entries, *new_knowledge]}
 
     # Link new messages to knowledge and update counter
-    if settings["secondary_database"]["enabled"]:
-        for db_message in chat.messages:
-            message_ents = entity_dict[external_id_map[db_message.external_id]]
-            ent_names: list[str] = list({ent.name for ent in message_ents})
-            for ent in ent_names:
-                if db_message not in knowledge_dict[ent].messages:
-                    knowledge_dict[ent].messages.append(db_message)
-                    knowledge_dict[ent].update_count += 1
-        session.add_all(knowledge_dict.values())
-        session.commit()
-    else:
-        for db_message in chat.messages:
-            message_ents = entity_dict[db_message.message]
-            ent_names: list[str] = list({ent.name for ent in message_ents})
-            for ent in ent_names:
-                if db_message not in knowledge_dict[ent].messages:
-                    knowledge_dict[ent].messages.append(db_message)
-                    knowledge_dict[ent].update_count += 1
-        session.add_all(knowledge_dict.values())
-        session.commit()
+    for db_message in chat.messages:
+        if settings["secondary_database"]["enabled"]:
+            message_identifier = external_id_map[db_message.external_id]
+        else:
+            message_identifier = db_message.message
+
+        message_ents = entity_dict[message_identifier]
+        ent_names: list[str] = list({ent.name for ent in message_ents})
+
+        for ent in ent_names:
+            coresponding_entity = similarity_dict[ent]
+            if db_message not in knowledge_dict[coresponding_entity].messages:
+                knowledge_dict[coresponding_entity].messages.append(db_message)
+                knowledge_dict[coresponding_entity].update_count += 1
+
+    session.add_all(knowledge_dict.values())
+    session.commit()
 
 
 @async_time_execution
@@ -540,16 +589,11 @@ def generate_grimoire_entries(max_grimoire_context: int, summaries: list[tuple[s
 
 
 def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]], session: Session) -> list[tuple[str, int, str]]:
-    summaries = []
-    lower_ent_names = [name.lower() for name, _ in unique_ents]
-    knowledge_ents = get_knowledge_entities(lower_ent_names, chat.id, session)
-    knowledge_dict = {
-        knowledge_ent.entity.lower(): knowledge_ent for knowledge_ent in knowledge_ents if knowledge_ent.summary
-    }
-    ordered_knowledge_ents = [knowledge_dict[ent_name] for ent_name in lower_ent_names if ent_name in knowledge_dict]
-    for knowledge_entity in ordered_knowledge_ents:
-        summaries.append((knowledge_entity.summary, knowledge_entity.token_count, knowledge_entity.entity))
-
+    ent_names = [name for name, _ in unique_ents]
+    knowledge_ents = get_knowledge_entities(ent_names, chat.id, session)
+    summaries = [
+        (ent.summary, ent.token_count, ent.entity) for ent in knowledge_ents if ent is not None and ent.summary
+    ]
     return summaries
 
 

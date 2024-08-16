@@ -14,6 +14,7 @@ defaults = {
     "prefer_gpu": False,
     "context_percentage": 0.25,
     "preserved_messages": 2,
+    "match_distance": 80,
     "main_api": {
         "backend": "GenericOAI",
         "url": "",
