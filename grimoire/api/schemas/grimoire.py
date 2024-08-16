@@ -37,12 +37,16 @@ class KnowledgeOut(BaseModel):
     id: int
     entity: str
     summary: str
+    enabled: bool
+    frozen: bool
     updated_date: datetime
 
 
 class KnowledgeIn(BaseModel):
     entity: str
     summary: str
+    enabled: bool
+    frozen: bool
     updated_date: datetime
 
 
