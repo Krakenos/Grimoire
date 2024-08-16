@@ -125,11 +125,16 @@ def save_messages(
 
 @time_execution
 def get_named_entities(
-    messages: list[str], messages_external_ids: list[str], chat: Chat
+    messages: list[str],
+    messages_external_ids: list[str],
+    messages_names: list[str],
+    chat: Chat,
+    include_names: bool = True,
 ) -> tuple[list[list[NamedEntity]], dict[str, list[NamedEntity]]]:
     entity_list = []
     entity_dict = {}
     to_process = []
+    to_process_with_names = []
     banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME", "QUANTITY"]
     external_id_map = {}
 
@@ -151,11 +156,15 @@ def get_named_entities(
         else:
             raise ValueError("No external id or message provided")
 
-    for message in messages:
+    for sender_name, message in zip(messages_names, messages, strict=True):
         if message not in entity_dict:
+            to_process_with_names.append(f"{sender_name}: {message}")
             to_process.append(message)
 
-    new_docs = list(nlp.pipe(to_process))
+    if include_names:
+        new_docs = list(nlp.pipe(to_process_with_names))
+    else:
+        new_docs = list(nlp.pipe(to_process))
 
     for text, doc in zip(to_process, new_docs, strict=True):
         entities = [NamedEntity(ent.text, ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
@@ -327,6 +336,7 @@ def process_request(
     external_chat_id: str,
     chat_texts: list[str],
     messages_external_ids: list[str],
+    messages_names: list[str],
     db_session,
     include_names: bool = True,
     external_user_id: str | None = None,
@@ -344,7 +354,9 @@ def process_request(
         external_message_map = dict(zip(messages_external_ids, chat_texts, strict=True))
 
     doc_time = timeit.default_timer()
-    entity_list, entity_dict = get_named_entities(chat_texts, messages_external_ids, chat)
+    entity_list, entity_dict = get_named_entities(
+        chat_texts, messages_external_ids, messages_names, chat, include_names
+    )
     doc_end_time = timeit.default_timer()
     general_logger.debug(f"Getting named entities {doc_end_time - doc_time} seconds")
     last_messages = chat_texts[:-excluded_messages]  # exclude last few messages from saving
