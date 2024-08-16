@@ -72,6 +72,3 @@ def merge_settings(settings_dict, overrides):
 settings = copy.deepcopy(defaults)
 loaded_settings = SettingsLoader.load_config()
 settings = merge_settings(settings, loaded_settings)
-
-if settings["side_api"]["url"] in ("", None):
-    settings["single_api_mode"] = True
