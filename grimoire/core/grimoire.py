@@ -389,6 +389,7 @@ def process_request(
                 settings["summarization"],
                 settings["secondary_database"],
                 settings["DB_ENGINE"],
+                include_names,
             )
 
     unique_ents = get_ordered_entities(entity_list)
