@@ -59,6 +59,7 @@ class ChatDataMessage(BaseModel):
 class ChatData(BaseModel):
     external_chat_id: str
     external_user_id: str | None = None
+    include_names: bool = True
     max_tokens: int | None = None
     messages: list[ChatDataMessage]
 

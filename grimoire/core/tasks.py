@@ -20,6 +20,7 @@ def make_summary_prompt(
     api_settings,
     summarization_settings,
     secondary_database_settings,
+    include_names: bool = True,
 ) -> str | None:
     summarization_url = api_settings["url"]
     summarization_backend = api_settings["backend"]
@@ -32,43 +33,69 @@ def make_summary_prompt(
     secondary_database_encryption_method = secondary_database_settings["message_encryption"]
     secondary_database_encryption_key = secondary_database_settings["encryption_key"]
     chat_id = knowledge_entry.chat_id
+
     if knowledge_entry.summary:
         summary = knowledge_entry.summary
     else:
         summary = ""
+
     message_indices = [message.message_index for message in knowledge_entry.messages]
     chunk_indices = set()
     for message_index in message_indices:
         chunk_indices.update([message_index - 1, message_index, message_index + 1])
     chunk_indices -= {-1, 0}
     final_indices = sorted(chunk_indices)
+
     if secondary_database:
         query = (
-            select(Message.external_id)
+            select(Message.external_id, Message.sender_name)
             .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
             .order_by(Message.message_index)
         )
         query_results = session.execute(query).all()
         external_ids = [row[0] for row in query_results]
-        messages = get_messages_from_external_db(
+        sender_names = [row[1] for row in query_results]
+        db_messages = get_messages_from_external_db(
             external_ids,
             secondary_database_url,
             secondary_database_encryption_method,
             secondary_database_encryption_key,
         )
-        messages = [message for message in messages if message is not None]
+        if include_names:
+            messages = []
+            for name, message in zip(sender_names, db_messages, strict=True):
+                if name and message:
+                    messages.append(f"{name}: {message}")
+                elif message:
+                    messages.append(message)
+        else:
+            messages = [message for message in db_messages if message is not None]
+
     else:
         query = (
-            select(Message.message)
+            select(Message.message, Message.sender_name)
             .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
             .order_by(Message.message_index)
         )
         query_results = session.execute(query).all()
-        messages = [row[0] for row in query_results]
+        db_messages = [row[0] for row in query_results]
+        sender_names = [row[1] for row in query_results]
+        if include_names:
+            messages = []
+            for name, message in zip(sender_names, db_messages, strict=True):
+                if name:
+                    messages.append(f"{name}: {message}")
+                else:
+                    messages.append(message)
+        else:
+            messages = db_messages
+
     if len(messages) <= 1:
         return None
+
     prompt = ""
     reversed_messages = []
+
     for message in messages[::-1]:
         reversed_messages.append(message)
         messages_text = "\n".join(reversed_messages[::-1])
@@ -82,10 +109,12 @@ def make_summary_prompt(
             output_sequence=output_sequence,
         )
         new_tokens = count_context(new_prompt, summarization_backend, summarization_url, summarization_auth)
+
         if new_tokens > max_context:
             break
         else:
             prompt = new_prompt
+
     return prompt
 
 
@@ -98,6 +127,7 @@ def summarize(
     summarization_settings: dict,
     secondary_database_settings: dict,
     db_engine: str,
+    include_names: bool = True,
     max_retries: int = 50,
     retry_interval: int = 1,
 ) -> None:
@@ -124,6 +154,7 @@ def summarize(
             api_settings,
             summarization_settings,
             secondary_database_settings,
+            include_names,
         )
         if prompt is None:  # Edge case of having 1 message for summary, only may happen at start of chat
             general_logger.info("Skipping entry to summarize, only 1 message for term exists")

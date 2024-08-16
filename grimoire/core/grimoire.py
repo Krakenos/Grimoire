@@ -42,6 +42,7 @@ nlp = spacy.load("en_core_web_trf")
 def save_messages(
     messages: list[str],
     messages_external_ids: list[str],
+    sender_names: list[str],
     entity_dict: dict[str, list[NamedEntity]],
     chat: Chat,
     session: Session,
@@ -50,6 +51,7 @@ def save_messages(
     Saves messages to and returns indices of new messages
     :param messages:
     :param messages_external_ids:
+    :param sender_names:
     :param entity_dict:
     :param chat:
     :param session:
@@ -79,6 +81,7 @@ def save_messages(
             chat.messages.append(
                 Message(
                     external_id=messages_external_ids[index],
+                    sender_name=sender_names[index],
                     message_index=message_number,
                     spacy_named_entities=db_named_entities,
                 )
@@ -112,7 +115,12 @@ def save_messages(
                 for named_ent in named_entities
             ]
             chat.messages.append(
-                Message(message=message_to_add, message_index=message_number, spacy_named_entities=db_named_entities)
+                Message(
+                    message=message_to_add,
+                    sender_name=sender_names[index],
+                    message_index=message_number,
+                    spacy_named_entities=db_named_entities,
+                )
             )
             message_number += 1
 
@@ -125,11 +133,16 @@ def save_messages(
 
 @time_execution
 def get_named_entities(
-    messages: list[str], messages_external_ids: list[str], chat: Chat
+    messages: list[str],
+    messages_external_ids: list[str],
+    messages_names: list[str],
+    chat: Chat,
+    include_names: bool = True,
 ) -> tuple[list[list[NamedEntity]], dict[str, list[NamedEntity]]]:
     entity_list = []
     entity_dict = {}
     to_process = []
+    to_process_with_names = []
     banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME", "QUANTITY"]
     external_id_map = {}
 
@@ -144,8 +157,6 @@ def get_named_entities(
                 NamedEntity(name=ent.entity_name, label=ent.entity_label) for ent in message.spacy_named_entities
             ]
 
-        entity_dict[message.message] = named_entities
-
         if message.external_id and external_id_map:
             entity_dict[external_id_map[message.external_id]] = named_entities
         elif message.message:
@@ -153,11 +164,15 @@ def get_named_entities(
         else:
             raise ValueError("No external id or message provided")
 
-    for message in messages:
+    for sender_name, message in zip(messages_names, messages, strict=True):
         if message not in entity_dict:
+            to_process_with_names.append(f"{sender_name}: {message}")
             to_process.append(message)
 
-    new_docs = list(nlp.pipe(to_process))
+    if include_names:
+        new_docs = list(nlp.pipe(to_process_with_names))
+    else:
+        new_docs = list(nlp.pipe(to_process))
 
     for text, doc in zip(to_process, new_docs, strict=True):
         entities = [NamedEntity(ent.text, ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
@@ -329,7 +344,9 @@ def process_request(
     external_chat_id: str,
     chat_texts: list[str],
     messages_external_ids: list[str],
+    messages_names: list[str],
     db_session,
+    include_names: bool = True,
     external_user_id: str | None = None,
     token_limit: int | None = None,
 ):
@@ -345,13 +362,18 @@ def process_request(
         external_message_map = dict(zip(messages_external_ids, chat_texts, strict=True))
 
     doc_time = timeit.default_timer()
-    entity_list, entity_dict = get_named_entities(chat_texts, messages_external_ids, chat)
+    entity_list, entity_dict = get_named_entities(
+        chat_texts, messages_external_ids, messages_names, chat, include_names
+    )
     doc_end_time = timeit.default_timer()
     general_logger.debug(f"Getting named entities {doc_end_time - doc_time} seconds")
     last_messages = chat_texts[:-excluded_messages]  # exclude last few messages from saving
+    last_names = messages_names[:-excluded_messages]
     last_external_ids = messages_external_ids[:-excluded_messages]
     last_entities = entity_list[:-excluded_messages]
-    new_message_indices, chat = save_messages(last_messages, last_external_ids, entity_dict, chat, db_session)
+    new_message_indices, chat = save_messages(
+        last_messages, last_external_ids, last_names, entity_dict, chat, db_session
+    )
     save_named_entities(chat, entity_list, entity_dict, external_message_map, db_session)
 
     entities_to_summarize = [last_entities[index] for index in new_message_indices]
@@ -367,6 +389,7 @@ def process_request(
                 settings["summarization"],
                 settings["secondary_database"],
                 settings["DB_ENGINE"],
+                include_names,
             )
 
     unique_ents = get_ordered_entities(entity_list)
