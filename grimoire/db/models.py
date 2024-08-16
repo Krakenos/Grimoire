@@ -33,6 +33,8 @@ class Knowledge(Base):
     entity_label: Mapped[str | None]
     summary = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"))
     token_count: Mapped[int | None]
+    enabled: Mapped[bool] = mapped_column(default=True)
+    frozen: Mapped[bool] = mapped_column(default=False)
     messages: Mapped[list["Message"]] = relationship(secondary=knowledge_message, back_populates="knowledge")
     updated_date: Mapped[datetime] = mapped_column(default=datetime.now)
     update_at: Mapped[int | None] = mapped_column(default=1)
