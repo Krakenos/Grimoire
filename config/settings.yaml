@@ -8,30 +8,10 @@ LOG_PROMPTS: False
 LOG_FILES: False
 AUTH_KEY: ''
 ENCRYPTION_KEY: !env ENCRYPTION_KEY
-single_api_mode: False
-multi_user_mode: False
 prefer_gpu: False
-context_percentage: 0.25
-preserved_messages: 2
 match_distance: 80
 
-main_api:
-  backend: GenericOAI
-  url: !env MAIN_API_URL
-  auth_key: !env MAIN_API_AUTH
-  context_length: 4096
-  system_sequence: ''
-  system_suffix: ''
-  input_sequence: '### Instruction:\n'
-  input_suffix: ''
-  output_sequence: '\n### Response:\n'
-  output_suffix: ''
-  first_output_sequence: ''
-  last_output_sequence: ''
-  wrap: False
-  collapse_newlines: False
-
-side_api:
+summarization_api:
   backend: GenericOAI
   url: !env SIDE_API_URL
   auth_key: !env SIDE_API_AUTH
@@ -44,8 +24,6 @@ side_api:
   output_suffix: ''
   first_output_sequence: ''
   last_output_sequence: ''
-  wrap: False
-  collapse_newlines: False
 
 summarization:
   prompt: '{previous_summary}\n{messages}\n{input_sequence}Describe {term}.{input_suffix}{output_sequence}'
