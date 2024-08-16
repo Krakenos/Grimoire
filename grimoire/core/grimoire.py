@@ -324,9 +324,9 @@ def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]], session: Sessi
     ent_names = [name for name, _ in unique_ents]
     knowledge_ents = get_knowledge_entities(ent_names, chat.id, session)
     summaries = [
-        (ent.summary, ent.token_count, ent.entity)
+        (ent.summary_entry, ent.token_count, ent.entity)
         for ent in knowledge_ents
-        if ent is not None and ent.summary and ent.enabled
+        if ent is not None and ent.summary_entry and ent.enabled
     ]
     return summaries
 
