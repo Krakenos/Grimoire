@@ -13,8 +13,8 @@ match_distance: 80
 
 summarization_api:
   backend: GenericOAI
-  url: !env SIDE_API_URL
-  auth_key: !env SIDE_API_AUTH
+  url: !env SUMMARIZATION_API_URL
+  auth_key: !env SUMMARIZATION_API_AUTH
   context_length: 4096
   system_sequence: ''
   system_suffix: ''
