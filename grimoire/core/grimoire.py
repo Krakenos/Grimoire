@@ -148,7 +148,7 @@ def get_named_entities(
     entity_list = []
     entity_dict = {}
     to_process = []
-    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME"]
+    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME", "QUANTITY"]
     external_id_map = {}
 
     if settings["secondary_database"]["enabled"]:
@@ -373,6 +373,7 @@ def filter_similar_entities(entity_names: list[str]) -> dict[str, str]:
     found_score_cords = np.argwhere(result_matrix)
     relation_dict = defaultdict(lambda: [])
     results = {}
+
     for cords in found_score_cords:
         x = cords[0]
         y = cords[1]
@@ -380,6 +381,7 @@ def filter_similar_entities(entity_names: list[str]) -> dict[str, str]:
 
     entity_groups = set()
     entity_mean_score = {}
+
     for entity, related_entities in relation_dict.items():
         if len(related_entities) > 1:
             entity_mean_score[entity] = np.mean([ent[1] for ent in related_entities])
@@ -387,10 +389,13 @@ def filter_similar_entities(entity_names: list[str]) -> dict[str, str]:
             entity_groups.add(frozenset([entity, *related_names]))
         else:
             results[entity] = related_entities[0][0]
+
     for entity_group in entity_groups:
         mean_scores = [(entity, entity_mean_score[entity]) for entity in entity_group]
-        sorted_mean_scores = sorted(mean_scores, key=lambda x: x[1], reverse=True)
-        top_name, _ = sorted_mean_scores[0]
+        # sorts by highest score, then longest entity, then lexically
+        sorted_entities = sorted(mean_scores, key=lambda x: (-x[1], -len(x[0]), x[0]))
+        top_name, _ = sorted_entities[0]
+
         for entity in entity_group:
             results[entity] = top_name
     return results
@@ -410,7 +415,8 @@ def save_named_entities(
     similarity_dict = filter_similar_entities(unique_ent_names)
     filtered_ent_names = list(similarity_dict.values())
     knowledge_entries = get_knowledge_entities(filtered_ent_names, chat.id, session)
-    db_entry_names = [entry.entity for entry in knowledge_entries]
+    found_knowledge_entries = [entry for entry in knowledge_entries if entry is not None]
+    db_entry_names = [entry.entity if entry is not None else None for entry in knowledge_entries]
     new_knowledge = []
 
     for ent_name, db_object in zip(filtered_ent_names, db_entry_names, strict=True):
@@ -427,7 +433,7 @@ def save_named_entities(
     session.add_all(new_knowledge)
     session.commit()
 
-    knowledge_dict = {knowledge.entity: knowledge for knowledge in [*knowledge_entries, *new_knowledge]}
+    knowledge_dict = {knowledge.entity: knowledge for knowledge in [*found_knowledge_entries, *new_knowledge]}
 
     # Link new messages to knowledge and update counter
     for db_message in chat.messages:
