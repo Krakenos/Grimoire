@@ -16,7 +16,7 @@ Edit settings.yaml file with your values:
 ```yaml
 DEBUG: True # Enables debug logs
 LOG_PROMPTS: True # Enables prompt logging
-side_api: # Api used for summarization
+summarization_api: # Api used for summarization
   backend: GenericOAI # Accepted values: GenericOAI, Kobold, KoboldCPP, Aphrodite, Tabby
   url: http://127.0.0.1:5002 # Url to side api that will summarize entries
   auth_key: 'your-api-authkey' # Api key to side api, leave empty or delete entry if there is none
