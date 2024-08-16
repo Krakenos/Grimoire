@@ -1,17 +1,7 @@
 import timeit
 from functools import wraps
-from urllib.parse import urljoin
-
-import requests
 
 from grimoire.common.loggers import general_logger
-from grimoire.core.settings import settings
-
-
-def get_passthrough(endpoint: str, auth_token=None) -> dict:
-    passthrough_url = urljoin(settings["main_api"]["url"], endpoint)
-    engine = requests.get(passthrough_url, headers={"Authorization": f"Bearer {auth_token}"})
-    return engine.json()
 
 
 def orm_get_or_create(session, db_model, **kwargs):
