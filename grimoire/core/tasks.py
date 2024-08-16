@@ -142,8 +142,16 @@ def summarize(
     with Session(db) as session:
         knowledge_entry = get_knowledge_entity(term, chat_id, session)
 
+        if knowledge_entry is None:
+            general_logger.error("Knowledge entry not found for term")
+            return None
+
         if knowledge_entry.update_count < limit_rate:  # Don't summarize if it's below the limit
             general_logger.info("Skipping entry to summarize, messages amount below limit rate")
+            return None
+
+        if knowledge_entry.frozen:  # Don't summarize if frozen
+            general_logger.info("Skipping entry to summarize, frozen entity")
             return None
 
         max_prompt_context = context_len - response_len

@@ -384,7 +384,7 @@ def process_request(
         for entity in set(entities):
             general_logger.debug(f"{entity.name}, {entity.label}, {spacy.explain(entity.label)}")
             summarize.delay(
-                entity.name.lower(),
+                entity.name,
                 entity.label,
                 chat.id,
                 settings["summarization_api"],
