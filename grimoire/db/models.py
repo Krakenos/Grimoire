@@ -31,7 +31,8 @@ class Knowledge(Base):
     entity = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=False)
     entity_type: Mapped[str | None]
     entity_label: Mapped[str | None]
-    summary = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"))
+    summary = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=True)
+    summary_entry = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=True)
     token_count: Mapped[int | None]
     enabled: Mapped[bool] = mapped_column(default=True)
     frozen: Mapped[bool] = mapped_column(default=False)
