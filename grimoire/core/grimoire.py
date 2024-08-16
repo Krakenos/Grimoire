@@ -42,6 +42,7 @@ nlp = spacy.load("en_core_web_trf")
 def save_messages(
     messages: list[str],
     messages_external_ids: list[str],
+    sender_names: list[str],
     entity_dict: dict[str, list[NamedEntity]],
     chat: Chat,
     session: Session,
@@ -50,6 +51,7 @@ def save_messages(
     Saves messages to and returns indices of new messages
     :param messages:
     :param messages_external_ids:
+    :param sender_names:
     :param entity_dict:
     :param chat:
     :param session:
@@ -79,6 +81,7 @@ def save_messages(
             chat.messages.append(
                 Message(
                     external_id=messages_external_ids[index],
+                    sender_name=sender_names[index],
                     message_index=message_number,
                     spacy_named_entities=db_named_entities,
                 )
@@ -112,7 +115,12 @@ def save_messages(
                 for named_ent in named_entities
             ]
             chat.messages.append(
-                Message(message=message_to_add, message_index=message_number, spacy_named_entities=db_named_entities)
+                Message(
+                    message=message_to_add,
+                    sender_name=sender_names[index],
+                    message_index=message_number,
+                    spacy_named_entities=db_named_entities,
+                )
             )
             message_number += 1
 
@@ -360,9 +368,12 @@ def process_request(
     doc_end_time = timeit.default_timer()
     general_logger.debug(f"Getting named entities {doc_end_time - doc_time} seconds")
     last_messages = chat_texts[:-excluded_messages]  # exclude last few messages from saving
+    last_names = messages_names[:-excluded_messages]
     last_external_ids = messages_external_ids[:-excluded_messages]
     last_entities = entity_list[:-excluded_messages]
-    new_message_indices, chat = save_messages(last_messages, last_external_ids, entity_dict, chat, db_session)
+    new_message_indices, chat = save_messages(
+        last_messages, last_external_ids, last_names, entity_dict, chat, db_session
+    )
     save_named_entities(chat, entity_list, entity_dict, external_message_map, db_session)
 
     entities_to_summarize = [last_entities[index] for index in new_message_indices]
