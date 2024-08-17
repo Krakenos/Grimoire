@@ -1,8 +1,6 @@
-import asyncio
 import time
 from urllib.parse import urljoin
 
-import aiohttp
 import redis
 import requests
 from transformers import AutoTokenizer
@@ -113,7 +111,7 @@ async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=No
 
     if to_tokenize:
         if api_type.lower() in ("koboldai", "koboldcpp", "tabby", "aphrodite", "genericoai"):
-            new_tokens = await remote_tokenization(to_tokenize, api_url, api_auth, api_type)
+            new_tokens = remote_tokenization(to_tokenize, api_url, api_auth, api_type)
         else:
             new_tokens = local_tokenization(to_tokenize, api_url, api_auth, api_type)
 
@@ -127,12 +125,12 @@ async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=No
     return tokens
 
 
-async def remote_tokenization(batch: list[str], api_url: str, api_auth: str, api_type: str) -> list[int]:
-    tasks = []
+def remote_tokenization(batch: list[str], api_url: str, api_auth: str, api_type: str) -> list[int]:
     tokenization_endpoint = ""
     request_jsons = []
     header = {"Authorization": f"Bearer {api_auth}"}
     token_amounts = []
+    responses = []
 
     if api_type.lower() in ("koboldai", "koboldcpp"):
         tokenization_endpoint = urljoin(api_url, "/api/extra/tokencount")
@@ -149,11 +147,10 @@ async def remote_tokenization(batch: list[str], api_url: str, api_auth: str, api
         for text in batch:
             request_jsons.append({"prompt": text})
 
-    async with aiohttp.ClientSession() as session:
-        for request_json in request_jsons:
-            task = asyncio.ensure_future(post_json(request_json, header, tokenization_endpoint, session))
-            tasks.append(task)
-        responses = await asyncio.gather(*tasks)
+    for request_json in request_jsons:
+        response = requests.get(url=tokenization_endpoint, json=request_json, headers=header)
+        if response and response.status_code == 200:
+            responses.append(response.json())
 
     if api_type.lower() in ("koboldai", "koboldcpp"):
         for response in responses:
@@ -168,11 +165,6 @@ async def remote_tokenization(batch: list[str], api_url: str, api_auth: str, api
             token_amounts.append(int(response["value"]))
 
     return token_amounts
-
-
-async def post_json(json_content: dict, headers: dict, url: str, session: aiohttp.ClientSession) -> dict:
-    async with session.post(url, json=json_content, headers=headers) as resp:
-        return await resp.json()
 
 
 def get_context_length(api_url: str) -> int:
