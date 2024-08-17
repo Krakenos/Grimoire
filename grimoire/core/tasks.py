@@ -10,7 +10,7 @@ from grimoire.db.models import Message
 from grimoire.db.queries import get_knowledge_entity
 from grimoire.db.secondary_database import get_messages_from_external_db
 
-celery_app = Celery("tasks", broker=settings["CELERY_BROKER_URL"])
+celery_app = Celery("tasks", broker=f"redis://{settings['REDIS_HOST']}:{settings['REDIS_PORT']}/0")
 
 
 def make_summary_prompt(
@@ -150,7 +150,7 @@ def summarize(
     context_len = api_settings["context_length"]
     response_len = summarization_settings["max_tokens"]
     prefer_local_tokenizer = tokenization_settings["prefer_local_tokenizer"]
-    tokenizer = tokenization_settings["tokenizer"]
+    tokenizer = tokenization_settings["local_tokenizer"]
 
     with Session(db) as session:
         knowledge_entry = get_knowledge_entity(term, chat_id, session)
@@ -212,7 +212,7 @@ def summarize(
         summary_text = summary_text.replace("\n\n", "\n")
         summary_entry_text = f"[ {knowledge_entry.entity}: {summary_text} ]"
         knowledge_entry.summary = summary_text
-        knowledge_entry.summary = summary_entry_text
+        knowledge_entry.summary_entry = summary_entry_text
         knowledge_entry.token_count = token_count(
             [summary_entry_text],
             summarization_backend,

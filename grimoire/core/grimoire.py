@@ -390,6 +390,7 @@ def process_request(
                 settings["summarization_api"],
                 settings["summarization"],
                 settings["secondary_database"],
+                settings["tokenization"],
                 settings["DB_ENGINE"],
                 include_names,
             )
