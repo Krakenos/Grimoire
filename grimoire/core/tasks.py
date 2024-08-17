@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from celery import Celery
 from celery_singleton import Singleton
 from sqlalchemy import create_engine, select
@@ -117,7 +119,7 @@ def make_summary_prompt(
         to_tokenize = [*splitted_prompt, *reversed_messages, summary]
         to_tokenize = [text for text in to_tokenize if text != "" and text is not None]
         new_tokens = token_count(
-            to_tokenize, summarization_backend, summarization_url, summarization_auth, tokenizer, prefer_local_tokenizer
+            to_tokenize, summarization_backend, summarization_url, tokenizer, prefer_local_tokenizer, summarization_auth
         )
         sum_tokens = sum(new_tokens)
         if sum_tokens > max_context:
@@ -222,5 +224,6 @@ def summarize(
             summarization_auth,
         )[0]
         knowledge_entry.update_count = 1
+        knowledge_entry.updated_date = datetime.now()
         summary_logger.debug(f"({knowledge_entry.token_count} tokens){term} ({label}): {summary_text}\n{request_json}")
         session.commit()

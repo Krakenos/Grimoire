@@ -26,8 +26,8 @@ def local_tokenization(texts: str | list[str], tokenizer_name: str) -> int | lis
         token_amount = len(encoded["input_ids"])
         return token_amount
     else:
-        encoded_texts = [tokenizer(text) for text in texts]
-        return [len(tokenized_text["input_ids"]) for tokenized_text in encoded_texts]
+        encoded_texts = tokenizer(texts)
+        return [len(token_ids) for token_ids in encoded_texts["input_ids"]]
 
 
 def cache_entries(keys: list, values: list) -> None:
