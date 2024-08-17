@@ -1,12 +1,12 @@
-CELERY_BROKER_URL: 'redis://127.0.0.1:6370/0'
-REDIS_HOST: 'localhost'
+CELERY_BROKER_URL: "redis://127.0.0.1:6370/0"
+REDIS_HOST: "localhost"
 REDIS_PORT: 6370
 CACHE_EXPIRE_TIME: 86400
-DB_ENGINE: 'postgresql+psycopg2://grimoire:secretpassword@127.0.0.1:5430/grimoire'
+DB_ENGINE: "postgresql+psycopg2://grimoire:secretpassword@127.0.0.1:5430/grimoire"
 DEBUG: False
 LOG_PROMPTS: False
 LOG_FILES: False
-AUTH_KEY: ''
+AUTH_KEY: ""
 ENCRYPTION_KEY: !env ENCRYPTION_KEY
 prefer_gpu: False
 match_distance: 80
@@ -16,24 +16,24 @@ summarization_api:
   url: !env SUMMARIZATION_API_URL
   auth_key: !env SUMMARIZATION_API_AUTH
   context_length: 4096
-  system_sequence: ''
-  system_suffix: ''
-  input_sequence: '### Instruction:\n'
-  input_suffix: ''
-  output_sequence: '\n### Response:\n'
-  output_suffix: ''
-  first_output_sequence: ''
-  last_output_sequence: ''
+  system_sequence: ""
+  system_suffix: ""
+  input_sequence: "### Instruction:\n"
+  input_suffix: ""
+  output_sequence: "\n### Response:\n"
+  output_suffix: ""
+  first_output_sequence: ""
+  last_output_sequence: ""
 
 summarization:
-  prompt: '{previous_summary}\n{messages}\n{input_sequence}Describe {term}.{input_suffix}{output_sequence}'
+  prompt: "{previous_summary}\n{messages}\n{input_sequence}Describe {term}.{input_suffix}{output_sequence}"
   limit_rate: 1
-  bos_token: '<s>'
+  bos_token: "<s>"
   max_tokens: 300
-  params': {'min_p': 0.1, 'rep_pen': 1.0, 'temperature': 0.6, 'stop': ['</s>'], 'stop_sequence': ['</s>']}
+  params': {'min_p': 0.1, 'rep_pen': 1.0, 'temperature': 0.6, 'stop': ["</s>"], 'stop_sequence': ["</s>"]}
 
 secondary_database:
   enabled: False
-  db_engine: 'postgresql+psycopg2://user:password@database_url:5430/database_name'
-  message_encryption: 'aesgcm'
+  db_engine: "postgresql+psycopg2://user:password@database_url:5430/database_name"
+  message_encryption: "aesgcm"
   encryption_key: !env MESSAGE_ENCRYPTION_KEY
