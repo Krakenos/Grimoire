@@ -3,7 +3,7 @@ from celery_singleton import Singleton
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from grimoire.common.llm_helpers import count_context, generate_text
+from grimoire.common.llm_helpers import generate_text, token_count
 from grimoire.common.loggers import general_logger, summary_logger
 from grimoire.core.settings import settings
 from grimoire.db.models import Message
@@ -97,8 +97,8 @@ def make_summary_prompt(
     reversed_messages = []
 
     for message in messages[::-1]:
-        reversed_messages.append(message)
-        messages_text = "\n".join(reversed_messages[::-1])
+        reversed_messages.append(f"{message}\n")
+        messages_text = "".join(reversed_messages[::-1])
         new_prompt = summarization_settings["prompt"].format(
             term=knowledge_entry.entity,
             previous_summary=summary,
@@ -108,9 +108,12 @@ def make_summary_prompt(
             input_suffix=input_suffix,
             output_sequence=output_sequence,
         )
-        new_tokens = count_context(new_prompt, summarization_backend, summarization_url, summarization_auth)
-
-        if new_tokens > max_context:
+        splitted_prompt = new_prompt.split(messages_text)
+        to_tokenize = [*splitted_prompt, *reversed_messages]
+        to_tokenize = [text for text in to_tokenize if text != "" and text is not None]
+        new_tokens = token_count(to_tokenize, summarization_backend, summarization_url, summarization_auth)
+        sum_tokens = sum(new_tokens)
+        if sum_tokens > max_context:
             break
         else:
             prompt = new_prompt
@@ -198,9 +201,9 @@ def summarize(
         summary_entry_text = f"[ {knowledge_entry.entity}: {summary_text} ]"
         knowledge_entry.summary = summary_text
         knowledge_entry.summary = summary_entry_text
-        knowledge_entry.token_count = count_context(
-            summary_entry_text, summarization_backend, summarization_url, summarization_auth
-        )
+        knowledge_entry.token_count = token_count(
+            [summary_entry_text], summarization_backend, summarization_url, summarization_auth
+        )[0]
         knowledge_entry.update_count = 1
         summary_logger.debug(f"({knowledge_entry.token_count} tokens){term} ({label}): {summary_text}\n{request_json}")
         session.commit()

@@ -6,7 +6,7 @@ import requests
 from transformers import AutoTokenizer
 
 from grimoire.common.loggers import general_logger
-from grimoire.common.utils import async_time_execution
+from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 
 
@@ -96,8 +96,8 @@ def get_cached_tokens(keys: list[str]) -> list[int | None]:
     return cached_tokens
 
 
-@async_time_execution
-async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None) -> list[int]:
+@time_execution
+def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None) -> list[int]:
     unique_texts = list(set(batch))
     cache_keys = [f"llm_{api_type}_{api_url} {text}" for text in unique_texts]
     cached_tokens = get_cached_tokens(cache_keys)
