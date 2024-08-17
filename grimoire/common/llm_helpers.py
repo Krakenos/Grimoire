@@ -1,75 +1,24 @@
-import asyncio
 import time
 from urllib.parse import urljoin
 
-import aiohttp
 import redis
 import requests
 from transformers import AutoTokenizer
 
 from grimoire.common.loggers import general_logger
-from grimoire.common.utils import async_time_execution
+from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 
 
-# TODO old tokenization code, replace where it's used and remove
-def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
-    """
-    Counts the token length of the text either through endpoint or with local tokenizer
-    :param text:
-    :param api_type:
-    :param api_url:
-    :param api_auth:
-    :return:
-    """
-    if api_type.lower() in ("koboldai", "koboldcpp"):
-        token_count_endpoint = urljoin(api_url, "/api/extra/tokencount")
-        request_body = {"prompt": text}
-        kobold_response = requests.post(token_count_endpoint, json=request_body)
-        value = int(kobold_response.json()["value"])
-        return value
-
-    elif api_type.lower() == "tabby":
-        tokenize_endpoint = urljoin(api_url, "/v1/token/encode")
-        tokenize_json = {"text": text}
-        tokenize_response = requests.post(
-            tokenize_endpoint, json=tokenize_json, headers={"Authorization": f"Bearer {api_auth}"}
-        )
-        if tokenize_response.status_code == 200:
-            tokenized = tokenize_response.json()
-            return tokenized["length"]
-    else:
-        tokenize_endpoint = urljoin(api_url, "/v1/tokenize")
-        tokenize_json = {"prompt": text}
-        tokenize_response = requests.post(
-            tokenize_endpoint, json=tokenize_json, headers={"Authorization": f"Bearer {api_auth}"}
-        )
-        if tokenize_response.status_code == 200:
-            tokenized = tokenize_response.json()
-            return tokenized["value"]
-        general_logger.warning(f"Tokenize endpoint not found for {api_type}, proceeding to count based on tokenizer")
-        model_name = get_model_name(api_url, api_auth, api_type)
-        # Default to llama tokenizer if model tokenizer is not on huggingface
-        try:
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-        except OSError as s:
-            general_logger.warning("Could not load model tokenizer, defaulting to llama-tokenizer")
-            general_logger.warning(s)
-            tokenizer = AutoTokenizer.from_pretrained("oobabooga/llama-tokenizer")
-        encoded = tokenizer(text)
-        token_amount = len(encoded["input_ids"])
-        return token_amount
-
-
-def local_tokenization(texts: str | list[str], api_url: str, api_auth: str, api_type: str) -> int | list[int]:
-    model_name = get_model_name(api_url, api_auth, api_type)
+def local_tokenization(texts: str | list[str], tokenizer_name: str) -> int | list[int]:
+    general_logger.debug("using local tokenization")
     text = ""
     if texts is str:
         text = texts
     try:
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
     except OSError as s:
-        general_logger.warning("Could not load model tokenizer, defaulting to llama-tokenizer")
+        general_logger.warning(f"Could not load {tokenizer_name} tokenizer, defaulting to llama-tokenizer")
         general_logger.warning(s)
         tokenizer = AutoTokenizer.from_pretrained("oobabooga/llama-tokenizer")
     if text:
@@ -77,8 +26,8 @@ def local_tokenization(texts: str | list[str], api_url: str, api_auth: str, api_
         token_amount = len(encoded["input_ids"])
         return token_amount
     else:
-        encoded_texts = [tokenizer(text) for text in texts]
-        return [len(tokenized_text["input_ids"]) for tokenized_text in encoded_texts]
+        encoded_texts = tokenizer(texts)
+        return [len(token_ids) for token_ids in encoded_texts["input_ids"]]
 
 
 def cache_entries(keys: list, values: list) -> None:
@@ -98,8 +47,10 @@ def get_cached_tokens(keys: list[str]) -> list[int | None]:
     return cached_tokens
 
 
-@async_time_execution
-async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None) -> list[int]:
+@time_execution
+def token_count(
+    batch: list[str], api_type: str, api_url: str, local_tokenizer, prefer_local=True, api_auth=None
+) -> list[int]:
     unique_texts = list(set(batch))
     cache_keys = [f"llm_{api_type}_{api_url} {text}" for text in unique_texts]
     cached_tokens = get_cached_tokens(cache_keys)
@@ -112,10 +63,13 @@ async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=No
             to_tokenize.append(text)
 
     if to_tokenize:
-        if api_type.lower() in ("koboldai", "koboldcpp", "tabby", "aphrodite", "genericoai"):
-            new_tokens = await remote_tokenization(to_tokenize, api_url, api_auth, api_type)
+        if not prefer_local and api_type.lower() in ("koboldai", "koboldcpp", "tabby", "aphrodite", "genericoai"):
+            new_tokens = remote_tokenization(to_tokenize, api_url, api_auth, api_type)
         else:
-            new_tokens = local_tokenization(to_tokenize, api_url, api_auth, api_type)
+            new_tokens = local_tokenization(to_tokenize, local_tokenizer)
+
+        if new_tokens is None:
+            new_tokens = local_tokenization(to_tokenize, local_tokenizer)
 
         for text, tokens in zip(to_tokenize, new_tokens, strict=False):
             tokens_dict[text] = tokens
@@ -127,12 +81,13 @@ async def token_count(batch: list[str], api_type: str, api_url: str, api_auth=No
     return tokens
 
 
-async def remote_tokenization(batch: list[str], api_url: str, api_auth: str, api_type: str) -> list[int]:
-    tasks = []
+def remote_tokenization(batch: list[str], api_url: str, api_auth: str, api_type: str) -> list[int] | None:
+    general_logger.debug("using remote tokenization")
     tokenization_endpoint = ""
     request_jsons = []
     header = {"Authorization": f"Bearer {api_auth}"}
     token_amounts = []
+    responses = []
 
     if api_type.lower() in ("koboldai", "koboldcpp"):
         tokenization_endpoint = urljoin(api_url, "/api/extra/tokencount")
@@ -149,11 +104,13 @@ async def remote_tokenization(batch: list[str], api_url: str, api_auth: str, api
         for text in batch:
             request_jsons.append({"prompt": text})
 
-    async with aiohttp.ClientSession() as session:
-        for request_json in request_jsons:
-            task = asyncio.ensure_future(post_json(request_json, header, tokenization_endpoint, session))
-            tasks.append(task)
-        responses = await asyncio.gather(*tasks)
+    for request_json in request_jsons:
+        response = requests.post(url=tokenization_endpoint, json=request_json, headers=header)
+        if response and response.status_code == 200:
+            responses.append(response.json())
+        else:
+            general_logger.error("Request to tokenize failed, using local tokenizer fallback")
+            return None
 
     if api_type.lower() in ("koboldai", "koboldcpp"):
         for response in responses:
@@ -168,11 +125,6 @@ async def remote_tokenization(batch: list[str], api_url: str, api_auth: str, api
             token_amounts.append(int(response["value"]))
 
     return token_amounts
-
-
-async def post_json(json_content: dict, headers: dict, url: str, session: aiohttp.ClientSession) -> dict:
-    async with session.post(url, json=json_content, headers=headers) as resp:
-        return await resp.json()
 
 
 def get_context_length(api_url: str) -> int:

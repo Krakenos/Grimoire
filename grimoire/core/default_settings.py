@@ -1,6 +1,5 @@
 defaults = {
-    "CELERY_BROKER_URL": "redis://127.0.0.1:6379/0",
-    "REDIS_HOST": "localhost",
+    "REDIS_HOST": "127.0.0.1",
     "REDIS_PORT": 6379,
     "CACHE_EXPIRE_TIME": 86400,
     "DB_ENGINE": "postgresql+psycopg2://grimoire:secretpassword@127.0.0.1:5432/grimoire",
@@ -32,5 +31,6 @@ defaults = {
         "max_tokens": 300,
         "params": {"min_p": 0.1, "rep_pen": 1.0, "temperature": 0.6, "stop": ["</s>"], "stop_sequence": ["</s>"]},
     },
+    "tokenization": {"prefer_local_tokenizer": True, "local_tokenizer": "oobabooga/llama-tokenizer"},
     "secondary_database": {"enabled": False, "db_engine": "", "message_encryption": "aesgcm", "encryption_key": ""},
 }

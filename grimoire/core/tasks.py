@@ -1,16 +1,18 @@
+from datetime import datetime
+
 from celery import Celery
 from celery_singleton import Singleton
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from grimoire.common.llm_helpers import count_context, generate_text
+from grimoire.common.llm_helpers import generate_text, token_count
 from grimoire.common.loggers import general_logger, summary_logger
 from grimoire.core.settings import settings
 from grimoire.db.models import Message
 from grimoire.db.queries import get_knowledge_entity
 from grimoire.db.secondary_database import get_messages_from_external_db
 
-celery_app = Celery("tasks", broker=settings["CELERY_BROKER_URL"])
+celery_app = Celery("tasks", broker=f"redis://{settings['REDIS_HOST']}:{settings['REDIS_PORT']}/0")
 
 
 def make_summary_prompt(
@@ -20,6 +22,8 @@ def make_summary_prompt(
     api_settings,
     summarization_settings,
     secondary_database_settings,
+    prefer_local_tokenizer,
+    tokenizer,
     include_names: bool = True,
 ) -> str | None:
     summarization_url = api_settings["url"]
@@ -34,8 +38,8 @@ def make_summary_prompt(
     secondary_database_encryption_key = secondary_database_settings["encryption_key"]
     chat_id = knowledge_entry.chat_id
 
-    if knowledge_entry.summary:
-        summary = knowledge_entry.summary
+    if knowledge_entry.summary_entry:
+        summary = knowledge_entry.summary_entry
     else:
         summary = ""
 
@@ -97,8 +101,8 @@ def make_summary_prompt(
     reversed_messages = []
 
     for message in messages[::-1]:
-        reversed_messages.append(message)
-        messages_text = "\n".join(reversed_messages[::-1])
+        reversed_messages.append(f"{message}\n")
+        messages_text = "".join(reversed_messages[::-1])
         new_prompt = summarization_settings["prompt"].format(
             term=knowledge_entry.entity,
             previous_summary=summary,
@@ -108,9 +112,17 @@ def make_summary_prompt(
             input_suffix=input_suffix,
             output_sequence=output_sequence,
         )
-        new_tokens = count_context(new_prompt, summarization_backend, summarization_url, summarization_auth)
-
-        if new_tokens > max_context:
+        prompt_without_summary = new_prompt
+        if summary:
+            prompt_without_summary = new_prompt.replace(summary, "")
+        splitted_prompt = prompt_without_summary.split(messages_text)
+        to_tokenize = [*splitted_prompt, *reversed_messages, summary]
+        to_tokenize = [text for text in to_tokenize if text != "" and text is not None]
+        new_tokens = token_count(
+            to_tokenize, summarization_backend, summarization_url, tokenizer, prefer_local_tokenizer, summarization_auth
+        )
+        sum_tokens = sum(new_tokens)
+        if sum_tokens > max_context:
             break
         else:
             prompt = new_prompt
@@ -126,6 +138,7 @@ def summarize(
     api_settings: dict,
     summarization_settings: dict,
     secondary_database_settings: dict,
+    tokenization_settings: dict,
     db_engine: str,
     include_names: bool = True,
     max_retries: int = 50,
@@ -138,6 +151,8 @@ def summarize(
     limit_rate = summarization_settings["limit_rate"]
     context_len = api_settings["context_length"]
     response_len = summarization_settings["max_tokens"]
+    prefer_local_tokenizer = tokenization_settings["prefer_local_tokenizer"]
+    tokenizer = tokenization_settings["local_tokenizer"]
 
     with Session(db) as session:
         knowledge_entry = get_knowledge_entity(term, chat_id, session)
@@ -162,6 +177,8 @@ def summarize(
             api_settings,
             summarization_settings,
             secondary_database_settings,
+            prefer_local_tokenizer,
+            tokenizer,
             include_names,
         )
         if prompt is None:  # Edge case of having 1 message for summary, only may happen at start of chat
@@ -195,11 +212,18 @@ def summarize(
             retry_interval,
         )
         summary_text = summary_text.replace("\n\n", "\n")
-        summary_text = f"[ {knowledge_entry.entity}: {summary_text} ]"
+        summary_entry_text = f"[ {knowledge_entry.entity}: {summary_text} ]"
         knowledge_entry.summary = summary_text
-        knowledge_entry.token_count = count_context(
-            summary_text, summarization_backend, summarization_url, summarization_auth
-        )
+        knowledge_entry.summary_entry = summary_entry_text
+        knowledge_entry.token_count = token_count(
+            [summary_entry_text],
+            summarization_backend,
+            summarization_url,
+            tokenizer,
+            prefer_local_tokenizer,
+            summarization_auth,
+        )[0]
         knowledge_entry.update_count = 1
+        knowledge_entry.updated_date = datetime.now()
         summary_logger.debug(f"({knowledge_entry.token_count} tokens){term} ({label}): {summary_text}\n{request_json}")
         session.commit()
