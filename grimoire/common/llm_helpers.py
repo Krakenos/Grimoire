@@ -99,7 +99,7 @@ def remote_tokenization(batch: list[str], api_url: str, api_auth: str, api_type:
             request_jsons.append({"prompt": text})
 
     for request_json in request_jsons:
-        response = requests.get(url=tokenization_endpoint, json=request_json, headers=header)
+        response = requests.post(url=tokenization_endpoint, json=request_json, headers=header)
         if response and response.status_code == 200:
             responses.append(response.json())
 

@@ -108,8 +108,11 @@ def make_summary_prompt(
             input_suffix=input_suffix,
             output_sequence=output_sequence,
         )
-        splitted_prompt = new_prompt.split(messages_text)
-        to_tokenize = [*splitted_prompt, *reversed_messages]
+        prompt_without_summary = new_prompt
+        if summary:
+            prompt_without_summary = new_prompt.replace(summary, "")
+        splitted_prompt = prompt_without_summary.split(messages_text)
+        to_tokenize = [*splitted_prompt, *reversed_messages, summary]
         to_tokenize = [text for text in to_tokenize if text != "" and text is not None]
         new_tokens = token_count(to_tokenize, summarization_backend, summarization_url, summarization_auth)
         sum_tokens = sum(new_tokens)
