@@ -20,6 +20,8 @@ def make_summary_prompt(
     api_settings,
     summarization_settings,
     secondary_database_settings,
+    prefer_local_tokenizer,
+    tokenizer,
     include_names: bool = True,
 ) -> str | None:
     summarization_url = api_settings["url"]
@@ -114,7 +116,9 @@ def make_summary_prompt(
         splitted_prompt = prompt_without_summary.split(messages_text)
         to_tokenize = [*splitted_prompt, *reversed_messages, summary]
         to_tokenize = [text for text in to_tokenize if text != "" and text is not None]
-        new_tokens = token_count(to_tokenize, summarization_backend, summarization_url, summarization_auth)
+        new_tokens = token_count(
+            to_tokenize, summarization_backend, summarization_url, summarization_auth, tokenizer, prefer_local_tokenizer
+        )
         sum_tokens = sum(new_tokens)
         if sum_tokens > max_context:
             break
@@ -132,6 +136,7 @@ def summarize(
     api_settings: dict,
     summarization_settings: dict,
     secondary_database_settings: dict,
+    tokenization_settings: dict,
     db_engine: str,
     include_names: bool = True,
     max_retries: int = 50,
@@ -144,6 +149,8 @@ def summarize(
     limit_rate = summarization_settings["limit_rate"]
     context_len = api_settings["context_length"]
     response_len = summarization_settings["max_tokens"]
+    prefer_local_tokenizer = tokenization_settings["prefer_local_tokenizer"]
+    tokenizer = tokenization_settings["tokenizer"]
 
     with Session(db) as session:
         knowledge_entry = get_knowledge_entity(term, chat_id, session)
@@ -168,6 +175,8 @@ def summarize(
             api_settings,
             summarization_settings,
             secondary_database_settings,
+            prefer_local_tokenizer,
+            tokenizer,
             include_names,
         )
         if prompt is None:  # Edge case of having 1 message for summary, only may happen at start of chat
@@ -205,7 +214,12 @@ def summarize(
         knowledge_entry.summary = summary_text
         knowledge_entry.summary = summary_entry_text
         knowledge_entry.token_count = token_count(
-            [summary_entry_text], summarization_backend, summarization_url, summarization_auth
+            [summary_entry_text],
+            summarization_backend,
+            summarization_url,
+            tokenizer,
+            prefer_local_tokenizer,
+            summarization_auth,
         )[0]
         knowledge_entry.update_count = 1
         summary_logger.debug(f"({knowledge_entry.token_count} tokens){term} ({label}): {summary_text}\n{request_json}")

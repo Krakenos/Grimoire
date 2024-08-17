@@ -10,15 +10,15 @@ from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 
 
-def local_tokenization(texts: str | list[str], api_url: str, api_auth: str, api_type: str) -> int | list[int]:
-    model_name = get_model_name(api_url, api_auth, api_type)
+def local_tokenization(texts: str | list[str], tokenizer_name: str) -> int | list[int]:
+    general_logger.debug("using local tokenization")
     text = ""
     if texts is str:
         text = texts
     try:
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
     except OSError as s:
-        general_logger.warning("Could not load model tokenizer, defaulting to llama-tokenizer")
+        general_logger.warning(f"Could not load {tokenizer_name} tokenizer, defaulting to llama-tokenizer")
         general_logger.warning(s)
         tokenizer = AutoTokenizer.from_pretrained("oobabooga/llama-tokenizer")
     if text:
@@ -48,7 +48,9 @@ def get_cached_tokens(keys: list[str]) -> list[int | None]:
 
 
 @time_execution
-def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None) -> list[int]:
+def token_count(
+    batch: list[str], api_type: str, api_url: str, local_tokenizer, prefer_local=True, api_auth=None
+) -> list[int]:
     unique_texts = list(set(batch))
     cache_keys = [f"llm_{api_type}_{api_url} {text}" for text in unique_texts]
     cached_tokens = get_cached_tokens(cache_keys)
@@ -61,10 +63,13 @@ def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None) ->
             to_tokenize.append(text)
 
     if to_tokenize:
-        if api_type.lower() in ("koboldai", "koboldcpp", "tabby", "aphrodite", "genericoai"):
+        if not prefer_local and api_type.lower() in ("koboldai", "koboldcpp", "tabby", "aphrodite", "genericoai"):
             new_tokens = remote_tokenization(to_tokenize, api_url, api_auth, api_type)
         else:
-            new_tokens = local_tokenization(to_tokenize, api_url, api_auth, api_type)
+            new_tokens = local_tokenization(to_tokenize, local_tokenizer)
+
+        if new_tokens is None:
+            new_tokens = local_tokenization(to_tokenize, local_tokenizer)
 
         for text, tokens in zip(to_tokenize, new_tokens, strict=False):
             tokens_dict[text] = tokens
@@ -76,7 +81,8 @@ def token_count(batch: list[str], api_type: str, api_url: str, api_auth=None) ->
     return tokens
 
 
-def remote_tokenization(batch: list[str], api_url: str, api_auth: str, api_type: str) -> list[int]:
+def remote_tokenization(batch: list[str], api_url: str, api_auth: str, api_type: str) -> list[int] | None:
+    general_logger.debug("using remote tokenization")
     tokenization_endpoint = ""
     request_jsons = []
     header = {"Authorization": f"Bearer {api_auth}"}
@@ -102,6 +108,9 @@ def remote_tokenization(batch: list[str], api_url: str, api_auth: str, api_type:
         response = requests.post(url=tokenization_endpoint, json=request_json, headers=header)
         if response and response.status_code == 200:
             responses.append(response.json())
+        else:
+            general_logger.error("Request to tokenize failed, using local tokenizer fallback")
+            return None
 
     if api_type.lower() in ("koboldai", "koboldcpp"):
         for response in responses:
