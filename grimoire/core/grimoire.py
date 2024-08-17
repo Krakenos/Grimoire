@@ -1,3 +1,4 @@
+import json
 import timeit
 from collections import defaultdict
 from dataclasses import asdict, dataclass
@@ -137,9 +138,10 @@ def get_cached_entities(texts: list[str]) -> list[list[NamedEntity] | None]:
     redis_keys = [f"NAMED_ENTITIES_{text}" for text in texts]
     cached_entries = []
     for key in redis_keys:
-        cached_value: list | None = redis_client.get(key)
+        cached_value = redis_client.get(key)
         if cached_value is not None:
-            entity_list = [NamedEntity(**entity_dict) for entity_dict in cached_value]
+            cached_list = json.loads(cached_value)
+            entity_list = [NamedEntity(**entity_dict) for entity_dict in cached_list]
             cached_entries.append(entity_list)
         else:
             cached_entries.append(None)
@@ -155,7 +157,7 @@ def cache_entities(texts: list[str], entities: list[list[NamedEntity]]) -> None:
         redis_values.append(redis_value)
 
     for key, value in zip(redis_keys, redis_values, strict=True):
-        redis_client.set(key, value, settings["CACHE_EXPIRE_TIME"])
+        redis_client.set(key, json.dumps(value), settings["CACHE_EXPIRE_TIME"])
 
 
 @time_execution
