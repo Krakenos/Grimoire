@@ -10,55 +10,6 @@ from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 
 
-# TODO old tokenization code, replace where it's used and remove
-def count_context(text: str, api_type: str, api_url: str, api_auth=None) -> int:
-    """
-    Counts the token length of the text either through endpoint or with local tokenizer
-    :param text:
-    :param api_type:
-    :param api_url:
-    :param api_auth:
-    :return:
-    """
-    if api_type.lower() in ("koboldai", "koboldcpp"):
-        token_count_endpoint = urljoin(api_url, "/api/extra/tokencount")
-        request_body = {"prompt": text}
-        kobold_response = requests.post(token_count_endpoint, json=request_body)
-        value = int(kobold_response.json()["value"])
-        return value
-
-    elif api_type.lower() == "tabby":
-        tokenize_endpoint = urljoin(api_url, "/v1/token/encode")
-        tokenize_json = {"text": text}
-        tokenize_response = requests.post(
-            tokenize_endpoint, json=tokenize_json, headers={"Authorization": f"Bearer {api_auth}"}
-        )
-        if tokenize_response.status_code == 200:
-            tokenized = tokenize_response.json()
-            return tokenized["length"]
-    else:
-        tokenize_endpoint = urljoin(api_url, "/v1/tokenize")
-        tokenize_json = {"prompt": text}
-        tokenize_response = requests.post(
-            tokenize_endpoint, json=tokenize_json, headers={"Authorization": f"Bearer {api_auth}"}
-        )
-        if tokenize_response.status_code == 200:
-            tokenized = tokenize_response.json()
-            return tokenized["value"]
-        general_logger.warning(f"Tokenize endpoint not found for {api_type}, proceeding to count based on tokenizer")
-        model_name = get_model_name(api_url, api_auth, api_type)
-        # Default to llama tokenizer if model tokenizer is not on huggingface
-        try:
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-        except OSError as s:
-            general_logger.warning("Could not load model tokenizer, defaulting to llama-tokenizer")
-            general_logger.warning(s)
-            tokenizer = AutoTokenizer.from_pretrained("oobabooga/llama-tokenizer")
-        encoded = tokenizer(text)
-        token_amount = len(encoded["input_ids"])
-        return token_amount
-
-
 def local_tokenization(texts: str | list[str], api_url: str, api_auth: str, api_type: str) -> int | list[int]:
     model_name = get_model_name(api_url, api_auth, api_type)
     text = ""
