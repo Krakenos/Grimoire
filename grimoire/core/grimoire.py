@@ -376,7 +376,7 @@ def process_request(
     new_message_indices, chat = save_messages(
         last_messages, last_external_ids, last_names, entity_dict, chat, db_session
     )
-    save_named_entities(chat, entity_list, entity_dict, external_message_map, db_session)
+    save_named_entities(chat, last_entities, entity_dict, external_message_map, db_session)
 
     entities_to_summarize = [last_entities[index] for index in new_message_indices]
 
