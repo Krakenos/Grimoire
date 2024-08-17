@@ -1,9 +1,10 @@
 import timeit
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from itertools import chain
 
 import numpy as np
+import redis
 import spacy
 from rapidfuzz import fuzz
 from rapidfuzz import process as fuzz_process
@@ -131,6 +132,32 @@ def save_messages(
         return new_messages_indices, chat
 
 
+def get_cached_entities(texts: list[str]) -> list[list[NamedEntity] | None]:
+    redis_client = redis.StrictRedis(host=settings["REDIS_HOST"], port=settings["REDIS_PORT"], decode_responses=True)
+    redis_keys = [f"NAMED_ENTITIES_{text}" for text in texts]
+    cached_entries = []
+    for key in redis_keys:
+        cached_value: list | None = redis_client.get(key)
+        if cached_value is not None:
+            entity_list = [NamedEntity(**entity_dict) for entity_dict in cached_value]
+            cached_entries.append(entity_list)
+        else:
+            cached_entries.append(None)
+    return cached_entries
+
+
+def cache_entities(texts: list[str], entities: list[list[NamedEntity]]) -> None:
+    redis_client = redis.StrictRedis(host=settings["REDIS_HOST"], port=settings["REDIS_PORT"])
+    redis_keys = [f"NAMED_ENTITIES_{text}" for text in texts]
+    redis_values = []
+    for entity_list in entities:
+        redis_value = [asdict(entity) for entity in entity_list]
+        redis_values.append(redis_value)
+
+    for key, value in zip(redis_keys, redis_values, strict=True):
+        redis_client.set(key, value, settings["CACHE_EXPIRE_TIME"])
+
+
 @time_execution
 def get_named_entities(
     messages: list[str],
@@ -141,6 +168,7 @@ def get_named_entities(
 ) -> tuple[list[list[NamedEntity]], dict[str, list[NamedEntity]]]:
     entity_list = []
     entity_dict = {}
+    to_check_cache = []
     to_process = []
     to_process_with_names = []
     banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME", "QUANTITY"]
@@ -164,6 +192,15 @@ def get_named_entities(
         else:
             raise ValueError("No external id or message provided")
 
+    for message in messages:
+        if message not in entity_dict:
+            to_check_cache.append(message)
+
+    cached_values = get_cached_entities(to_check_cache)
+    for message, cached in zip(to_check_cache, cached_values, strict=True):
+        if cached is not None:
+            entity_dict[message] = cached
+
     for sender_name, message in zip(messages_names, messages, strict=True):
         if message not in entity_dict:
             to_process_with_names.append(f"{sender_name}: {message}")
@@ -177,6 +214,9 @@ def get_named_entities(
     for text, doc in zip(to_process, new_docs, strict=True):
         entities = [NamedEntity(ent.text, ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
         entity_dict[text] = entities
+
+    values_to_cache = [entity_dict[text] for text in to_process]
+    cache_entities(to_process, values_to_cache)
     for message in messages:
         entity_list.append(entity_dict[message])
 
