@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [ ! -f "config/settings.yaml" ]; then
+    echo "Settings file doesn't exist! Creating one for you."
+    cp config/settings.default.yaml config/settings.yaml
+fi
+
 if [ ! -d "venv" ]; then
     echo "Venv doesn't exist! Creating one for you."
     python3 -m venv venv
