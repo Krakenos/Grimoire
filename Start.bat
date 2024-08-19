@@ -2,6 +2,11 @@
 
 cd "%~dp0"
 
+IF NOT EXIST "config\settings.yaml" (
+    ECHO Settings file doesn't exist! Creating one for you.
+    COPY config\settings.default.yaml config\settings.yaml
+)
+
 CALL python -V
 IF ERRORLEVEL 1 (
     ECHO Can't find python command, make sure python is installed and added to PATH environmental variable
