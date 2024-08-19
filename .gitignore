@@ -161,3 +161,6 @@ cython_debug/
 
 # custom settings file 
 config/settings.yaml
+
+# postgres data
+db_data
