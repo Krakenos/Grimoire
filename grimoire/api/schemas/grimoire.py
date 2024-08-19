@@ -36,6 +36,7 @@ class ChatMessageIn(BaseModel):
 class KnowledgeOut(BaseModel):
     id: int
     entity: str
+    entity_label: str
     summary: str
     enabled: bool
     frozen: bool
