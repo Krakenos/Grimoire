@@ -166,7 +166,6 @@ def get_named_entities(
     messages_external_ids: list[str],
     messages_names: list[str],
     chat: Chat,
-    include_names: bool = True,
 ) -> tuple[list[list[NamedEntity]], dict[str, list[NamedEntity]]]:
     entity_list = []
     entity_dict = {}
@@ -208,10 +207,7 @@ def get_named_entities(
             to_process_with_names.append(f"{sender_name}: {message}")
             to_process.append(message)
 
-    if include_names:
-        new_docs = list(nlp.pipe(to_process_with_names))
-    else:
-        new_docs = list(nlp.pipe(to_process))
+    new_docs = list(nlp.pipe(to_process_with_names))
 
     for text, doc in zip(to_process, new_docs, strict=True):
         entities = [NamedEntity(ent.text, ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
@@ -390,7 +386,7 @@ def process_request(
     messages_external_ids: list[str],
     messages_names: list[str],
     db_session,
-    include_names: bool = True,
+    include_names: bool = False,
     external_user_id: str | None = None,
     token_limit: int | None = None,
 ):
@@ -407,7 +403,7 @@ def process_request(
 
     doc_time = timeit.default_timer()
     entity_list, entity_dict = get_named_entities(
-        chat_texts, messages_external_ids, messages_names, chat, include_names
+        chat_texts, messages_external_ids, messages_names, chat
     )
     doc_end_time = timeit.default_timer()
     general_logger.debug(f"Getting named entities {doc_end_time - doc_time} seconds")
