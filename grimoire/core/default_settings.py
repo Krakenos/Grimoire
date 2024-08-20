@@ -7,7 +7,7 @@ defaults = {
     "LOG_PROMPTS": False,
     "LOG_FILES": False,
     "AUTH_KEY": "",
-    "ENCRYPTION_KEY": "",
+    "ENCRYPTION_KEY": "sample-database-encryption-key",
     "prefer_gpu": False,
     "match_distance": 80,
     "summarization_api": {
