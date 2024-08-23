@@ -33,11 +33,11 @@ class SettingsLoader:
         else:  # Other envs
             proj_path = pathlib.Path(__file__).parents[2]
 
-        default_settings_path = proj_path / "config" / "settings.yaml"
+        settings_file = os.environ.get("SETTINGS_FILE", "settings.yaml")
 
-        config_path = os.environ.get("APP_CONFIG", default_settings_path.resolve())
+        settings_path = proj_path / "config" / settings_file
 
-        return config_path
+        return settings_path.resolve()
 
     @classmethod
     def load_from_file(cls, file_path: str) -> dict:
