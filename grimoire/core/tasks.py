@@ -1,3 +1,4 @@
+import ssl
 from datetime import datetime
 
 from celery import Celery
@@ -8,12 +9,21 @@ from sqlalchemy.orm import Session
 from grimoire.common.llm_helpers import generate_text, token_count
 from grimoire.common.loggers import general_logger, summary_logger
 from grimoire.common.redis import redis_manager
-from grimoire.core.settings import settings
 from grimoire.db.models import Message
 from grimoire.db.queries import get_knowledge_entity
 from grimoire.db.secondary_database import get_messages_from_external_db
 
-celery_app = Celery("tasks", broker=f"redis://{settings['REDIS_HOST']}:{settings['REDIS_PORT']}/0")
+broker_url = redis_manager.celery_broker_url()
+
+celery_app = Celery("tasks", broker=broker_url)
+
+if redis_manager.sentinel:
+    transport_options = {"master_name": redis_manager.sentinel_master}
+
+    if redis_manager.tls:
+        transport_options["sentinel_kwargs"] = {"ssl": True, "ssl_cert_reqs": ssl.CERT_NONE}
+
+    celery_app.conf.broker_transport_options = transport_options
 
 
 @celery_app.on_after_configure.connect
