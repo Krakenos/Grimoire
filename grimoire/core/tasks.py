@@ -1,6 +1,5 @@
 from datetime import datetime
 
-import redis
 from celery import Celery
 from celery_singleton import Singleton
 from sqlalchemy import create_engine, select
@@ -8,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from grimoire.common.llm_helpers import generate_text, token_count
 from grimoire.common.loggers import general_logger, summary_logger
+from grimoire.common.redis import redis_manager
 from grimoire.core.settings import settings
 from grimoire.db.models import Message
 from grimoire.db.queries import get_knowledge_entity
@@ -238,6 +238,6 @@ def summarize(
 @celery_app.task
 def queue_logging():
     summarization_queue = "celery"
-    redis_client = redis.StrictRedis(host=settings["REDIS_HOST"], port=settings["REDIS_PORT"], decode_responses=True)
+    redis_client = redis_manager.get_client()
     queue_length = redis_client.llen(summarization_queue)
     general_logger.info(f"Summarization tasks in queue: {queue_length}")

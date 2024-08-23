@@ -19,12 +19,12 @@ class RedisManager:
         hosts = self.host.split(",")
         ports = self.port.split(",")
         sentinel_hosts = [(host_name, int(port)) for host_name, port in zip(hosts, ports, strict=True)]
-        self.sentinel_client = Sentinel(sentinel_hosts)
+        self.sentinel_client = Sentinel(sentinel_hosts, decode_responses=True)
 
     def _init_single(self) -> None:
-        self.connection_pool = ConnectionPool(self.host, int(self.port), db=0)
+        self.connection_pool = ConnectionPool(self.host, int(self.port), db=0, decode_responses=True)
 
-    def get_redis_client(self) -> Redis:
+    def get_client(self) -> Redis:
         if self.sentinel:
             return self.sentinel_client.master_for(self.sentinel_master)
         else:
