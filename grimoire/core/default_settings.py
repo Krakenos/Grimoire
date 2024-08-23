@@ -1,6 +1,9 @@
 defaults = {
     "REDIS_HOST": "127.0.0.1",
     "REDIS_PORT": 6379,
+    "REDIS_SENTINEL": False,
+    "SENTINEL_MASTER_NAME": "",
+    "REDIS_TLS": False,
     "CACHE_EXPIRE_TIME": 86400,
     "DB_ENGINE": "postgresql+psycopg2://grimoire:secretpassword@127.0.0.1:5432/grimoire",
     "DEBUG": False,
