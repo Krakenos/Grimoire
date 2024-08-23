@@ -6,7 +6,7 @@ fi
 
 alembic upgrade head
 
-celery -A grimoire.core.tasks beat
+celery -A grimoire.core.tasks beat &
 
 concurrency="${TASK_CONCURRENCY:-8}"
 celery -A grimoire.core.tasks worker -l info -c $concurrency &
