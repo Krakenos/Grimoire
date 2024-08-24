@@ -28,15 +28,15 @@ class RedisManager:
     def _init_single(self) -> None:
         if self.tls:
             self.connection_pool = ConnectionPool(
-                self.host,
-                int(self.port),
+                host=self.host,
+                port=int(self.port),
                 db=0,
                 decode_responses=True,
                 connection_class=SSLConnection,
                 ssl_cert_reqs="none",
             )
         else:
-            self.connection_pool = ConnectionPool(self.host, int(self.port), db=0, decode_responses=True)
+            self.connection_pool = ConnectionPool(host=self.host, port=int(self.port), db=0, decode_responses=True)
 
     def get_client(self) -> Redis:
         if self.sentinel:
