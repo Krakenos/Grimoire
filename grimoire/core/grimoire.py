@@ -5,7 +5,6 @@ from dataclasses import asdict, dataclass
 from itertools import chain
 
 import numpy as np
-import redis
 import spacy
 from rapidfuzz import fuzz
 from rapidfuzz import process as fuzz_process
@@ -15,6 +14,7 @@ from sqlalchemy.orm import Session, selectinload, with_loader_criteria
 
 from grimoire.api.schemas.grimoire import KnowledgeData
 from grimoire.common.loggers import general_logger
+from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 from grimoire.core.tasks import summarize
@@ -134,7 +134,7 @@ def save_messages(
 
 
 def get_cached_entities(texts: list[str]) -> list[list[NamedEntity] | None]:
-    redis_client = redis.StrictRedis(host=settings["REDIS_HOST"], port=settings["REDIS_PORT"], decode_responses=True)
+    redis_client = redis_manager.get_client()
     redis_keys = [f"NAMED_ENTITIES_{text}" for text in texts]
     cached_entries = []
     for key in redis_keys:
@@ -149,7 +149,7 @@ def get_cached_entities(texts: list[str]) -> list[list[NamedEntity] | None]:
 
 
 def cache_entities(texts: list[str], entities: list[list[NamedEntity]]) -> None:
-    redis_client = redis.StrictRedis(host=settings["REDIS_HOST"], port=settings["REDIS_PORT"])
+    redis_client = redis_manager.get_client()
     redis_keys = [f"NAMED_ENTITIES_{text}" for text in texts]
     redis_values = []
     for entity_list in entities:
@@ -402,9 +402,7 @@ def process_request(
         external_message_map = dict(zip(messages_external_ids, chat_texts, strict=True))
 
     doc_time = timeit.default_timer()
-    entity_list, entity_dict = get_named_entities(
-        chat_texts, messages_external_ids, messages_names, chat
-    )
+    entity_list, entity_dict = get_named_entities(chat_texts, messages_external_ids, messages_names, chat)
     doc_end_time = timeit.default_timer()
     general_logger.debug(f"Getting named entities {doc_end_time - doc_time} seconds")
     last_messages = chat_texts[:-excluded_messages]  # exclude last few messages from saving

@@ -1,11 +1,11 @@
 import time
 from urllib.parse import urljoin
 
-import redis
 import requests
 from transformers import AutoTokenizer
 
 from grimoire.common.loggers import general_logger
+from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 
@@ -31,13 +31,13 @@ def local_tokenization(texts: str | list[str], tokenizer_name: str) -> int | lis
 
 
 def cache_entries(keys: list, values: list) -> None:
-    redis_client = redis.StrictRedis(host=settings["REDIS_HOST"], port=settings["REDIS_PORT"])
+    redis_client = redis_manager.get_client()
     for key, value in zip(keys, values, strict=False):
         redis_client.set(key, value, settings["CACHE_EXPIRE_TIME"])
 
 
 def get_cached_tokens(keys: list[str]) -> list[int | None]:
-    redis_client = redis.StrictRedis(host=settings["REDIS_HOST"], port=settings["REDIS_PORT"], decode_responses=True)
+    redis_client = redis_manager.get_client()
     cached_tokens = []
     for key in keys:
         cached_value: str | None = redis_client.get(key)
