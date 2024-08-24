@@ -38,3 +38,4 @@ db.sqlite3
 db.sqlite3-journal
 venv
 db_data
+config/settings.yaml
