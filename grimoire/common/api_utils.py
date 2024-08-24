@@ -114,6 +114,8 @@ def update_record(db: Session, db_object: Base, request_object: BaseModel) -> Ba
 # TODO this is manual cleanup as a quick fix, check if this can be done properly with cascades
 def delete_chat(db_session: Session, chat: Chat) -> None:
     for message in chat.messages:
+        for named_entity in message.spacy_named_entities:
+            db_session.delete(named_entity)
         db_session.delete(message)
     db_session.commit()
     db_session.refresh(chat)
