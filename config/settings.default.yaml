@@ -1,5 +1,5 @@
-REDIS_HOST: "127.0.0.1"
-REDIS_PORT: 6370
+REDIS_HOST: "127.0.0.1" # For Sentinel, separate hosts with ,
+REDIS_PORT: 6370 # For Sentinel, make it a string and separate with , for example "6370" or "6370,6371"
 REDIS_SENTINEL: False
 SENTINEL_MASTER_NAME: ""
 REDIS_TLS: False
