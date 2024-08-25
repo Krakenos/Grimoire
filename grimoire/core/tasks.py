@@ -25,6 +25,9 @@ if redis_manager.sentinel:
 
     celery_app.conf.broker_transport_options = transport_options
 
+celery_app.conf.task_routes = {
+    'grimoire.core.tasks.summarize': {'queue': 'summarization_queue'}
+}
 
 @celery_app.on_after_configure.connect
 def setup_periodic_tasks(sender, **kwargs):
@@ -247,7 +250,7 @@ def summarize(
 
 @celery_app.task
 def queue_logging():
-    summarization_queue = "celery"
+    summarization_queue = "summarization_queue"
     redis_client = redis_manager.get_client()
     queue_length = redis_client.llen(summarization_queue)
     general_logger.info(f"Summarization tasks in queue: {queue_length}")
