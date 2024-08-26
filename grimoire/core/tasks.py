@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from grimoire.common.llm_helpers import generate_text, token_count
 from grimoire.common.loggers import general_logger, summary_logger
 from grimoire.common.redis import redis_manager
+from grimoire.core.settings import settings
 from grimoire.db.models import Message
 from grimoire.db.queries import get_knowledge_entity
 from grimoire.db.secondary_database import get_messages_from_external_db
@@ -43,7 +44,7 @@ def make_summary_prompt(
     secondary_database_settings,
     prefer_local_tokenizer,
     tokenizer,
-    include_names: bool = True,
+    include_names: bool = False,
 ) -> str | None:
     summarization_url = api_settings["url"]
     summarization_backend = api_settings["backend"]
@@ -154,16 +155,17 @@ def summarize(
     term: str,
     label: str,
     chat_id: int,
-    api_settings: dict,
-    summarization_settings: dict,
-    secondary_database_settings: dict,
-    tokenization_settings: dict,
-    db_engine: str,
-    include_names: bool = True,
+    include_names: bool = False,
     max_retries: int = 50,
     retry_interval: int = 1,
 ) -> None:
+    db_engine = settings["DB_ENGINE"]
+    api_settings = settings["summarization_api"]
+    summarization_settings = settings["summarization"]
+    tokenization_settings = settings["tokenization"]
+    secondary_database_settings = settings["secondary_database"]
     db = create_engine(db_engine)
+
     summarization_url = api_settings["url"]
     summarization_backend = api_settings["backend"]
     summarization_auth = api_settings["auth_key"]

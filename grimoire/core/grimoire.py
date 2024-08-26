@@ -423,11 +423,6 @@ def process_request(
                 entity.name,
                 entity.label,
                 chat.id,
-                settings["summarization_api"],
-                settings["summarization"],
-                settings["secondary_database"],
-                settings["tokenization"],
-                settings["DB_ENGINE"],
                 include_names,
             )
 
