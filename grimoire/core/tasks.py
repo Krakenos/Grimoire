@@ -26,9 +26,8 @@ if redis_manager.sentinel:
 
     celery_app.conf.broker_transport_options = transport_options
 
-celery_app.conf.task_routes = {
-    'grimoire.core.tasks.summarize': {'queue': 'summarization_queue'}
-}
+celery_app.conf.task_routes = {"grimoire.core.tasks.summarize": {"queue": "summarization_queue"}}
+
 
 @celery_app.on_after_configure.connect
 def setup_periodic_tasks(sender, **kwargs):
