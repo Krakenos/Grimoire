@@ -4,10 +4,68 @@ import pathlib
 
 import yaml
 from dotenv import load_dotenv
+from pydantic import BaseModel
 
 from grimoire.core.default_settings import defaults
 
 load_dotenv()
+
+
+# TODO Move defaults to pydantic model and refactor settings dict to pydantic object
+class SecondaryDatabaseSettingsValidator(BaseModel):
+    enabled: bool | None = None
+    db_engine: str | None = None
+    message_encryption: str | None = None
+    encryption_key: str | None = None
+
+
+class TokenizationSettingsValidator(BaseModel):
+    prefer_local_tokenizer: bool | None = None
+    local_tokenizer: str | None = None
+
+
+class SummarizationSettingsValidator(BaseModel):
+    prompt: str | None = None
+    limit_rate: int | None = None
+    bos_token: str | None = None
+    max_tokens: int | None = None
+    params: dict | None = None
+
+
+class ApiSettingsValidator(BaseModel):
+    backend: str | None = None
+    url: str | None = None
+    auth_key: str | None = None
+    context_length: int | None = None
+    system_sequence: str | None = None
+    system_suffix: str | None = None
+    input_sequence: str | None = None
+    input_suffix: str | None = None
+    output_sequence: str | None = None
+    output_suffix: str | None = None
+    first_output_sequence: str | None = None
+    last_output_sequence: str | None = None
+
+
+class SettingsValidator(BaseModel):
+    REDIS_HOST: str | None = None
+    REDIS_PORT: str | int | None = None
+    REDIS_SENTINEL: bool | None = None
+    SENTINEL_MASTER_NAME: str | None
+    REDIS_TLS: bool | None = None
+    CACHE_EXPIRE_TIME: int | None = None
+    DB_ENGINE: str | None = None
+    DEBUG: bool | None = None
+    LOG_PROMPTS: bool | None = None
+    LOG_FILES: bool | None = None
+    AUTH_KEY: str | None = None
+    ENCRYPTION_KEY: str | None = None
+    prefer_gpu: bool | None = None
+    match_distance: int | None = None
+    summarization_api: ApiSettingsValidator | None = None
+    summarization: SummarizationSettingsValidator | None = None
+    tokenization: TokenizationSettingsValidator | None = None
+    secondary_database: SecondaryDatabaseSettingsValidator | None = None
 
 
 def envvar_constructor(loader: yaml.Loader, node: yaml.ScalarNode):
@@ -71,4 +129,5 @@ def merge_settings(settings_dict, overrides):
 
 settings = copy.deepcopy(defaults)
 loaded_settings = SettingsLoader.load_config()
-settings = merge_settings(settings, loaded_settings)
+validated_settings = SettingsValidator(**loaded_settings).model_dump()
+settings = merge_settings(settings, validated_settings)
