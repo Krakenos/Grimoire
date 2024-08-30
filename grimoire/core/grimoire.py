@@ -316,7 +316,7 @@ def save_named_entities(
     unique_ent_names = list({ent.name for ent in unique_ents})
     ent_labels = {ent.name: ent.label for ent in unique_ents}
     similarity_dict = filter_similar_entities(unique_ent_names)
-    filtered_ent_names = list(similarity_dict.values())
+    filtered_ent_names = list(set(similarity_dict.values()))
     knowledge_entries = get_knowledge_entities(filtered_ent_names, chat.id, session)
     found_knowledge_entries = [entry for entry in knowledge_entries if entry is not None]
     db_entry_names = [entry.entity if entry is not None else None for entry in knowledge_entries]
@@ -366,7 +366,8 @@ def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]], session: Sessi
         for ent in knowledge_ents
         if ent is not None and ent.summary_entry and ent.enabled
     ]
-    return summaries
+    unique_summaries = list(dict.fromkeys(summaries))
+    return unique_summaries
 
 
 def get_ordered_entities(entity_list: list[list[NamedEntity]]) -> list[tuple[str, str]]:
@@ -414,17 +415,23 @@ def process_request(
     )
     save_named_entities(chat, last_entities, entity_dict, external_message_map, db_session)
 
-    entities_to_summarize = [last_entities[index] for index in new_message_indices]
+    messages_to_summarize = [last_entities[index] for index in new_message_indices]
 
-    for entities in entities_to_summarize:
+    ent_names = set()
+
+    for entities in messages_to_summarize:
         for entity in set(entities):
+            ent_names.add(entity.name)
             general_logger.debug(f"{entity.name}, {entity.label}, {spacy.explain(entity.label)}")
-            summarize.delay(
-                entity.name,
-                entity.label,
-                chat.id,
-                include_names,
-            )
+
+    ent_map = filter_similar_entities(list(ent_names))
+    to_summarize = list(set(ent_map.values()))
+    for ent in to_summarize:
+        summarize.delay(
+            ent,
+            chat.id,
+            include_names,
+        )
 
     unique_ents = get_ordered_entities(entity_list)
     summaries = get_summaries(chat, unique_ents, db_session)

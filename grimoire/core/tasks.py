@@ -58,7 +58,7 @@ def make_summary_prompt(
     chat_id = knowledge_entry.chat_id
 
     if knowledge_entry.summary_entry:
-        summary = knowledge_entry.summary_entry
+        summary = f"{knowledge_entry.summary_entry}\n"
     else:
         summary = ""
 
@@ -152,7 +152,6 @@ def make_summary_prompt(
 @celery_app.task(base=Singleton, lock_expiry=60)
 def summarize(
     term: str,
-    label: str,
     chat_id: int,
     include_names: bool = False,
     max_retries: int = 50,
@@ -245,7 +244,8 @@ def summarize(
         )[0]
         knowledge_entry.update_count = 1
         knowledge_entry.updated_date = datetime.now()
-        summary_logger.debug(f"({knowledge_entry.token_count} tokens){term} ({label}): {summary_text}\n{request_json}")
+        summary_logger.debug(f"({knowledge_entry.token_count} tokens){term}: {summary_text}\n{request_json}")
+        # summary_logger.debug(f"#### PROMPT ####\n{prompt}\n#### RESPONSE ####\n{summary_text}")
         session.commit()
 
 

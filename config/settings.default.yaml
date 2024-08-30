@@ -28,7 +28,7 @@ summarization_api:
   last_output_sequence: ""
 
 summarization:
-  prompt: "{previous_summary}\n{messages}\n{input_sequence}Describe {term}.{input_suffix}{output_sequence}"
+  prompt: "{previous_summary}{messages}\n{input_sequence}Describe {term}.{input_suffix}{output_sequence}"
   limit_rate: 1
   bos_token: "<s>"
   max_tokens: 300
