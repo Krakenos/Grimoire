@@ -13,59 +13,60 @@ load_dotenv()
 
 # TODO Move defaults to pydantic model and refactor settings dict to pydantic object
 class SecondaryDatabaseSettingsValidator(BaseModel):
-    enabled: bool | None = None
-    db_engine: str | None = None
-    message_encryption: str | None = None
-    encryption_key: str | None = None
+    enabled: bool = False
+    db_engine: str = ""
+    message_encryption: str = "aesgcm"
+    encryption_key: str = ""
 
 
 class TokenizationSettingsValidator(BaseModel):
-    prefer_local_tokenizer: bool | None = None
-    local_tokenizer: str | None = None
+    prefer_local_tokenizer: bool = True
+    local_tokenizer: str = "oobabooga/llama-tokenizer"
 
 
 class SummarizationSettingsValidator(BaseModel):
-    prompt: str | None = None
-    limit_rate: int | None = None
-    bos_token: str | None = None
-    max_tokens: int | None = None
-    params: dict | None = None
+    prompt: str = ("{system_sequence}{previous_summary}{messages}{system_suffix}\n"
+                   "{input_sequence}Describe {term}.{input_suffix}{output_sequence}")
+    limit_rate: int = 1
+    bos_token: str = "<s>"
+    max_tokens: int = 300
+    params: dict = {"min_p": 0.1, "rep_pen": 1.0, "temperature": 0.6, "stop": ["</s>"], "stop_sequence": ["</s>"]}
 
 
 class ApiSettingsValidator(BaseModel):
-    backend: str | None = None
-    url: str | None = None
-    auth_key: str | None = None
-    context_length: int | None = None
-    system_sequence: str | None = None
-    system_suffix: str | None = None
-    input_sequence: str | None = None
-    input_suffix: str | None = None
-    output_sequence: str | None = None
-    output_suffix: str | None = None
-    first_output_sequence: str | None = None
-    last_output_sequence: str | None = None
+    backend: str = "GenericOAI"
+    url: str = ""
+    auth_key: str = ""
+    context_length: int = 4096
+    system_sequence: str = ""
+    system_suffix: str = ""
+    input_sequence: str = "### Instruction:\n"
+    input_suffix: str = "\n"
+    output_sequence: str = "### Response:\n"
+    output_suffix: str = "\n"
+    first_output_sequence: str = ""
+    last_output_sequence: str = ""
 
 
 class SettingsValidator(BaseModel):
-    REDIS_HOST: str | None = None
-    REDIS_PORT: str | int | None = None
-    REDIS_SENTINEL: bool | None = None
-    SENTINEL_MASTER_NAME: str | None
-    REDIS_TLS: bool | None = None
-    CACHE_EXPIRE_TIME: int | None = None
-    DB_ENGINE: str | None = None
-    DEBUG: bool | None = None
-    LOG_PROMPTS: bool | None = None
-    LOG_FILES: bool | None = None
+    REDIS_HOST: str = "127.0.0.1"
+    REDIS_PORT: str | int = 6379
+    REDIS_SENTINEL: bool = False
+    SENTINEL_MASTER_NAME: str = "mymaster"
+    REDIS_TLS: bool = False
+    CACHE_EXPIRE_TIME: int = 86400
+    DB_ENGINE: str = "postgresql+psycopg2://grimoire:secretpassword@127.0.0.1:5432/grimoire"
+    DEBUG: bool = False
+    LOG_PROMPTS: bool = False
+    LOG_FILES: bool = False
     AUTH_KEY: str | None = None
-    ENCRYPTION_KEY: str | None = None
-    prefer_gpu: bool | None = None
-    match_distance: int | None = None
-    summarization_api: ApiSettingsValidator | None = None
-    summarization: SummarizationSettingsValidator | None = None
-    tokenization: TokenizationSettingsValidator | None = None
-    secondary_database: SecondaryDatabaseSettingsValidator | None = None
+    ENCRYPTION_KEY: str = "sample-database-encryption-key"
+    prefer_gpu: bool = False
+    match_distance: int = 80
+    summarization_api: ApiSettingsValidator = ApiSettingsValidator()
+    summarization: SummarizationSettingsValidator = SummarizationSettingsValidator()
+    tokenization: TokenizationSettingsValidator = TokenizationSettingsValidator()
+    secondary_database: SecondaryDatabaseSettingsValidator = SecondaryDatabaseSettingsValidator()
 
 
 def envvar_constructor(loader: yaml.Loader, node: yaml.ScalarNode):
