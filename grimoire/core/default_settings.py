@@ -28,7 +28,8 @@ defaults = {
         "last_output_sequence": "",
     },
     "summarization": {
-        "prompt": "{previous_summary}{messages}\n{input_sequence}Describe {term}.{input_suffix}{output_sequence}",
+        "prompt": "{system_sequence}{previous_summary}{messages}{system_suffix}\n"
+        "{input_sequence}Describe {term}.{input_suffix}{output_sequence}",
         "limit_rate": 1,
         "bos_token": "<s>",
         "max_tokens": 300,

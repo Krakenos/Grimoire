@@ -48,9 +48,19 @@ def make_summary_prompt(
     summarization_url = api_settings["url"]
     summarization_backend = api_settings["backend"]
     summarization_auth = api_settings["auth_key"]
-    input_sequence = api_settings["input_sequence"]
-    input_suffix = api_settings["input_suffix"]
-    output_sequence = api_settings["output_sequence"]
+
+    instruct_fields = {
+        "bos_token": summarization_settings["bos_token"],
+        "system_sequence": api_settings["system_sequence"],
+        "system_suffix": api_settings["system_suffix"],
+        "input_sequence": api_settings["input_sequence"],
+        "input_suffix": api_settings["input_suffix"],
+        "output_sequence": api_settings["output_sequence"],
+        "output_suffix": api_settings["output_suffix"],
+        "first_output_sequence": api_settings["first_output_sequence"],
+        "last_output_sequence": api_settings["last_output_sequence"],
+    }
+
     secondary_database = secondary_database_settings["enabled"]
     secondary_database_url = secondary_database_settings["db_engine"]
     secondary_database_encryption_method = secondary_database_settings["message_encryption"]
@@ -123,13 +133,7 @@ def make_summary_prompt(
         reversed_messages.append(f"{message}\n")
         messages_text = "".join(reversed_messages[::-1])
         new_prompt = summarization_settings["prompt"].format(
-            term=knowledge_entry.entity,
-            previous_summary=summary,
-            messages=messages_text,
-            bos_token=summarization_settings["bos_token"],
-            input_sequence=input_sequence,
-            input_suffix=input_suffix,
-            output_sequence=output_sequence,
+            term=knowledge_entry.entity, previous_summary=summary, messages=messages_text, **instruct_fields
         )
         prompt_without_summary = new_prompt
         if summary:
