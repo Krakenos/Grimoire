@@ -172,7 +172,7 @@ def get_named_entities(
     to_check_cache = []
     to_process = []
     to_process_with_names = []
-    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME", "QUANTITY"]
+    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME", "QUANTITY", "PERCENT"]
     external_id_map = {}
 
     if settings["secondary_database"]["enabled"]:
