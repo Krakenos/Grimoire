@@ -12,19 +12,19 @@ load_dotenv()
 
 
 # TODO Move defaults to pydantic model and refactor settings dict to pydantic object
-class SecondaryDatabaseSettingsValidator(BaseModel):
+class SecondaryDatabaseSettings(BaseModel):
     enabled: bool = False
     db_engine: str = ""
     message_encryption: str = "aesgcm"
     encryption_key: str = ""
 
 
-class TokenizationSettingsValidator(BaseModel):
+class TokenizationSettings(BaseModel):
     prefer_local_tokenizer: bool = True
     local_tokenizer: str = "oobabooga/llama-tokenizer"
 
 
-class SummarizationSettingsValidator(BaseModel):
+class SummarizationSettings(BaseModel):
     prompt: str = ("{system_sequence}{previous_summary}{messages}{system_suffix}\n"
                    "{input_sequence}Describe {term}.{input_suffix}{output_sequence}")
     limit_rate: int = 1
@@ -33,7 +33,7 @@ class SummarizationSettingsValidator(BaseModel):
     params: dict = {"min_p": 0.1, "rep_pen": 1.0, "temperature": 0.6, "stop": ["</s>"], "stop_sequence": ["</s>"]}
 
 
-class ApiSettingsValidator(BaseModel):
+class ApiSettings(BaseModel):
     backend: str = "GenericOAI"
     url: str = ""
     auth_key: str = ""
@@ -48,7 +48,7 @@ class ApiSettingsValidator(BaseModel):
     last_output_sequence: str = ""
 
 
-class SettingsValidator(BaseModel):
+class Settings(BaseModel):
     REDIS_HOST: str = "127.0.0.1"
     REDIS_PORT: str | int = 6379
     REDIS_SENTINEL: bool = False
@@ -63,10 +63,10 @@ class SettingsValidator(BaseModel):
     ENCRYPTION_KEY: str = "sample-database-encryption-key"
     prefer_gpu: bool = False
     match_distance: int = 80
-    summarization_api: ApiSettingsValidator = ApiSettingsValidator()
-    summarization: SummarizationSettingsValidator = SummarizationSettingsValidator()
-    tokenization: TokenizationSettingsValidator = TokenizationSettingsValidator()
-    secondary_database: SecondaryDatabaseSettingsValidator = SecondaryDatabaseSettingsValidator()
+    summarization_api: ApiSettings = ApiSettings()
+    summarization: SummarizationSettings = SummarizationSettings()
+    tokenization: TokenizationSettings = TokenizationSettings()
+    secondary_database: SecondaryDatabaseSettings = SecondaryDatabaseSettings()
 
 
 def envvar_constructor(loader: yaml.Loader, node: yaml.ScalarNode):
@@ -130,5 +130,5 @@ def merge_settings(settings_dict, overrides):
 
 settings = copy.deepcopy(defaults)
 loaded_settings = SettingsLoader.load_config()
-validated_settings = SettingsValidator(**loaded_settings).model_dump()
+validated_settings = Settings(**loaded_settings).model_dump()
 settings = merge_settings(settings, validated_settings)
