@@ -28,7 +28,7 @@ class NamedEntity:
     label: str
 
 
-if settings["prefer_gpu"]:
+if settings.prefer_gpu:
     gpu_check = spacy.prefer_gpu()
     if gpu_check:
         general_logger.info("Running spacy on GPU")
@@ -60,7 +60,7 @@ def save_messages(
     :return: indices of new messages and updated chat object
     """
     new_messages_indices = []
-    if settings["secondary_database"]["enabled"]:
+    if settings.secondary_database.enabled:
         db_external_ids = [message.external_id for message in chat.messages]
         message_number = 0
         for index, external_id in enumerate(messages_external_ids):
@@ -157,7 +157,7 @@ def cache_entities(texts: list[str], entities: list[list[NamedEntity]]) -> None:
         redis_values.append(redis_value)
 
     for key, value in zip(redis_keys, redis_values, strict=True):
-        redis_client.set(key, json.dumps(value), settings["CACHE_EXPIRE_TIME"])
+        redis_client.set(key, json.dumps(value), settings.CACHE_EXPIRE_TIME)
 
 
 @time_execution
@@ -175,7 +175,7 @@ def get_named_entities(
     banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME", "QUANTITY", "PERCENT"]
     external_id_map = {}
 
-    if settings["secondary_database"]["enabled"]:
+    if settings.secondary_database.enabled:
         for message, external_id in zip(messages, messages_external_ids, strict=True):
             external_id_map[external_id] = message
 
@@ -246,7 +246,7 @@ def get_chat(
         .options(selectinload(Chat.messages), with_loader_criteria(Message, Message.message.in_(current_messages)))
     )
 
-    if settings["secondary_database"]["enabled"]:
+    if settings.secondary_database.enabled:
         query = (
             select(Chat)
             .where(Chat.external_id == chat_id, Chat.user_id == user.id)
@@ -271,7 +271,7 @@ def filter_similar_entities(entity_names: list[str]) -> dict[str, str]:
         entity_names,
         scorer=fuzz.WRatio,
         processor=fuzz_utils.default_process,
-        score_cutoff=settings["match_distance"],
+        score_cutoff=settings.match_distance,
     )
     found_score_cords = np.argwhere(result_matrix)
     relation_dict = defaultdict(lambda: [])
@@ -340,7 +340,7 @@ def save_named_entities(
 
     # Link new messages to knowledge and update counter
     for db_message in chat.messages:
-        if settings["secondary_database"]["enabled"]:
+        if settings.secondary_database.enabled:
             message_identifier = external_id_map[db_message.external_id]
         else:
             message_identifier = db_message.message
@@ -399,7 +399,7 @@ def process_request(
 
     external_message_map = {}
 
-    if settings["secondary_database"]["enabled"]:
+    if settings.secondary_database.enabled:
         external_message_map = dict(zip(messages_external_ids, chat_texts, strict=True))
 
     doc_time = timeit.default_timer()

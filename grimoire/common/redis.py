@@ -61,9 +61,9 @@ class RedisManager:
 
 
 redis_manager = RedisManager(
-    settings["REDIS_HOST"],
-    settings["REDIS_PORT"],
-    settings["REDIS_SENTINEL"],
-    settings["SENTINEL_MASTER_NAME"],
-    settings["REDIS_TLS"],
+    settings.REDIS_HOST,
+    settings.REDIS_PORT,
+    settings.REDIS_SENTINEL,
+    settings.SENTINEL_MASTER_NAME,
+    settings.REDIS_TLS,
 )

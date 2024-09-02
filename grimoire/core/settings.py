@@ -25,8 +25,10 @@ class TokenizationSettings(BaseModel):
 
 
 class SummarizationSettings(BaseModel):
-    prompt: str = ("{system_sequence}{previous_summary}{messages}{system_suffix}\n"
-                   "{input_sequence}Describe {term}.{input_suffix}{output_sequence}")
+    prompt: str = (
+        "{system_sequence}{previous_summary}{messages}{system_suffix}\n"
+        "{input_sequence}Describe {term}.{input_suffix}{output_sequence}"
+    )
     limit_rate: int = 1
     bos_token: str = "<s>"
     max_tokens: int = 300
@@ -130,5 +132,4 @@ def merge_settings(settings_dict, overrides):
 
 settings = copy.deepcopy(defaults)
 loaded_settings = SettingsLoader.load_config()
-validated_settings = Settings(**loaded_settings).model_dump()
-settings = merge_settings(settings, validated_settings)
+settings = Settings(**loaded_settings)

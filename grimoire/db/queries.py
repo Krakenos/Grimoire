@@ -21,7 +21,7 @@ def get_knowledge_entities(terms: list[str], chat_id: int, session: Session) -> 
             list(knowledge_dict),
             scorer=fuzz.WRatio,
             processor=utils.default_process,
-            score_cutoff=settings["match_distance"],
+            score_cutoff=settings.match_distance,
         )
         if found_entry is None:
             results.append(None)

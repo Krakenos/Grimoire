@@ -7,7 +7,7 @@ from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
 
 from grimoire.core.settings import settings
 
-encryption_key = settings["ENCRYPTION_KEY"]
+encryption_key = settings.ENCRYPTION_KEY
 
 
 class Base(DeclarativeBase):
