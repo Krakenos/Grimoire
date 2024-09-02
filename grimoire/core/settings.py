@@ -3,7 +3,7 @@ import pathlib
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 load_dotenv()
 
@@ -29,6 +29,17 @@ class SummarizationSettings(BaseModel):
     bos_token: str = "<s>"
     max_tokens: int = 300
     params: dict = {"min_p": 0.1, "rep_pen": 1.0, "temperature": 0.6, "stop": ["</s>"], "stop_sequence": ["</s>"]}
+
+    @classmethod
+    @field_validator("params")
+    def add_stop(cls, v: dict) -> dict:
+        if "stop" not in v.keys():
+            v["stop"] = []
+
+        if "stop_sequence" not in v.keys():
+            v["stop_sequence"] = []
+
+        return v
 
 
 class ApiSettings(BaseModel):
