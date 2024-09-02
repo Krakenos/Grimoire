@@ -1,3 +1,4 @@
+import json
 import os
 import pathlib
 from typing import Any
@@ -11,8 +12,8 @@ load_dotenv()
 
 
 class BaseSettingsModel(BaseModel):
-    @classmethod
     @field_validator("*", mode="before")
+    @classmethod
     def replace_none(cls, v: Any, info: ValidationInfo) -> Any:
         if v is None:
             return cls.model_fields[info.field_name].default
@@ -41,8 +42,8 @@ class SummarizationSettings(BaseSettingsModel):
     max_tokens: int = 300
     params: dict = {"min_p": 0.1, "rep_pen": 1.0, "temperature": 0.6, "stop": ["</s>"], "stop_sequence": ["</s>"]}
 
-    @classmethod
     @field_validator("params")
+    @classmethod
     def add_stop(cls, v: dict) -> dict:
         if "stop" not in v.keys():
             v["stop"] = []
@@ -50,6 +51,13 @@ class SummarizationSettings(BaseSettingsModel):
         if "stop_sequence" not in v.keys():
             v["stop_sequence"] = []
 
+        return v
+
+    @field_validator("params", mode="before")
+    @classmethod
+    def parse_string(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return json.loads(v)
         return v
 
 
