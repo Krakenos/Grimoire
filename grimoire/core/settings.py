@@ -1,4 +1,3 @@
-import copy
 import os
 import pathlib
 
@@ -6,12 +5,9 @@ import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from grimoire.core.default_settings import defaults
-
 load_dotenv()
 
 
-# TODO Move defaults to pydantic model and refactor settings dict to pydantic object
 class SecondaryDatabaseSettings(BaseModel):
     enabled: bool = False
     db_engine: str = ""
@@ -118,18 +114,5 @@ class SettingsLoader:
         return cls.load_from_file(path)
 
 
-def merge_settings(settings_dict, overrides):
-    settings_dict = copy.deepcopy(settings_dict)
-    for key, value in overrides.items():
-        if key in settings_dict and value not in ("", None):
-            match value:
-                case dict():
-                    settings_dict[key] = merge_settings(settings_dict[key], value)
-                case _:
-                    settings_dict[key] = value
-    return settings_dict
-
-
-settings = copy.deepcopy(defaults)
 loaded_settings = SettingsLoader.load_config()
 settings = Settings(**loaded_settings)
