@@ -1,26 +1,37 @@
 import os
 import pathlib
+from typing import Any
 
 import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel, field_validator
+from pydantic_core.core_schema import ValidationInfo
 
 load_dotenv()
 
 
-class SecondaryDatabaseSettings(BaseModel):
+class BaseSettingsModel(BaseModel):
+    @classmethod
+    @field_validator("*", mode="before")
+    def replace_none(cls, v: Any, info: ValidationInfo) -> Any:
+        if v is None:
+            return cls.model_fields[info.field_name].default
+        return v
+
+
+class SecondaryDatabaseSettings(BaseSettingsModel):
     enabled: bool = False
     db_engine: str = ""
     message_encryption: str = "aesgcm"
     encryption_key: str = ""
 
 
-class TokenizationSettings(BaseModel):
+class TokenizationSettings(BaseSettingsModel):
     prefer_local_tokenizer: bool = True
     local_tokenizer: str = "oobabooga/llama-tokenizer"
 
 
-class SummarizationSettings(BaseModel):
+class SummarizationSettings(BaseSettingsModel):
     prompt: str = (
         "{system_sequence}{previous_summary}{messages}{system_suffix}\n"
         "{input_sequence}Describe {term}.{input_suffix}{output_sequence}"
@@ -42,7 +53,7 @@ class SummarizationSettings(BaseModel):
         return v
 
 
-class ApiSettings(BaseModel):
+class ApiSettings(BaseSettingsModel):
     backend: str = "GenericOAI"
     url: str = ""
     auth_key: str = ""
@@ -57,7 +68,7 @@ class ApiSettings(BaseModel):
     last_output_sequence: str = ""
 
 
-class Settings(BaseModel):
+class Settings(BaseSettingsModel):
     REDIS_HOST: str = "127.0.0.1"
     REDIS_PORT: str | int = 6379
     REDIS_SENTINEL: bool = False
