@@ -76,6 +76,27 @@ class ApiSettings(BaseSettingsModel):
     last_output_sequence: str = ""
 
 
+class RedisSettings(BaseSettingsModel):
+    HOST: list[tuple[str, int]] = [("127.0.0.1", 6370)]
+    SENTINEL: bool = False
+    TLS: bool = False
+    SENTINEL_MASTER_NAME: str = "mymaster"
+    CACHE_EXPIRE_TIME: int = 86400
+
+    @field_validator("HOST", mode="before")
+    @classmethod
+    def parse_string(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            host_list = []
+
+            for full_address in v.split(","):
+                for address, port in full_address.split(":"):
+                    host_list.append((address, int(port)))
+
+            return host_list
+        return v
+
+
 class Settings(BaseSettingsModel):
     REDIS_HOST: str = "127.0.0.1"
     REDIS_PORT: str | int = 6379
