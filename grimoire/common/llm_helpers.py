@@ -33,7 +33,7 @@ def local_tokenization(texts: str | list[str], tokenizer_name: str) -> int | lis
 def cache_entries(keys: list, values: list) -> None:
     redis_client = redis_manager.get_client()
     for key, value in zip(keys, values, strict=False):
-        redis_client.set(key, value, settings.CACHE_EXPIRE_TIME)
+        redis_client.set(key, value, settings.redis.CACHE_EXPIRE_TIME)
 
 
 def get_cached_tokens(keys: list[str]) -> list[int | None]:

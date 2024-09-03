@@ -98,12 +98,6 @@ class RedisSettings(BaseSettingsModel):
 
 
 class Settings(BaseSettingsModel):
-    REDIS_HOST: str = "127.0.0.1"
-    REDIS_PORT: str | int = 6379
-    REDIS_SENTINEL: bool = False
-    SENTINEL_MASTER_NAME: str = "mymaster"
-    REDIS_TLS: bool = False
-    CACHE_EXPIRE_TIME: int = 86400
     DB_ENGINE: str = "postgresql+psycopg2://grimoire:secretpassword@127.0.0.1:5432/grimoire"
     DEBUG: bool = False
     LOG_PROMPTS: bool = False
@@ -112,6 +106,7 @@ class Settings(BaseSettingsModel):
     ENCRYPTION_KEY: str = "sample-database-encryption-key"
     prefer_gpu: bool = False
     match_distance: int = 80
+    redis: RedisSettings = RedisSettings()
     summarization_api: ApiSettings = ApiSettings()
     summarization: SummarizationSettings = SummarizationSettings()
     tokenization: TokenizationSettings = TokenizationSettings()

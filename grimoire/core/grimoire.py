@@ -157,7 +157,7 @@ def cache_entities(texts: list[str], entities: list[list[NamedEntity]]) -> None:
         redis_values.append(redis_value)
 
     for key, value in zip(redis_keys, redis_values, strict=True):
-        redis_client.set(key, json.dumps(value), settings.CACHE_EXPIRE_TIME)
+        redis_client.set(key, json.dumps(value), settings.redis.CACHE_EXPIRE_TIME)
 
 
 @time_execution
