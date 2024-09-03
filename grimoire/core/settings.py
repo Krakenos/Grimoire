@@ -38,7 +38,6 @@ class SummarizationSettings(BaseSettingsModel):
         "{input_sequence}Describe {term}.{input_suffix}{output_sequence}"
     )
     limit_rate: int = 1
-    bos_token: str = "<s>"
     max_tokens: int = 300
     params: dict = {"min_p": 0.1, "rep_pen": 1.0, "temperature": 0.6, "stop": ["</s>"], "stop_sequence": ["</s>"]}
 
@@ -74,6 +73,7 @@ class ApiSettings(BaseSettingsModel):
     output_suffix: str = "\n"
     first_output_sequence: str = ""
     last_output_sequence: str = ""
+    bos_token: str = "<s>"
 
 
 class RedisSettings(BaseSettingsModel):

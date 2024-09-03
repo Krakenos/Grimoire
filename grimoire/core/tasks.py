@@ -45,26 +45,26 @@ def make_summary_prompt(
     tokenizer: str,
     include_names: bool = False,
 ) -> str | None:
-    summarization_url = api_settings["url"]
-    summarization_backend = api_settings["backend"]
-    summarization_auth = api_settings["auth_key"]
+    summarization_url = api_settings.url
+    summarization_backend = api_settings.backend
+    summarization_auth = api_settings.auth_key
 
     instruct_fields = {
-        "bos_token": summarization_settings["bos_token"],
-        "system_sequence": api_settings["system_sequence"],
-        "system_suffix": api_settings["system_suffix"],
-        "input_sequence": api_settings["input_sequence"],
-        "input_suffix": api_settings["input_suffix"],
-        "output_sequence": api_settings["output_sequence"],
-        "output_suffix": api_settings["output_suffix"],
-        "first_output_sequence": api_settings["first_output_sequence"],
-        "last_output_sequence": api_settings["last_output_sequence"],
+        "bos_token": api_settings.bos_token,
+        "system_sequence": api_settings.system_sequence,
+        "system_suffix": api_settings.system_suffix,
+        "input_sequence": api_settings.input_sequence,
+        "input_suffix": api_settings.input_suffix,
+        "output_sequence": api_settings.output_sequence,
+        "output_suffix": api_settings.output_suffix,
+        "first_output_sequence": api_settings.first_output_sequence,
+        "last_output_sequence": api_settings.last_output_sequence,
     }
 
-    secondary_database = secondary_database_settings["enabled"]
-    secondary_database_url = secondary_database_settings["db_engine"]
-    secondary_database_encryption_method = secondary_database_settings["message_encryption"]
-    secondary_database_encryption_key = secondary_database_settings["encryption_key"]
+    secondary_database = secondary_database_settings.enabled
+    secondary_database_url = secondary_database_settings.db_engine
+    secondary_database_encryption_method = secondary_database_settings.message_encryption
+    secondary_database_encryption_key = secondary_database_settings.encryption_key
     chat_id = knowledge_entry.chat_id
 
     if knowledge_entry.summary_entry:
@@ -132,7 +132,7 @@ def make_summary_prompt(
     for message in messages[::-1]:
         reversed_messages.append(f"{message}\n")
         messages_text = "".join(reversed_messages[::-1])
-        new_prompt = summarization_settings["prompt"].format(
+        new_prompt = summarization_settings.prompt.format(
             term=knowledge_entry.entity, previous_summary=summary, messages=messages_text, **instruct_fields
         )
         prompt_without_summary = new_prompt

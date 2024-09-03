@@ -31,7 +31,9 @@ class RedisManager:
                 ssl_cert_reqs="none",
             )
         else:
-            self.connection_pool = ConnectionPool(host=self.host[0][0], port=self.host[0][1], db=0, decode_responses=True)
+            self.connection_pool = ConnectionPool(
+                host=self.host[0][0], port=self.host[0][1], db=0, decode_responses=True
+            )
 
     def get_client(self) -> Redis:
         if self.sentinel:
@@ -41,9 +43,7 @@ class RedisManager:
 
     def celery_broker_url(self) -> str:
         if self.sentinel:
-            connection_strings = [
-                f"sentinel://{host_name}:{port}" for host_name, port in self.host
-            ]
+            connection_strings = [f"sentinel://{host_name}:{port}" for host_name, port in self.host]
             return ";".join(connection_strings)
 
         else:
