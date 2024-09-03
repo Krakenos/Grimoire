@@ -2,12 +2,12 @@ import logging
 
 from grimoire.core.settings import settings
 
-if settings["DEBUG"]:
+if settings.DEBUG:
     LOG_LEVEL = logging.DEBUG
 else:
     LOG_LEVEL = logging.INFO
 
-if settings["LOG_PROMPTS"]:
+if settings.LOG_PROMPTS:
     PROMPT_LEVEL = logging.DEBUG
 else:
     PROMPT_LEVEL = logging.INFO
@@ -21,7 +21,7 @@ summary_logger = logging.getLogger("summary")
 general_logger.setLevel(LOG_LEVEL)
 summary_logger.setLevel(PROMPT_LEVEL)
 
-if settings["LOG_FILES"]:
+if settings.LOG_FILES:
     GENERAL_LOG_FILE = "general.log"
     SUMMARY_LOG_FILE = "summary.log"
 

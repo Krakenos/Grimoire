@@ -1,71 +1,116 @@
-import copy
+import json
 import os
 import pathlib
+from typing import Any
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel
-
-from grimoire.core.default_settings import defaults
+from pydantic import BaseModel, field_validator
+from pydantic_core.core_schema import ValidationInfo
 
 load_dotenv()
 
 
-# TODO Move defaults to pydantic model and refactor settings dict to pydantic object
-class SecondaryDatabaseSettingsValidator(BaseModel):
-    enabled: bool | None = None
-    db_engine: str | None = None
-    message_encryption: str | None = None
-    encryption_key: str | None = None
+class BaseSettingsModel(BaseModel):
+    @field_validator("*", mode="before")
+    @classmethod
+    def replace_none(cls, v: Any, info: ValidationInfo) -> Any:
+        if v is None:
+            return cls.model_fields[info.field_name].default
+        return v
 
 
-class TokenizationSettingsValidator(BaseModel):
-    prefer_local_tokenizer: bool | None = None
-    local_tokenizer: str | None = None
+class SecondaryDatabaseSettings(BaseSettingsModel):
+    enabled: bool = False
+    db_engine: str = ""
+    message_encryption: str = "aesgcm"
+    encryption_key: str = ""
 
 
-class SummarizationSettingsValidator(BaseModel):
-    prompt: str | None = None
-    limit_rate: int | None = None
-    bos_token: str | None = None
-    max_tokens: int | None = None
-    params: dict | None = None
+class TokenizationSettings(BaseSettingsModel):
+    prefer_local_tokenizer: bool = True
+    local_tokenizer: str = "oobabooga/llama-tokenizer"
 
 
-class ApiSettingsValidator(BaseModel):
-    backend: str | None = None
-    url: str | None = None
-    auth_key: str | None = None
-    context_length: int | None = None
-    system_sequence: str | None = None
-    system_suffix: str | None = None
-    input_sequence: str | None = None
-    input_suffix: str | None = None
-    output_sequence: str | None = None
-    output_suffix: str | None = None
-    first_output_sequence: str | None = None
-    last_output_sequence: str | None = None
+class SummarizationSettings(BaseSettingsModel):
+    prompt: str = (
+        "{system_sequence}{previous_summary}{messages}{system_suffix}\n"
+        "{input_sequence}Describe {term}.{input_suffix}{output_sequence}"
+    )
+    limit_rate: int = 1
+    max_tokens: int = 300
+    params: dict = {"min_p": 0.1, "rep_pen": 1.0, "temperature": 0.6, "stop": ["</s>"], "stop_sequence": ["</s>"]}
+
+    @field_validator("params")
+    @classmethod
+    def add_stop(cls, v: dict) -> dict:
+        if "stop" not in v.keys():
+            v["stop"] = []
+
+        if "stop_sequence" not in v.keys():
+            v["stop_sequence"] = []
+
+        return v
+
+    @field_validator("params", mode="before")
+    @classmethod
+    def parse_string(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
 
 
-class SettingsValidator(BaseModel):
-    REDIS_HOST: str | None = None
-    REDIS_PORT: str | int | None = None
-    REDIS_SENTINEL: bool | None = None
-    SENTINEL_MASTER_NAME: str | None
-    REDIS_TLS: bool | None = None
-    CACHE_EXPIRE_TIME: int | None = None
-    DB_ENGINE: str | None = None
-    DEBUG: bool | None = None
-    LOG_PROMPTS: bool | None = None
-    LOG_FILES: bool | None = None
+class ApiSettings(BaseSettingsModel):
+    backend: str = "GenericOAI"
+    url: str = ""
+    auth_key: str = ""
+    context_length: int = 4096
+    system_sequence: str = ""
+    system_suffix: str = ""
+    input_sequence: str = "### Instruction:\n"
+    input_suffix: str = "\n"
+    output_sequence: str = "### Response:\n"
+    output_suffix: str = "\n"
+    first_output_sequence: str = ""
+    last_output_sequence: str = ""
+    bos_token: str = "<s>"
+
+
+class RedisSettings(BaseSettingsModel):
+    HOST: list[tuple[str, int]] = [("127.0.0.1", 6370)]
+    SENTINEL: bool = False
+    TLS: bool = False
+    SENTINEL_MASTER_NAME: str = "mymaster"
+    CACHE_EXPIRE_TIME: int = 86400
+
+    @field_validator("HOST", mode="before")
+    @classmethod
+    def parse_string(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            host_list = []
+
+            for full_address in v.split(","):
+                for address, port in full_address.split(":"):
+                    host_list.append((address, int(port)))
+
+            return host_list
+        return v
+
+
+class Settings(BaseSettingsModel):
+    DB_ENGINE: str = "postgresql+psycopg2://grimoire:secretpassword@127.0.0.1:5432/grimoire"
+    DEBUG: bool = False
+    LOG_PROMPTS: bool = False
+    LOG_FILES: bool = False
     AUTH_KEY: str | None = None
-    ENCRYPTION_KEY: str | None = None
-    prefer_gpu: bool | None = None
-    match_distance: int | None = None
-    summarization_api: ApiSettingsValidator | None = None
-    summarization: SummarizationSettingsValidator | None = None
-    tokenization: TokenizationSettingsValidator | None = None
-    secondary_database: SecondaryDatabaseSettingsValidator | None = None
+    ENCRYPTION_KEY: str = "sample-database-encryption-key"
+    prefer_gpu: bool = False
+    match_distance: int = 80
+    redis: RedisSettings = RedisSettings()
+    summarization_api: ApiSettings = ApiSettings()
+    summarization: SummarizationSettings = SummarizationSettings()
+    tokenization: TokenizationSettings = TokenizationSettings()
+    secondary_database: SecondaryDatabaseSettings = SecondaryDatabaseSettings()
 
 
 def envvar_constructor(loader: yaml.Loader, node: yaml.ScalarNode):
@@ -115,19 +160,5 @@ class SettingsLoader:
         return cls.load_from_file(path)
 
 
-def merge_settings(settings_dict, overrides):
-    settings_dict = copy.deepcopy(settings_dict)
-    for key, value in overrides.items():
-        if key in settings_dict and value not in ("", None):
-            match value:
-                case dict():
-                    settings_dict[key] = merge_settings(settings_dict[key], value)
-                case _:
-                    settings_dict[key] = value
-    return settings_dict
-
-
-settings = copy.deepcopy(defaults)
 loaded_settings = SettingsLoader.load_config()
-validated_settings = SettingsValidator(**loaded_settings).model_dump()
-settings = merge_settings(settings, validated_settings)
+settings = Settings(**loaded_settings)

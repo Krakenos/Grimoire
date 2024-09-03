@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from grimoire.common.llm_helpers import generate_text, token_count
 from grimoire.common.loggers import general_logger, summary_logger
 from grimoire.common.redis import redis_manager
-from grimoire.core.settings import settings
-from grimoire.db.models import Message
+from grimoire.core.settings import ApiSettings, SecondaryDatabaseSettings, SummarizationSettings, settings
+from grimoire.db.models import Knowledge, Message
 from grimoire.db.queries import get_knowledge_entity
 from grimoire.db.secondary_database import get_messages_from_external_db
 
@@ -35,36 +35,36 @@ def setup_periodic_tasks(sender, **kwargs):
 
 
 def make_summary_prompt(
-    session,
-    knowledge_entry,
+    session: Session,
+    knowledge_entry: Knowledge,
     max_context: int,
-    api_settings,
-    summarization_settings,
-    secondary_database_settings,
-    prefer_local_tokenizer,
-    tokenizer,
+    api_settings: ApiSettings,
+    summarization_settings: SummarizationSettings,
+    secondary_database_settings: SecondaryDatabaseSettings,
+    prefer_local_tokenizer: bool,
+    tokenizer: str,
     include_names: bool = False,
 ) -> str | None:
-    summarization_url = api_settings["url"]
-    summarization_backend = api_settings["backend"]
-    summarization_auth = api_settings["auth_key"]
+    summarization_url = api_settings.url
+    summarization_backend = api_settings.backend
+    summarization_auth = api_settings.auth_key
 
     instruct_fields = {
-        "bos_token": summarization_settings["bos_token"],
-        "system_sequence": api_settings["system_sequence"],
-        "system_suffix": api_settings["system_suffix"],
-        "input_sequence": api_settings["input_sequence"],
-        "input_suffix": api_settings["input_suffix"],
-        "output_sequence": api_settings["output_sequence"],
-        "output_suffix": api_settings["output_suffix"],
-        "first_output_sequence": api_settings["first_output_sequence"],
-        "last_output_sequence": api_settings["last_output_sequence"],
+        "bos_token": api_settings.bos_token,
+        "system_sequence": api_settings.system_sequence,
+        "system_suffix": api_settings.system_suffix,
+        "input_sequence": api_settings.input_sequence,
+        "input_suffix": api_settings.input_suffix,
+        "output_sequence": api_settings.output_sequence,
+        "output_suffix": api_settings.output_suffix,
+        "first_output_sequence": api_settings.first_output_sequence,
+        "last_output_sequence": api_settings.last_output_sequence,
     }
 
-    secondary_database = secondary_database_settings["enabled"]
-    secondary_database_url = secondary_database_settings["db_engine"]
-    secondary_database_encryption_method = secondary_database_settings["message_encryption"]
-    secondary_database_encryption_key = secondary_database_settings["encryption_key"]
+    secondary_database = secondary_database_settings.enabled
+    secondary_database_url = secondary_database_settings.db_engine
+    secondary_database_encryption_method = secondary_database_settings.message_encryption
+    secondary_database_encryption_key = secondary_database_settings.encryption_key
     chat_id = knowledge_entry.chat_id
 
     if knowledge_entry.summary_entry:
@@ -132,7 +132,7 @@ def make_summary_prompt(
     for message in messages[::-1]:
         reversed_messages.append(f"{message}\n")
         messages_text = "".join(reversed_messages[::-1])
-        new_prompt = summarization_settings["prompt"].format(
+        new_prompt = summarization_settings.prompt.format(
             term=knowledge_entry.entity, previous_summary=summary, messages=messages_text, **instruct_fields
         )
         prompt_without_summary = new_prompt
@@ -161,21 +161,21 @@ def summarize(
     max_retries: int = 50,
     retry_interval: int = 1,
 ) -> None:
-    db_engine = settings["DB_ENGINE"]
-    api_settings = settings["summarization_api"]
-    summarization_settings = settings["summarization"]
-    tokenization_settings = settings["tokenization"]
-    secondary_database_settings = settings["secondary_database"]
+    db_engine = settings.DB_ENGINE
+    api_settings = settings.summarization_api
+    summarization_settings = settings.summarization
+    tokenization_settings = settings.tokenization
+    secondary_database_settings = settings.secondary_database
     db = create_engine(db_engine)
 
-    summarization_url = api_settings["url"]
-    summarization_backend = api_settings["backend"]
-    summarization_auth = api_settings["auth_key"]
-    limit_rate = summarization_settings["limit_rate"]
-    context_len = api_settings["context_length"]
-    response_len = summarization_settings["max_tokens"]
-    prefer_local_tokenizer = tokenization_settings["prefer_local_tokenizer"]
-    tokenizer = tokenization_settings["local_tokenizer"]
+    summarization_url = api_settings.url
+    summarization_backend = api_settings.backend
+    summarization_auth = api_settings.auth_key
+    limit_rate = summarization_settings.limit_rate
+    context_len = api_settings.context_length
+    response_len = summarization_settings.max_tokens
+    prefer_local_tokenizer = tokenization_settings.prefer_local_tokenizer
+    tokenizer = tokenization_settings.local_tokenizer
 
     with Session(db) as session:
         knowledge_entry = get_knowledge_entity(term, chat_id, session)
@@ -213,14 +213,14 @@ def summarize(
             "truncation_length": context_len,
             "max_context_length": context_len,
         }
-        generation_params.update(summarization_settings["params"])
+        generation_params.update(summarization_settings.params)
         additional_stops = [
-            api_settings["input_sequence"].strip(),
-            api_settings["output_sequence"].strip(),
-            api_settings["first_output_sequence"].strip(),
-            api_settings["last_output_sequence"].strip(),
-            api_settings["input_suffix"].strip(),
-            api_settings["output_suffix"].strip(),
+            api_settings.input_sequence.strip(),
+            api_settings.output_sequence.strip(),
+            api_settings.first_output_sequence.strip(),
+            api_settings.last_output_sequence.strip(),
+            api_settings.input_suffix.strip(),
+            api_settings.output_suffix.strip(),
         ]
         additional_stops = [stop for stop in additional_stops if stop]
         generation_params["stop"].extend(additional_stops)
@@ -254,7 +254,7 @@ def summarize(
 
 
 @celery_app.task
-def queue_logging():
+def queue_logging() -> None:
     summarization_queue = "summarization_queue"
     redis_client = redis_manager.get_client()
     queue_length = redis_client.llen(summarization_queue)

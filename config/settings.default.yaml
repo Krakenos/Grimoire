@@ -1,9 +1,3 @@
-REDIS_HOST: "127.0.0.1" # For Sentinel, separate hosts with ,
-REDIS_PORT: 6370 # For Sentinel, make it a string and separate with , for example "6370" or "6370,6371"
-REDIS_SENTINEL: False
-SENTINEL_MASTER_NAME: ""
-REDIS_TLS: False
-CACHE_EXPIRE_TIME: 86400
 DB_ENGINE: "postgresql+psycopg2://grimoire:secretpassword@127.0.0.1:5430/grimoire"
 DEBUG: False
 LOG_PROMPTS: False
@@ -12,6 +6,13 @@ AUTH_KEY: ""
 ENCRYPTION_KEY: !env ENCRYPTION_KEY
 prefer_gpu: False
 match_distance: 80
+
+redis:
+  REDIS_HOST: "127.0.0.1:6370" # For Sentinel, separate hosts with ,
+  REDIS_SENTINEL: False
+  SENTINEL_MASTER_NAME: ""
+  REDIS_TLS: False
+  CACHE_EXPIRE_TIME: 86400
 
 summarization_api:
   backend: GenericOAI
@@ -26,13 +27,13 @@ summarization_api:
   output_suffix: ""
   first_output_sequence: ""
   last_output_sequence: ""
+  bos_token: "<s>"
 
 summarization:
   prompt: "{system_sequence}{previous_summary}{messages}{system_suffix}\n{input_sequence}Describe {term}.{input_suffix}{output_sequence}"
   limit_rate: 1
-  bos_token: "<s>"
   max_tokens: 300
-  params': {'min_p': 0.1, 'rep_pen': 1.0, 'temperature': 0.6, 'stop': ["</s>"], 'stop_sequence': ["</s>"]}
+  params: {'min_p': 0.1, 'rep_pen': 1.0, 'temperature': 0.6, 'stop': ["</s>"], 'stop_sequence': ["</s>"]}
 
 tokenization:
   prefer_local_tokenizer: True
