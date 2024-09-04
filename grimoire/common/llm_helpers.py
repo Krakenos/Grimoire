@@ -161,7 +161,10 @@ def generate_text(
         endpoint = urljoin(api_url, "/api/v1/generate")
     else:
         request_body = {"prompt": prompt}
-        model_name = get_model_name(api_url, api_key, api_type)
+        if settings.summarization_api.model_name:
+            model_name = settings.summarization_api.model_name
+        else:
+            model_name = get_model_name(api_url, api_key, api_type)
         request_body["model"] = model_name
         request_body.update(params)
         endpoint = urljoin(api_url, "/v1/completions")
