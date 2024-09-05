@@ -19,7 +19,7 @@ def get_knowledge_entities(terms: list[str], chat_id: int, session: Session) -> 
         found_entry = process.extractOne(
             term,
             list(knowledge_dict),
-            scorer=fuzz.WRatio,
+            scorer=fuzz.partial_ratio,
             processor=utils.default_process,
             score_cutoff=settings.match_distance,
         )

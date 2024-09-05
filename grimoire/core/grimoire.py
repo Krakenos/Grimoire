@@ -269,14 +269,14 @@ def filter_similar_entities(entity_names: list[str]) -> dict[str, str]:
     result_matrix = fuzz_process.cdist(
         entity_names,
         entity_names,
-        scorer=fuzz.WRatio,
+        scorer=fuzz.partial_ratio,
         processor=fuzz_utils.default_process,
     )
     found_score_cords = np.argwhere(result_matrix >= settings.match_distance)
-    relation_dict = defaultdict(lambda: [])
+    relation_dict = defaultdict(list)
     results = {}
 
-    score_dict = defaultdict(lambda: {})
+    score_dict = defaultdict(dict)
     for i, word_1 in enumerate(entity_names):
         for j, word_2 in enumerate(entity_names):
             score_dict[word_1][word_2] = result_matrix[i, j]
