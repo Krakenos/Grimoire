@@ -36,11 +36,11 @@ class TestFilterSimilarEntities(TestCase):
         self.assertEqual(test_results["Alex"], "Alex")
         self.assertEqual(test_results["alex"], "Alex")
 
-    def test_filter_lenght_priority(self):
+    def test_filter_length_priority(self):
         test_data = ["Alex", "Alexey"]
         test_results = filter_similar_entities(test_data)
-        self.assertEqual(test_results["Alex"], "Alexey")
-        self.assertEqual(test_results["Alexey"], "Alexey")
+        self.assertEqual(test_results["Alex"], "Alex")
+        self.assertEqual(test_results["Alexey"], "Alex")
 
     def test_filter_with_relations_uppercase_priority(self):
         test_data = ["Alex", "Alexy", "Alexey", "ALEXEY"]
