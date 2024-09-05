@@ -322,6 +322,7 @@ def save_named_entities(
     found_knowledge_entries = [entry for entry in knowledge_entries if entry is not None]
     db_entry_names = [entry.entity if entry is not None else None for entry in knowledge_entries]
     new_knowledge = []
+    db_ent_map = {}
 
     for ent_name, db_object in zip(filtered_ent_names, db_entry_names, strict=True):
         if db_object is None:
@@ -333,6 +334,9 @@ def save_named_entities(
                 update_count=0,
             )
             new_knowledge.append(knowledge_entity)
+            db_ent_map[ent_name] = ent_name
+        else:
+            db_ent_map[ent_name] = db_object
 
     session.add_all(new_knowledge)
     session.commit()
@@ -351,9 +355,10 @@ def save_named_entities(
 
         for ent in ent_names:
             coresponding_entity = similarity_dict[ent]
-            if db_message not in knowledge_dict[coresponding_entity].messages:
-                knowledge_dict[coresponding_entity].messages.append(db_message)
-                knowledge_dict[coresponding_entity].update_count += 1
+            db_name = db_ent_map[coresponding_entity]
+            if db_message not in knowledge_dict[db_name].messages:
+                knowledge_dict[db_name].messages.append(db_message)
+                knowledge_dict[db_name].update_count += 1
 
     session.add_all(knowledge_dict.values())
     session.commit()
