@@ -16,16 +16,26 @@ def get_knowledge_entities(terms: list[str], chat_id: int, session: Session) -> 
     results = []
     knowledge_dict = {knowledge_obj.entity: knowledge_obj for knowledge_obj in query_results}
     for term in terms:
-        found_entry = process.extractOne(
+        found_entries = process.extract(
             term,
             list(knowledge_dict),
-            scorer=fuzz.WRatio,
+            scorer=fuzz.partial_ratio,
             processor=utils.default_process,
             score_cutoff=settings.match_distance,
         )
-        if found_entry is None:
+        if not found_entries:
             results.append(None)
         else:
-            ent_name, _, _ = found_entry
+            max_score = max([entry[1] for entry in found_entries])
+            max_entries = list(filter(lambda x: x[1] == max_score, found_entries))
+            if len(max_entries) == 1:
+                ent_name, _, _ = max_entries[0]
+            else:
+                # If entries have the same score use regular ratio as tiebreaker
+                max_entry_names = [entry[0] for entry in max_entries]
+                best_match = process.extractOne(
+                    term, max_entry_names, scorer=fuzz.ratio, processor=utils.default_process
+                )
+                ent_name, _, _ = best_match
             results.append(knowledge_dict[ent_name])
     return results

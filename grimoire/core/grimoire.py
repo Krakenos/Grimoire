@@ -269,38 +269,39 @@ def filter_similar_entities(entity_names: list[str]) -> dict[str, str]:
     result_matrix = fuzz_process.cdist(
         entity_names,
         entity_names,
-        scorer=fuzz.WRatio,
+        scorer=fuzz.partial_ratio,
         processor=fuzz_utils.default_process,
-        score_cutoff=settings.match_distance,
     )
-    found_score_cords = np.argwhere(result_matrix)
-    relation_dict = defaultdict(lambda: [])
+    found_score_cords = np.argwhere(result_matrix >= settings.match_distance)
+    relation_dict = defaultdict(list)
     results = {}
+
+    score_dict = defaultdict(dict)
+    for i, word_1 in enumerate(entity_names):
+        for j, word_2 in enumerate(entity_names):
+            score_dict[word_1][word_2] = result_matrix[i, j]
 
     for cords in found_score_cords:
         x = cords[0]
         y = cords[1]
         relation_dict[entity_names[x]].append((entity_names[y], result_matrix[x][y]))
 
-    entity_groups = set()
-    entity_mean_score = {}
-
     for entity, related_entities in relation_dict.items():
         if len(related_entities) > 1:
-            entity_mean_score[entity] = np.mean([ent[1] for ent in related_entities])
             related_names = [ent[0] for ent in related_entities]
-            entity_groups.add(frozenset([entity, *related_names]))
+
+            # Get mean score for each entity in relation to other ones in group
+            mean_scores = []
+            for ent_1 in related_names:
+                ent_scores = [score_dict[ent_1][ent_2] for ent_2 in related_names]
+                mean_scores.append((ent_1, np.mean(ent_scores)))
+
+            # sorts by highest score, then shortest entity, then lexically
+            sorted_entities = sorted(mean_scores, key=lambda x: (-x[1], len(x[0]), x[0]))
+            top_name, _ = sorted_entities[0]
+            results[entity] = top_name
         else:
             results[entity] = related_entities[0][0]
-
-    for entity_group in entity_groups:
-        mean_scores = [(entity, entity_mean_score[entity]) for entity in entity_group]
-        # sorts by highest score, then longest entity, then lexically
-        sorted_entities = sorted(mean_scores, key=lambda x: (-x[1], -len(x[0]), x[0]))
-        top_name, _ = sorted_entities[0]
-
-        for entity in entity_group:
-            results[entity] = top_name
     return results
 
 
@@ -321,6 +322,7 @@ def save_named_entities(
     found_knowledge_entries = [entry for entry in knowledge_entries if entry is not None]
     db_entry_names = [entry.entity if entry is not None else None for entry in knowledge_entries]
     new_knowledge = []
+    db_ent_map = {}
 
     for ent_name, db_object in zip(filtered_ent_names, db_entry_names, strict=True):
         if db_object is None:
@@ -332,6 +334,9 @@ def save_named_entities(
                 update_count=0,
             )
             new_knowledge.append(knowledge_entity)
+            db_ent_map[ent_name] = ent_name
+        else:
+            db_ent_map[ent_name] = db_object
 
     session.add_all(new_knowledge)
     session.commit()
@@ -350,9 +355,10 @@ def save_named_entities(
 
         for ent in ent_names:
             coresponding_entity = similarity_dict[ent]
-            if db_message not in knowledge_dict[coresponding_entity].messages:
-                knowledge_dict[coresponding_entity].messages.append(db_message)
-                knowledge_dict[coresponding_entity].update_count += 1
+            db_name = db_ent_map[coresponding_entity]
+            if db_message not in knowledge_dict[db_name].messages:
+                knowledge_dict[db_name].messages.append(db_message)
+                knowledge_dict[db_name].update_count += 1
 
     session.add_all(knowledge_dict.values())
     session.commit()
