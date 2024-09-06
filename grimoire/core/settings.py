@@ -62,7 +62,7 @@ class SummarizationSettings(BaseSettingsModel):
 
 class ApiSettings(BaseSettingsModel):
     backend: str = "GenericOAI"
-    model_name: str = ""
+    model: str = ""
     url: str = ""
     auth_key: str = ""
     context_length: int = 4096

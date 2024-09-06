@@ -34,10 +34,7 @@ def get_knowledge_entities(terms: list[str], chat_id: int, session: Session) -> 
                 # If entries have the same score use regular ratio as tiebreaker
                 max_entry_names = [entry[0] for entry in max_entries]
                 best_match = process.extractOne(
-                    term,
-                    max_entry_names,
-                    scorer=fuzz.ratio,
-                    processor=utils.default_process
+                    term, max_entry_names, scorer=fuzz.ratio, processor=utils.default_process
                 )
                 ent_name, _, _ = best_match
             results.append(knowledge_dict[ent_name])

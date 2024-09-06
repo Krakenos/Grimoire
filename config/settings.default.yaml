@@ -16,7 +16,7 @@ redis:
 
 summarization_api:
   backend: GenericOAI
-  model_name: "" # Used when inference has multiple models/loras, if empty first found name is used
+  model: "" # Used when inference has multiple models/loras, if empty first found name is used
   url: !env SUMMARIZATION_API_URL
   auth_key: !env SUMMARIZATION_API_AUTH
   context_length: 4096
