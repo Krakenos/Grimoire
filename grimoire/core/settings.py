@@ -105,6 +105,7 @@ class Settings(BaseSettingsModel):
     LOG_FILES: bool = False
     AUTH_KEY: str | None = None
     ENCRYPTION_KEY: str = "sample-database-encryption-key"
+    HF_TOKEN: str | None = None
     prefer_gpu: bool = False
     match_distance: int = 80
     redis: RedisSettings = RedisSettings()

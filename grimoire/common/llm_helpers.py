@@ -16,7 +16,7 @@ def local_tokenization(texts: str | list[str], tokenizer_name: str) -> int | lis
     if texts is str:
         text = texts
     try:
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, token=settings.HF_TOKEN)
     except OSError as s:
         general_logger.warning(f"Could not load {tokenizer_name} tokenizer, defaulting to llama-tokenizer")
         general_logger.warning(s)
