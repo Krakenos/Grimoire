@@ -10,7 +10,12 @@ Grimoire collects the messages that are meant to be sent to LLM and analyzes the
 To run Grimoire you need to have installed:
 - Python 3.10 or above
 - Docker
+- Linux (for Windows run under WSL)
 
+Copy the default settings file:
+```bash
+cp config/settings.default.yaml config/settings.yaml
+```
 
 Edit settings.yaml file with your values:
 ```yaml
@@ -19,9 +24,11 @@ LOG_PROMPTS: True # Enables prompt logging
 summarization_api: # Api used for summarization
   backend: GenericOAI # Accepted values: GenericOAI, Kobold, KoboldCPP, Aphrodite, Tabby
   url: http://127.0.0.1:5002 # Url to side api that will summarize entries
-  auth_key: 'your-api-authkey' # Api key to side api, leave empty or delete entry if there is none
-  input_sequence: '### Instruction:\n' # Instruct sequence for side api
-  output_sequence: '\n### Response:\n' # Instruct sequence for side api
+  auth_key: "your-api-authkey" # Api key to summarization api, leave empty or delete entry if there is none
+  input_sequence: "### Instruction:\n" # Instruct sequence for summarization api
+  input_suffix: "\n"
+  output_sequence: "### Response:\n" # Instruct sequence for summarization api
+  output_suffix: "\n"
 ```
 
 ### Running from source
@@ -42,10 +49,6 @@ Installing Grimoire requirements:
 pip install -r requirements.txt
 python -m spacy download en_core_web_trf
 ```
-For Windows, you also have to install:
-```bash
-pip install eventlet
-```
 
 Setup database:
 
@@ -55,13 +58,8 @@ alembic upgrade head
 
 To start a process that will make summarization prompts use the following command:
 
-Linux
 ```bash
 celery -A grimoire.core.tasks worker --loglevel=INFO --concurrency=1
-```
-Windows
-```bash
-celery -A grimoire.core.tasks worker --loglevel=INFO --concurrency=1 -P eventlet
 ```
 Note: -concurrency=1 refers to how many prompts will be directed to side api at the same time. Leave it at 1 unless you know the backend supports proper queueing or batching.
 
