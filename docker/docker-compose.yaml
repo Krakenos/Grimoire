@@ -16,7 +16,7 @@ services:
       - 6370:6379
 
   postgres:
-    image: postgres
+    image: pgvector/pgvector:pg15
     container_name: "postgres-grimoire"
     environment:
       - POSTGRES_USER=grimoire
