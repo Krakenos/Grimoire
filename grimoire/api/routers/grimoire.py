@@ -133,6 +133,8 @@ def delete_message(user_id: int, chat_id: int, message_index: int, db: Session =
     db_message = api_utils.get_message(db, user_id=user_id, chat_id=chat_id, message_index=message_index)
     if db_message is None:
         raise HTTPException(status_code=404, detail="Message not found")
+    for named_entity in db_message.spacy_named_entities:
+        db.delete(named_entity)
     db.delete(db_message)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
