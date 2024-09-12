@@ -16,12 +16,15 @@ def vectorize_texts(texts: str | list[str]) -> Tensor | np.ndarray:
 
 
 def get_similarity(queries: list[str], texts: list[str]) -> np.ndarray:
-    embed_1 = get_embeddings(queries)
-    embed_2 = get_embeddings(texts)
+    embed_1 = get_text_embeddings(queries)
+    embed_2 = get_text_embeddings(texts)
     return embed_1 @ embed_2.T
 
 
-def get_embeddings(texts: str | list) -> np.ndarray:
+def get_text_embeddings(texts: str | list) -> np.ndarray:
+    if isinstance(texts, str):
+        texts = [texts]
+
     # get redis cached
     redis_client = redis_manager.get_client()
     redis_keys = [f"VECTOR_EMBEDDING_{text}" for text in texts]

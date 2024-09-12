@@ -18,6 +18,7 @@ from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 from grimoire.core.tasks import summarize
+from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import Chat, Knowledge, Message, SpacyNamedEntity, User
 from grimoire.db.queries import get_knowledge_entities
 
@@ -46,6 +47,7 @@ def save_messages(
     messages_external_ids: list[str],
     sender_names: list[str],
     entity_dict: dict[str, list[NamedEntity]],
+    embedding_dict: dict[str, np.ndarray],
     chat: Chat,
     session: Session,
 ) -> tuple[list[int], Chat]:
@@ -55,6 +57,7 @@ def save_messages(
     :param messages_external_ids:
     :param sender_names:
     :param entity_dict:
+    :param embedding_dict:
     :param chat:
     :param session:
     :return: indices of new messages and updated chat object
@@ -76,6 +79,7 @@ def save_messages(
         for index in new_messages_indices:
             message_to_add = messages[index]
             named_entities = entity_dict[message_to_add]
+            embedding = embedding_dict[message_to_add]
             db_named_entities = [
                 SpacyNamedEntity(entity_name=named_ent.name, entity_label=named_ent.label)
                 for named_ent in named_entities
@@ -85,6 +89,7 @@ def save_messages(
                     external_id=messages_external_ids[index],
                     sender_name=sender_names[index],
                     message_index=message_number,
+                    vector_embedding=embedding,
                     spacy_named_entities=db_named_entities,
                 )
             )
@@ -112,6 +117,7 @@ def save_messages(
         for index in new_messages_indices:
             message_to_add = messages[index]
             named_entities = entity_dict[message_to_add]
+            embedding = embedding_dict[message_to_add]
             db_named_entities = [
                 SpacyNamedEntity(entity_name=named_ent.name, entity_label=named_ent.label)
                 for named_ent in named_entities
@@ -121,6 +127,7 @@ def save_messages(
                     message=message_to_add,
                     sender_name=sender_names[index],
                     message_index=message_number,
+                    vector_embedding=embedding,
                     spacy_named_entities=db_named_entities,
                 )
             )
@@ -387,6 +394,31 @@ def get_ordered_entities(entity_list: list[list[NamedEntity]]) -> list[tuple[str
     return unique_ents
 
 
+def get_embeddings(
+    chat: Chat, chat_texts: list[str], messages_names: list[str], external_message_map: dict
+) -> dict[str, np.ndarray]:
+    embedding_dict = {}
+
+    if settings.secondary_database.enabled:
+        for mes in chat.messages:
+            mes_text = external_message_map[mes.external_id]
+            if mes.vector_embedding:
+                embedding_dict[mes_text] = np.array(mes.vector_embedding)
+    else:
+        for mes in chat.messages:
+            if mes.vector_embedding:
+                embedding_dict[mes.message] = np.array(mes.vector_embedding)
+
+    to_vectorize = [
+        f"{name}: {text}" for name, text in zip(messages_names, chat_texts, strict=True) if text not in embedding_dict
+    ]
+    new_embeddings = get_text_embeddings(to_vectorize)
+
+    for text, embedding in zip(to_vectorize, new_embeddings, strict=True):
+        embedding_dict[text] = embedding
+    return embedding_dict
+
+
 def process_request(
     external_chat_id: str,
     chat_texts: list[str],
@@ -412,12 +444,18 @@ def process_request(
     entity_list, entity_dict = get_named_entities(chat_texts, messages_external_ids, messages_names, chat)
     doc_end_time = timeit.default_timer()
     general_logger.debug(f"Getting named entities {doc_end_time - doc_time} seconds")
+
+    embedding_time = timeit.default_timer()
+    embedding_dict = get_embeddings(chat, chat_texts, messages_names, external_message_map)
+    embedding_time_end = timeit.default_timer()
+    general_logger.debug(f"Getting vector embeddings {embedding_time_end - embedding_time} seconds")
+
     last_messages = chat_texts[:-excluded_messages]  # exclude last few messages from saving
     last_names = messages_names[:-excluded_messages]
     last_external_ids = messages_external_ids[:-excluded_messages]
     last_entities = entity_list[:-excluded_messages]
     new_message_indices, chat = save_messages(
-        last_messages, last_external_ids, last_names, entity_dict, chat, db_session
+        last_messages, last_external_ids, last_names, entity_dict, embedding_dict, chat, db_session
     )
     save_named_entities(chat, last_entities, entity_dict, external_message_map, db_session)
 
