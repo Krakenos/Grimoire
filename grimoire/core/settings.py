@@ -1,13 +1,118 @@
-import copy
+import json
 import os
 import pathlib
+from typing import Any
 
 import yaml
 from dotenv import load_dotenv
-
-from grimoire.core.default_settings import defaults
+from pydantic import BaseModel, field_validator
+from pydantic_core.core_schema import ValidationInfo
 
 load_dotenv()
+
+
+class BaseSettingsModel(BaseModel):
+    @field_validator("*", mode="before")
+    @classmethod
+    def replace_none(cls, v: Any, info: ValidationInfo) -> Any:
+        if v is None:
+            return cls.model_fields[info.field_name].default
+        return v
+
+
+class SecondaryDatabaseSettings(BaseSettingsModel):
+    enabled: bool = False
+    db_engine: str = ""
+    message_encryption: str = "aesgcm"
+    encryption_key: str = ""
+
+
+class TokenizationSettings(BaseSettingsModel):
+    prefer_local_tokenizer: bool = True
+    local_tokenizer: str = "oobabooga/llama-tokenizer"
+
+
+class SummarizationSettings(BaseSettingsModel):
+    prompt: str = (
+        "{system_sequence}{previous_summary}{messages}{system_suffix}\n"
+        "{input_sequence}Describe {term}.{input_suffix}{output_sequence}"
+    )
+    limit_rate: int = 1
+    max_tokens: int = 300
+    params: dict = {"min_p": 0.1, "rep_pen": 1.0, "temperature": 0.6, "stop": ["</s>"], "stop_sequence": ["</s>"]}
+
+    @field_validator("params")
+    @classmethod
+    def add_stop(cls, v: dict) -> dict:
+        if "stop" not in v.keys():
+            v["stop"] = []
+
+        if "stop_sequence" not in v.keys():
+            v["stop_sequence"] = []
+
+        return v
+
+    @field_validator("params", mode="before")
+    @classmethod
+    def parse_string(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
+
+
+class ApiSettings(BaseSettingsModel):
+    backend: str = "GenericOAI"
+    model: str = ""
+    url: str = ""
+    auth_key: str = ""
+    context_length: int = 4096
+    system_sequence: str = ""
+    system_suffix: str = ""
+    input_sequence: str = "### Instruction:\n"
+    input_suffix: str = "\n"
+    output_sequence: str = "### Response:\n"
+    output_suffix: str = "\n"
+    first_output_sequence: str = ""
+    last_output_sequence: str = ""
+    bos_token: str = "<s>"
+
+
+class RedisSettings(BaseSettingsModel):
+    HOST: list[tuple[str, int]] = [("127.0.0.1", 6370)]
+    SENTINEL: bool = False
+    TLS: bool = False
+    SENTINEL_MASTER_NAME: str = "mymaster"
+    CACHE_EXPIRE_TIME: int = 86400
+
+    @field_validator("HOST", mode="before")
+    @classmethod
+    def parse_string(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            host_list = []
+
+            for full_address in v.split(","):
+                for address, port in full_address.split(":"):
+                    host_list.append((address, int(port)))
+
+            return host_list
+        return v
+
+
+class Settings(BaseSettingsModel):
+    DB_ENGINE: str = "postgresql+psycopg2://grimoire:secretpassword@127.0.0.1:5432/grimoire"
+    DEBUG: bool = False
+    LOG_PROMPTS: bool = False
+    LOG_FILES: bool = False
+    AUTH_KEY: str | None = None
+    ENCRYPTION_KEY: str = "sample-database-encryption-key"
+    HF_TOKEN: str | None = None
+    prefer_gpu: bool = False
+    match_distance: int = 80
+    redis: RedisSettings = RedisSettings()
+    summarization_api: ApiSettings = ApiSettings()
+    summarization: SummarizationSettings = SummarizationSettings()
+    tokenization: TokenizationSettings = TokenizationSettings()
+    secondary_database: SecondaryDatabaseSettings = SecondaryDatabaseSettings()
 
 
 def envvar_constructor(loader: yaml.Loader, node: yaml.ScalarNode):
@@ -33,11 +138,11 @@ class SettingsLoader:
         else:  # Other envs
             proj_path = pathlib.Path(__file__).parents[2]
 
-        default_settings_path = proj_path / "config" / "settings.yaml"
+        settings_file = os.environ.get("SETTINGS_FILE", "settings.yaml")
 
-        config_path = os.environ.get("APP_CONFIG", default_settings_path.resolve())
+        settings_path = proj_path / "config" / settings_file
 
-        return config_path
+        return settings_path.resolve()
 
     @classmethod
     def load_from_file(cls, file_path: str) -> dict:
@@ -57,21 +162,5 @@ class SettingsLoader:
         return cls.load_from_file(path)
 
 
-def merge_settings(settings_dict, overrides):
-    settings_dict = copy.deepcopy(settings_dict)
-    for key, value in overrides.items():
-        if key in settings_dict and value not in ("", None):
-            match value:
-                case dict():
-                    settings_dict[key] = merge_settings(settings_dict[key], value)
-                case _:
-                    settings_dict[key] = value
-    return settings_dict
-
-
-settings = copy.deepcopy(defaults)
 loaded_settings = SettingsLoader.load_config()
-settings = merge_settings(settings, loaded_settings)
-
-if settings["side_api"]["url"] in ("", None):
-    settings["single_api_mode"] = True
+settings = Settings(**loaded_settings)

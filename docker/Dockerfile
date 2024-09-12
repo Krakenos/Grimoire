@@ -17,6 +17,10 @@ RUN pip install -r requirements_tests.txt
 FROM deps AS project
 COPY /grimoire ./grimoire
 COPY /config ./config
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x entrypoint.sh
+COPY alembic.ini ./alembic.ini
+COPY run.py ./run.py
 
 FROM test_deps AS testing
 COPY /grimoire ./grimoire

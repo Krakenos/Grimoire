@@ -4,17 +4,20 @@ from starlette import status
 from starlette.responses import Response
 
 from grimoire.api.schemas.grimoire import (
+    ChatData,
     ChatIn,
     ChatMessageIn,
     ChatMessageOut,
     ChatOut,
     ExternalId,
+    KnowledgeData,
     KnowledgeIn,
     KnowledgeOut,
     UserIn,
     UserOut,
 )
 from grimoire.common import api_utils
+from grimoire.core.grimoire import process_request
 from grimoire.db.connection import get_db
 
 router = APIRouter(tags=["Grimoire specific endpoints"])
@@ -130,6 +133,8 @@ def delete_message(user_id: int, chat_id: int, message_index: int, db: Session =
     db_message = api_utils.get_message(db, user_id=user_id, chat_id=chat_id, message_index=message_index)
     if db_message is None:
         raise HTTPException(status_code=404, detail="Message not found")
+    for named_entity in db_message.spacy_named_entities:
+        db.delete(named_entity)
     db.delete(db_message)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -168,3 +173,21 @@ def delete_knowledge(user_id: int, chat_id: int, knowledge_id: int, db: Session 
     db.delete(db_knowledge)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/get_data", response_model=list[KnowledgeData])
+def get_data(chat_data: ChatData, db: Session = Depends(get_db)):
+    chat_texts = [message.text for message in chat_data.messages]
+    messages_names = [message.sender_name for message in chat_data.messages]
+    messages_external_ids = [message.external_id for message in chat_data.messages]
+    include_names = chat_data.include_names
+    return process_request(
+        chat_data.external_chat_id,
+        chat_texts,
+        messages_external_ids,
+        messages_names,
+        db,
+        include_names,
+        chat_data.external_user_id,
+        chat_data.max_tokens,
+    )

@@ -18,8 +18,10 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "alembic~=1.12.1",
+    "aiohttp~=3.9.3",
     "celery~=5.3.6",
     "celery-singleton~=0.3.1",
+    "cryptography~=43.0.0",
     "fastapi~=0.110.1",
     "psycopg2-binary~=2.9.9",
     "pydantic~=2.4.2",
@@ -29,9 +31,14 @@ dependencies = [
     "spacy~=3.7.2",
     "spacy[cuda12x]",
     "SQLAlchemy~=2.0.22",
+    "SQLAlchemy-Utils~=0.41.2",
     "sseclient-py~=1.8.0",
-    "transformers~=4.36.2",
+    "transformers~=4.43.3",
     "uvicorn~=0.23.2",
+    "redis~=5.0.3",
+    "rapidfuzz~=3.9.6",
+    "starlette~=0.37.2",
+    "numpy~=1.26.4",
 ]
 dynamic = ["version"]
 

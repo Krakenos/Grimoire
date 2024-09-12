@@ -36,15 +36,39 @@ class ChatMessageIn(BaseModel):
 class KnowledgeOut(BaseModel):
     id: int
     entity: str
+    entity_label: str
     summary: str
+    enabled: bool
+    frozen: bool
     updated_date: datetime
 
 
 class KnowledgeIn(BaseModel):
     entity: str
     summary: str
+    enabled: bool
+    frozen: bool
     updated_date: datetime
 
 
 class ExternalId(BaseModel):
     external_id: str
+
+
+class ChatDataMessage(BaseModel):
+    external_id: str | None = None
+    sender_name: str
+    text: str
+
+
+class ChatData(BaseModel):
+    external_chat_id: str
+    external_user_id: str | None = None
+    include_names: bool = False
+    max_tokens: int | None = None
+    messages: list[ChatDataMessage]
+
+
+class KnowledgeData(BaseModel):
+    text: str
+    relevance: int
