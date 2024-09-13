@@ -1,3 +1,4 @@
+import copy
 import ssl
 from datetime import datetime
 
@@ -213,7 +214,7 @@ def summarize(
             "truncation_length": context_len,
             "max_context_length": context_len,
         }
-        generation_params.update(summarization_settings.params)
+        generation_params.update(copy.deepcopy(summarization_settings.params))
         additional_stops = [
             api_settings.input_sequence.strip(),
             api_settings.output_sequence.strip(),
