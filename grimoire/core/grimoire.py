@@ -412,9 +412,10 @@ def get_embeddings(
     to_vectorize = [
         f"{name}: {text}" for name, text in zip(messages_names, chat_texts, strict=True) if text not in embedding_dict
     ]
+    new_texts = [text for text in chat_texts if text not in embedding_dict]
     new_embeddings = get_text_embeddings(to_vectorize)
 
-    for text, embedding in zip(to_vectorize, new_embeddings, strict=True):
+    for text, embedding in zip(new_texts, new_embeddings, strict=True):
         embedding_dict[text] = embedding
     return embedding_dict
 
