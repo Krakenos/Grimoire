@@ -5,11 +5,13 @@ from sentence_transformers import SentenceTransformer
 from torch import Tensor
 
 from grimoire.common.redis import redis_manager
+from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 
 embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL)
 
 
+@time_execution
 def vectorize_texts(texts: str | list[str]) -> Tensor | np.ndarray:
     embeddings = embedding_model.encode(texts, normalize_embeddings=True)
     return embeddings
@@ -42,13 +44,13 @@ def get_text_embeddings(texts: str | list) -> np.ndarray:
             embedding_dict[text] = None
             cached_entries.append(None)
 
-    to_vectorize = [text for text, embedding in zip(texts, cached_entries, strict=True) if cached_entries is None]
+    to_vectorize = [text for text, embedding in zip(texts, cached_entries, strict=True) if embedding is None]
     new_embeddings = vectorize_texts(to_vectorize)
 
     # set new redis cache
     for text, embedding in zip(to_vectorize, new_embeddings, strict=True):
         key = f"VECTOR_EMBEDDING_{text}"
-        redis_client.set(key, json.dumps(embedding), settings.redis.CACHE_EXPIRE_TIME)
+        redis_client.set(key, json.dumps(embedding.tolist()), settings.redis.CACHE_EXPIRE_TIME)
 
     for text, embedding in zip(to_vectorize, new_embeddings, strict=True):
         embedding_dict[text] = embedding
