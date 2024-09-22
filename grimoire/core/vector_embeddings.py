@@ -4,16 +4,23 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 from torch import Tensor
 
+from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 
-embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL)
+if not settings.prefer_gpu:
+    embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL, device="cpu")
+    general_logger.info(f"Running embedding model {settings.EMBEDDING_MODEL} on CPU")
+else:
+    embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL)
+    general_logger.info(f"Running embedding model {settings.EMBEDDING_MODEL} on GPU")
 
 
 @time_execution
 def vectorize_texts(texts: str | list[str]) -> Tensor | np.ndarray:
-    embeddings = embedding_model.encode(texts, normalize_embeddings=True)
+    progress_bar = settings.DEBUG
+    embeddings = embedding_model.encode(texts, normalize_embeddings=True, show_progress_bar=progress_bar)
     return embeddings
 
 
