@@ -10,17 +10,16 @@ from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 
 if not settings.prefer_gpu:
-    embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL, device="cpu")
+    embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL, trust_remote_code=True, device="cpu")
     general_logger.info(f"Running embedding model {settings.EMBEDDING_MODEL} on CPU")
 else:
-    embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL)
+    embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL, trust_remote_code=True)
     general_logger.info(f"Running embedding model {settings.EMBEDDING_MODEL} on GPU")
 
 
 @time_execution
 def vectorize_texts(texts: str | list[str]) -> Tensor | np.ndarray:
-    progress_bar = settings.DEBUG
-    embeddings = embedding_model.encode(texts, normalize_embeddings=True, show_progress_bar=progress_bar)
+    embeddings = embedding_model.encode(texts)
     return embeddings
 
 
