@@ -30,7 +30,7 @@ class NamedEntity:
 
 
 if settings.prefer_gpu:
-    gpu_check = spacy.prefer_gpu()
+    gpu_check = spacy.require_gpu()
     if gpu_check:
         general_logger.info("Running spacy on GPU")
     else:

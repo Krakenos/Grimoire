@@ -1,6 +1,7 @@
 import json
 
 import numpy as np
+import torch
 from sentence_transformers import SentenceTransformer
 from torch import Tensor
 
@@ -13,6 +14,11 @@ if not settings.prefer_gpu:
     embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL, trust_remote_code=True, device="cpu")
     general_logger.info(f"Running embedding model {settings.EMBEDDING_MODEL} on CPU")
 else:
+    if not torch.cuda.is_available():
+        raise OSError("CUDA is not available")
+    if torch.cuda.device_count() < 1:
+        raise OSError("No GPU available")
+
     embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL, trust_remote_code=True)
     general_logger.info(f"Running embedding model {settings.EMBEDDING_MODEL} on GPU")
 
