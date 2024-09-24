@@ -5,6 +5,7 @@ LOG_FILES: False
 AUTH_KEY: ""
 ENCRYPTION_KEY: !env ENCRYPTION_KEY
 HF_TOKEN: "" # Huggingface user token, used to access tokenizer from restricted repository
+EMBEDDING_MODEL: "Alibaba-NLP/gte-base-en-v1.5"
 prefer_gpu: False
 match_distance: 80
 

@@ -59,7 +59,7 @@ alembic upgrade head
 To start a process that will make summarization prompts use the following command:
 
 ```bash
-celery -A grimoire.core.tasks worker --loglevel=INFO --concurrency=1
+celery -A grimoire.core.tasks worker --loglevel=INFO --concurrency=1 -Q summarization_queue --pool=threads
 ```
 Note: -concurrency=1 refers to how many prompts will be directed to side api at the same time. Leave it at 1 unless you know the backend supports proper queueing or batching.
 
