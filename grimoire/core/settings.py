@@ -91,8 +91,10 @@ class RedisSettings(BaseSettingsModel):
             host_list = []
 
             for full_address in v.split(","):
-                for address, port in full_address.split(":"):
-                    host_list.append((address, int(port)))
+                split_address = full_address.split(":")
+                address = split_address[0]
+                port = int(split_address[1])
+                host_list.append((address, int(port)))
 
             return host_list
         return v
@@ -165,3 +167,4 @@ class SettingsLoader:
 
 loaded_settings = SettingsLoader.load_config()
 settings = Settings(**loaded_settings)
+print(settings.redis.HOST)

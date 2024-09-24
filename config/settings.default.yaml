@@ -10,10 +10,10 @@ prefer_gpu: False
 match_distance: 80
 
 redis:
-  REDIS_HOST: "127.0.0.1:6370" # For Sentinel, separate hosts with ,
-  REDIS_SENTINEL: False
+  HOST: "127.0.0.1:6370" # For Sentinel, separate hosts with ,
+  SENTINEL: False
   SENTINEL_MASTER_NAME: ""
-  REDIS_TLS: False
+  TLS: False
   CACHE_EXPIRE_TIME: 86400
 
 summarization_api:
