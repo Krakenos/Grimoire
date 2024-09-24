@@ -167,4 +167,3 @@ class SettingsLoader:
 
 loaded_settings = SettingsLoader.load_config()
 settings = Settings(**loaded_settings)
-print(settings.redis.HOST)
