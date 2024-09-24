@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime as base
+FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime AS base
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
@@ -25,6 +25,6 @@ COPY /grimoire ./grimoire
 COPY /tests ./tests
 COPY /config ./config
 
-FROM project as run
+FROM project AS run
 EXPOSE 5005
 ENTRYPOINT ["./entrypoint.sh"]
