@@ -402,11 +402,11 @@ def get_embeddings(
     if settings.secondary_database.enabled:
         for mes in chat.messages:
             mes_text = external_message_map[mes.external_id]
-            if mes.vector_embedding:
+            if mes.vector_embedding is not None:
                 embedding_dict[mes_text] = np.array(mes.vector_embedding)
     else:
         for mes in chat.messages:
-            if mes.vector_embedding:
+            if mes.vector_embedding is not None:
                 embedding_dict[mes.message] = np.array(mes.vector_embedding)
 
     to_vectorize = [
