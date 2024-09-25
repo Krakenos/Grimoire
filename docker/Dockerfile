@@ -1,4 +1,16 @@
-FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime AS base
+FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04 AS base
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update -y
+RUN apt-get install -y software-properties-common
+RUN add-apt-repository ppa:deadsnakes/ppa
+RUN apt-get update -y
+RUN apt-get install -y python3.11 python3-pip
+
+RUN ln -fs /usr/bin/python3.11 /usr/bin/python
+RUN ln -fs /usr/bin/python3.11 /usr/bin/python3
+
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
