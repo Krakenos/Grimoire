@@ -25,7 +25,7 @@ else:
 
 @time_execution
 def vectorize_texts(texts: str | list[str]) -> Tensor | np.ndarray:
-    embeddings = embedding_model.encode(texts)
+    embeddings = embedding_model.encode(texts, show_progress_bar=False)
     return embeddings
 
 
