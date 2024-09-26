@@ -4,11 +4,13 @@ celery~=5.3.6
 celery-singleton~=0.3.1
 cryptography~=43.0.0
 fastapi~=0.110.1
+pgvector~=0.3.3
 psycopg2-binary~=2.9.9
 pydantic~=2.4.2
 python-dotenv~=1.0.0
 PyYAML~=6.0.1
 requests~=2.31.0
+sentence-transformers~=3.1.0
 spacy~=3.7.2
 spacy[cuda12x]
 SQLAlchemy~=2.0.22

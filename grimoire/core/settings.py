@@ -91,8 +91,10 @@ class RedisSettings(BaseSettingsModel):
             host_list = []
 
             for full_address in v.split(","):
-                for address, port in full_address.split(":"):
-                    host_list.append((address, int(port)))
+                split_address = full_address.split(":")
+                address = split_address[0]
+                port = int(split_address[1])
+                host_list.append((address, int(port)))
 
             return host_list
         return v
@@ -106,6 +108,8 @@ class Settings(BaseSettingsModel):
     AUTH_KEY: str | None = None
     ENCRYPTION_KEY: str = "sample-database-encryption-key"
     HF_TOKEN: str | None = None
+    EMBEDDING_MODEL: str = "Alibaba-NLP/gte-base-en-v1.5"
+    EMBEDDING_MODEL_REVISION: str | None = None
     prefer_gpu: bool = False
     match_distance: int = 80
     redis: RedisSettings = RedisSettings()

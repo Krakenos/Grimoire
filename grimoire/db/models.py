@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column, ForeignKey, Table, Unicode
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy_utils import StringEncryptedType
@@ -40,6 +41,7 @@ class Knowledge(Base):
     updated_date: Mapped[datetime] = mapped_column(default=datetime.now)
     update_at: Mapped[int | None] = mapped_column(default=1)
     update_count: Mapped[int | None] = mapped_column(default=1)
+    vector_embedding = mapped_column(Vector())
 
     def __repr__(self):
         return f"id: {self.id}, name: {self.entity}"
@@ -58,6 +60,7 @@ class Message(Base):
     created_date: Mapped[datetime] = mapped_column(default=datetime.now)
     spacy_named_entities: Mapped[list["SpacyNamedEntity"]] = relationship()
     knowledge: Mapped[list["Knowledge"]] = relationship(secondary=knowledge_message, back_populates="messages")
+    vector_embedding = mapped_column(Vector())
 
 
 class SpacyNamedEntity(Base):

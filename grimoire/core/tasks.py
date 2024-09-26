@@ -11,6 +11,7 @@ from grimoire.common.llm_helpers import generate_text, token_count
 from grimoire.common.loggers import general_logger, summary_logger
 from grimoire.common.redis import redis_manager
 from grimoire.core.settings import ApiSettings, SecondaryDatabaseSettings, SummarizationSettings, settings
+from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import Knowledge, Message
 from grimoire.db.queries import get_knowledge_entity
 from grimoire.db.secondary_database import get_messages_from_external_db
@@ -237,6 +238,7 @@ def summarize(
         )
         summary_text = summary_text.replace("\n\n", "\n")
         summary_entry_text = f"[ {knowledge_entry.entity}: {summary_text} ]"
+        summary_embedding = get_text_embeddings(summary_text)[0]
         knowledge_entry.summary = summary_text
         knowledge_entry.summary_entry = summary_entry_text
         knowledge_entry.token_count = token_count(
@@ -249,6 +251,7 @@ def summarize(
         )[0]
         knowledge_entry.update_count = 1
         knowledge_entry.updated_date = datetime.now()
+        knowledge_entry.vector_embedding = summary_embedding
         summary_logger.debug(f"({knowledge_entry.token_count} tokens){term}: {summary_text}\n{request_json}")
         # summary_logger.debug(f"#### PROMPT ####\n{prompt}\n#### RESPONSE ####\n{summary_text}")
         session.commit()

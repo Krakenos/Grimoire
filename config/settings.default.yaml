@@ -5,14 +5,16 @@ LOG_FILES: False
 AUTH_KEY: ""
 ENCRYPTION_KEY: !env ENCRYPTION_KEY
 HF_TOKEN: "" # Huggingface user token, used to access tokenizer from restricted repository
+EMBEDDING_MODEL: "Alibaba-NLP/gte-base-en-v1.5"
+EMBEDDING_MODEL_REVISION: "a8e4f3e0ee719c75bc30d12b8eae0f8440502718" # Points to specific commit in repo for security purposes
 prefer_gpu: False
 match_distance: 80
 
 redis:
-  REDIS_HOST: "127.0.0.1:6370" # For Sentinel, separate hosts with ,
-  REDIS_SENTINEL: False
+  HOST: "127.0.0.1:6370" # For Sentinel, separate hosts with ,
+  SENTINEL: False
   SENTINEL_MASTER_NAME: ""
-  REDIS_TLS: False
+  TLS: False
   CACHE_EXPIRE_TIME: 86400
 
 summarization_api:
