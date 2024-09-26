@@ -109,6 +109,7 @@ class Settings(BaseSettingsModel):
     ENCRYPTION_KEY: str = "sample-database-encryption-key"
     HF_TOKEN: str | None = None
     EMBEDDING_MODEL: str = "Alibaba-NLP/gte-base-en-v1.5"
+    EMBEDDING_MODEL_REVISION: str | None = None
     prefer_gpu: bool = False
     match_distance: int = 80
     redis: RedisSettings = RedisSettings()

@@ -11,7 +11,9 @@ from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 
 if not settings.prefer_gpu:
-    embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL, trust_remote_code=True, device="cpu")
+    embedding_model = SentenceTransformer(
+        settings.EMBEDDING_MODEL, revision=settings.EMBEDDING_MODEL_REVISION, trust_remote_code=True, device="cpu"
+    )
     general_logger.info(f"Running embedding model {settings.EMBEDDING_MODEL} on CPU")
 else:
     if not torch.cuda.is_available():
@@ -19,7 +21,9 @@ else:
     if torch.cuda.device_count() < 1:
         raise OSError("No GPU available")
 
-    embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL, trust_remote_code=True)
+    embedding_model = SentenceTransformer(
+        settings.EMBEDDING_MODEL, revision=settings.EMBEDDING_MODEL_REVISION, trust_remote_code=True
+    )
     general_logger.info(f"Running embedding model {settings.EMBEDDING_MODEL} on GPU")
 
 
