@@ -60,11 +60,15 @@ def semantic_search(message_embeddings: np.ndarray, chat_id: int, session: Sessi
             candidates.extend(message.knowledge)
 
     candidates = list(set(candidates))
+    candidates = [candidate for candidate in candidates if candidate.vector_embedding is not None]
     candidates_embeddings = [candidate.vector_embedding for candidate in candidates]
+
+    if not candidates:
+        return []
+
     cosine_similarity = cos_sim(message_embeddings, candidates_embeddings)
     weighted_similarity = cosine_similarity.T * weights
-    weighted_similarity = weighted_similarity.T
-    highest_similarities = np.max(weighted_similarity.numpy(), axis=0)
+    highest_similarities = np.max(weighted_similarity.numpy(), axis=1)
     sorted_indices = np.argsort(highest_similarities)[::-1]
     sorted_knowledge = [candidates[i] for i in sorted_indices]
     return sorted_knowledge
