@@ -4,6 +4,7 @@ from sentence_transformers.util import cos_sim
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 from grimoire.db.models import Knowledge, Message
 
@@ -43,6 +44,7 @@ def get_knowledge_entities(terms: list[str], chat_id: int, session: Session) -> 
     return results
 
 
+@time_execution
 def semantic_search(message_embeddings: np.ndarray, chat_id: int, session: Session) -> list[Knowledge]:
     message_amount = len(message_embeddings)
     weights = np.linspace(0.5, 1, num=message_amount)
@@ -61,10 +63,13 @@ def semantic_search(message_embeddings: np.ndarray, chat_id: int, session: Sessi
 
     candidates = list(set(candidates))
     candidates = [candidate for candidate in candidates if candidate.vector_embedding is not None]
-    candidates_embeddings = [candidate.vector_embedding for candidate in candidates]
 
     if not candidates:
         return []
+
+    # Cast as float64
+    candidates_embeddings = np.array([candidate.vector_embedding for candidate in candidates], dtype="float64")
+    message_embeddings = message_embeddings.astype("float64")
 
     cosine_similarity = cos_sim(message_embeddings, candidates_embeddings)
     weighted_similarity = cosine_similarity.T * weights
