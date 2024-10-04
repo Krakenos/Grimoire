@@ -371,29 +371,6 @@ def save_named_entities(
     session.commit()
 
 
-def get_summaries(chat: Chat, unique_ents: list[tuple[str, str]], session: Session) -> list[tuple[str, int, str]]:
-    ent_names = [name for name, _ in unique_ents]
-    knowledge_ents = get_knowledge_entities(ent_names, chat.id, session)
-    summaries = [
-        (ent.summary_entry, ent.token_count, ent.entity)
-        for ent in knowledge_ents
-        if ent is not None and ent.summary_entry and ent.enabled
-    ]
-    unique_summaries = list(dict.fromkeys(summaries))
-    return unique_summaries
-
-
-def get_ordered_entities(entity_list: list[list[NamedEntity]]) -> list[tuple[str, str]]:
-    full_ent_list = []
-
-    for entities in entity_list:
-        ent_list = [(ent.name, ent.label) for ent in entities]
-        full_ent_list += ent_list
-
-    unique_ents = list(dict.fromkeys(full_ent_list[::-1]))  # unique ents ordered from bottom of context
-    return unique_ents
-
-
 def get_embeddings(
     chat: Chat, chat_texts: list[str], messages_names: list[str], external_message_map: dict
 ) -> dict[str, np.ndarray]:
