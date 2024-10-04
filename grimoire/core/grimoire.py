@@ -20,7 +20,7 @@ from grimoire.core.settings import settings
 from grimoire.core.tasks import summarize
 from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import Chat, Knowledge, Message, SpacyNamedEntity, User
-from grimoire.db.queries import get_knowledge_entities
+from grimoire.db.queries import get_knowledge_entities, semantic_search
 
 
 @dataclass(frozen=True, eq=True)
@@ -478,20 +478,23 @@ def process_request(
             include_names,
         )
 
-    unique_ents = get_ordered_entities(entity_list)
-    summaries = get_summaries(chat, unique_ents, db_session)
+    vector_embeddings = np.array([embedding_dict[mes] for mes in chat_texts])
+    ordered_knowledge = semantic_search(vector_embeddings, chat.id, db_session)
 
     knowledge_data = []
     if token_limit:
         current_tokens = 0
-        for index, summary in enumerate(summaries, 1):
-            current_tokens += summary[1]
+        for index, knowledge in enumerate(ordered_knowledge, 1):
+            current_tokens += knowledge.token_count
             if current_tokens < token_limit:
-                knowledge_data.append(KnowledgeData(text=summary[0], relevance=index))
+                knowledge_data.append(KnowledgeData(text=knowledge.summary, relevance=index))
             else:
                 break
     else:
-        knowledge_data = [KnowledgeData(text=summary[0], relevance=index) for index, summary in enumerate(summaries, 1)]
+        knowledge_data = [
+            KnowledgeData(text=knowledge.summary, relevance=index)
+            for index, knowledge in enumerate(ordered_knowledge, 1)
+        ]
 
     end_time = timeit.default_timer()
     general_logger.info(f"Request processing time: {end_time - start_time}s")
