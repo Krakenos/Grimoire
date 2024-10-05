@@ -1,9 +1,12 @@
+import numpy as np
 from rapidfuzz import fuzz, process, utils
+from sentence_transformers.util import cos_sim
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
-from grimoire.db.models import Knowledge
+from grimoire.db.models import Knowledge, Message
 
 
 def get_knowledge_entity(term: str, chat_id: int, session: Session) -> Knowledge | None:
@@ -39,3 +42,38 @@ def get_knowledge_entities(terms: list[str], chat_id: int, session: Session) -> 
                 ent_name, _, _ = best_match
             results.append(knowledge_dict[ent_name])
     return results
+
+
+@time_execution
+def semantic_search(message_embeddings: np.ndarray, chat_id: int, session: Session) -> list[Knowledge]:
+    message_amount = len(message_embeddings)
+    weights = np.linspace(0.5, 1, num=message_amount)
+    candidates = []
+
+    for embedding in message_embeddings:
+        query = (
+            select(Message)
+            .where(Message.chat_id == chat_id)
+            .order_by(Message.vector_embedding.cosine_distance(embedding))
+            .limit(3)
+        )
+        similar_messages = session.scalars(query)
+        for message in similar_messages:
+            candidates.extend(message.knowledge)
+
+    candidates = list(set(candidates))
+    candidates = [candidate for candidate in candidates if candidate.vector_embedding is not None]
+
+    if not candidates:
+        return []
+
+    # Cast as float64
+    candidates_embeddings = np.array([candidate.vector_embedding for candidate in candidates], dtype="float64")
+    message_embeddings = message_embeddings.astype("float64")
+
+    cosine_similarity = cos_sim(message_embeddings, candidates_embeddings)
+    weighted_similarity = cosine_similarity.T * weights
+    highest_similarities = np.max(weighted_similarity.numpy(), axis=1)
+    sorted_indices = np.argsort(highest_similarities)[::-1]
+    sorted_knowledge = [candidates[i] for i in sorted_indices]
+    return sorted_knowledge
