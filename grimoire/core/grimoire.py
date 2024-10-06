@@ -464,12 +464,12 @@ def process_request(
         for index, knowledge in enumerate(ordered_knowledge, 1):
             current_tokens += knowledge.token_count
             if current_tokens < token_limit:
-                knowledge_data.append(KnowledgeData(text=knowledge.summary, relevance=index))
+                knowledge_data.append(KnowledgeData(text=knowledge.summary_entry, relevance=index))
             else:
                 break
     else:
         knowledge_data = [
-            KnowledgeData(text=knowledge.summary, relevance=index)
+            KnowledgeData(text=knowledge.summary_entry, relevance=index)
             for index, knowledge in enumerate(ordered_knowledge, 1)
         ]
 
