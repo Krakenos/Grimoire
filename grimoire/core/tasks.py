@@ -11,7 +11,6 @@ from grimoire.common.llm_helpers import generate_text, token_count
 from grimoire.common.loggers import general_logger, summary_logger
 from grimoire.common.redis import redis_manager
 from grimoire.core.settings import ApiSettings, SecondaryDatabaseSettings, SummarizationSettings, settings
-from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import Knowledge, Message
 from grimoire.db.queries import get_knowledge_entity
 from grimoire.db.secondary_database import get_messages_from_external_db
@@ -163,6 +162,8 @@ def summarize(
     max_retries: int = 50,
     retry_interval: int = 1,
 ) -> None:
+    from grimoire.core.vector_embeddings import get_text_embeddings
+
     db_engine = settings.DB_ENGINE
     api_settings = settings.summarization_api
     summarization_settings = settings.summarization
