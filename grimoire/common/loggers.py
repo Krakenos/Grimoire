@@ -18,6 +18,9 @@ formatter = logging.Formatter("[%(asctime)s] %(levelname)s [%(module)s:%(funcNam
 general_logger = logging.getLogger("general")
 summary_logger = logging.getLogger("summary")
 
+general_logger.propagate = False
+summary_logger.propagate = False
+
 general_logger.setLevel(LOG_LEVEL)
 summary_logger.setLevel(PROMPT_LEVEL)
 
@@ -34,5 +37,8 @@ if settings.LOG_FILES:
     general_logger.addHandler(general_file_handler)
     summary_logger.addHandler(summary_file_handler)
 
-general_logger.addHandler(logging.StreamHandler())
-summary_logger.addHandler(logging.StreamHandler())
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+
+general_logger.addHandler(stream_handler)
+summary_logger.addHandler(stream_handler)
