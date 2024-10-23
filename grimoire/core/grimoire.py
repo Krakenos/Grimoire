@@ -50,7 +50,7 @@ def save_messages(
     embedding_dict: dict[str, np.ndarray],
     chat: Chat,
     session: Session,
-) -> tuple[list[int], Chat]:
+) -> tuple[list[int], Chat, list[Message]]:
     """
     Saves messages to and returns indices of new messages
     :param messages:
@@ -60,9 +60,10 @@ def save_messages(
     :param embedding_dict:
     :param chat:
     :param session:
-    :return: indices of new messages and updated chat object
+    :return: indices of new messages, updated chat object, new messages objects
     """
     new_messages_indices = []
+    new_messages = []
     if settings.secondary_database.enabled:
         db_external_ids = [message.external_id for message in chat.messages]
         message_number = 0
@@ -84,22 +85,21 @@ def save_messages(
                 SpacyNamedEntity(entity_name=named_ent.name, entity_label=named_ent.label)
                 for named_ent in named_entities
             ]
-            chat.messages.append(
-                Message(
-                    external_id=messages_external_ids[index],
-                    sender_name=sender_names[index],
-                    message_index=message_number,
-                    vector_embedding=embedding,
-                    spacy_named_entities=db_named_entities,
-                )
+            new_message = Message(
+                external_id=messages_external_ids[index],
+                sender_name=sender_names[index],
+                message_index=message_number,
+                vector_embedding=embedding,
+                spacy_named_entities=db_named_entities,
             )
+            chat.messages.append(new_message)
+            new_messages.append(new_message)
             message_number += 1
 
         session.add(chat)
         session.commit()
         session.refresh(chat)
-
-        return new_messages_indices, chat
+        return new_messages_indices, chat, new_messages
 
     else:
         db_messages = [message.message for message in chat.messages]
@@ -122,22 +122,22 @@ def save_messages(
                 SpacyNamedEntity(entity_name=named_ent.name, entity_label=named_ent.label)
                 for named_ent in named_entities
             ]
-            chat.messages.append(
-                Message(
-                    message=message_to_add,
-                    sender_name=sender_names[index],
-                    message_index=message_number,
-                    vector_embedding=embedding,
-                    spacy_named_entities=db_named_entities,
-                )
+            new_message = Message(
+                message=message_to_add,
+                sender_name=sender_names[index],
+                message_index=message_number,
+                vector_embedding=embedding,
+                spacy_named_entities=db_named_entities,
             )
+            chat.messages.append(new_message)
+            new_messages.append(new_message)
             message_number += 1
 
         session.add(chat)
         session.commit()
         session.refresh(chat)
 
-        return new_messages_indices, chat
+        return new_messages_indices, chat, new_messages
 
 
 def get_cached_entities(texts: list[str]) -> list[list[NamedEntity] | None]:
@@ -316,18 +316,18 @@ def filter_similar_entities(entity_names: list[str]) -> dict[str, str]:
 def save_named_entities(
     chat: Chat,
     entity_list: list[list[NamedEntity]],
-    entity_dict: dict[str, list[NamedEntity]],
-    external_id_map: dict[str, str],
+    similarity_dict: dict[str, str],
     session: Session,
-) -> None:
+) -> tuple[dict[str, Knowledge], dict[str, str]]:
     unique_ents: list[NamedEntity] = list(set(chain(*entity_list)))
     unique_ent_names = list({ent.name for ent in unique_ents})
     ent_labels = {ent.name: ent.label for ent in unique_ents}
-    similarity_dict = filter_similar_entities(unique_ent_names)
-    filtered_ent_names = list(set(similarity_dict.values()))
+    filtered_ent_names = list({similarity_dict[name] for name in unique_ent_names})
+
     knowledge_entries = get_knowledge_entities(filtered_ent_names, chat.id, session)
     found_knowledge_entries = [entry for entry in knowledge_entries if entry is not None]
     db_entry_names = [entry.entity if entry is not None else None for entry in knowledge_entries]
+
     new_knowledge = []
     db_ent_map = {}
 
@@ -351,22 +351,41 @@ def save_named_entities(
     knowledge_dict = {knowledge.entity: knowledge for knowledge in [*found_knowledge_entries, *new_knowledge]}
 
     # Link new messages to knowledge and update counter
-    for db_message in chat.messages:
-        if settings.secondary_database.enabled:
-            message_identifier = external_id_map[db_message.external_id]
-        else:
-            message_identifier = db_message.message
+    # for db_message in chat.messages:
+    #     if settings.secondary_database.enabled:
+    #         message_identifier = external_id_map[db_message.external_id]
+    #     else:
+    #         message_identifier = db_message.message
+    #
+    #     message_ents = entity_dict[message_identifier]
+    #     ent_names: list[str] = list({ent.name for ent in message_ents})
+    #
+    #     for ent in ent_names:
+    #         coresponding_entity = similarity_dict[ent]
+    #         db_name = db_ent_map[coresponding_entity]
+    #         if db_message not in knowledge_dict[db_name].messages:
+    #             knowledge_dict[db_name].messages.append(db_message)
+    #             knowledge_dict[db_name].update_count += 1
+    #
+    # session.add_all(knowledge_dict.values())
+    # session.commit()
+    return knowledge_dict, db_ent_map
 
-        message_ents = entity_dict[message_identifier]
-        ent_names: list[str] = list({ent.name for ent in message_ents})
 
-        for ent in ent_names:
-            coresponding_entity = similarity_dict[ent]
-            db_name = db_ent_map[coresponding_entity]
-            if db_message not in knowledge_dict[db_name].messages:
-                knowledge_dict[db_name].messages.append(db_message)
+def link_knowledge(
+    messages_to_update: list[Message],
+    knowledge_dict: dict[str, Knowledge],
+    db_entity_map: dict[str, str],
+    similarity_dict: dict[str, str],
+    session: Session,
+) -> None:
+    for message in messages_to_update:
+        for entity in message.spacy_named_entities:
+            corresponding_entity = similarity_dict[entity.entity_name]
+            db_name = db_entity_map[corresponding_entity]
+            if message not in knowledge_dict[db_name].messages:
+                knowledge_dict[db_name].messages.append(message)
                 knowledge_dict[db_name].update_count += 1
-
     session.add_all(knowledge_dict.values())
     session.commit()
 
@@ -406,7 +425,7 @@ def process_request(
     include_names: bool = False,
     external_user_id: str | None = None,
     token_limit: int | None = None,
-):
+) -> list[KnowledgeData]:
     start_time = timeit.default_timer()
     excluded_messages = 4
 
@@ -428,14 +447,21 @@ def process_request(
     embedding_time_end = timeit.default_timer()
     general_logger.debug(f"Getting vector embeddings {embedding_time_end - embedding_time} seconds")
 
+    unique_ents: list[NamedEntity] = list(set(chain(*entity_list)))
+    unique_ent_names = list({ent.name for ent in unique_ents})
+    entity_similarity_dict = filter_similar_entities(unique_ent_names)
+
     last_messages = chat_texts[:-excluded_messages]  # exclude last few messages from saving
     last_names = messages_names[:-excluded_messages]
     last_external_ids = messages_external_ids[:-excluded_messages]
     last_entities = entity_list[:-excluded_messages]
-    new_message_indices, chat = save_messages(
+
+    new_message_indices, chat, new_messages = save_messages(
         last_messages, last_external_ids, last_names, entity_dict, embedding_dict, chat, db_session
     )
-    save_named_entities(chat, last_entities, entity_dict, external_message_map, db_session)
+
+    knowledge_dict, entity_db_map = save_named_entities(chat, last_entities, entity_similarity_dict, db_session)
+    link_knowledge(new_messages, knowledge_dict, entity_db_map, entity_similarity_dict, db_session)
 
     messages_to_summarize = [last_entities[index] for index in new_message_indices]
 
@@ -446,8 +472,7 @@ def process_request(
             ent_names.add(entity.name)
             general_logger.debug(f"{entity.name}, {entity.label}, {spacy.explain(entity.label)}")
 
-    ent_map = filter_similar_entities(list(ent_names))
-    to_summarize = list(set(ent_map.values()))
+    to_summarize = list({entity_similarity_dict[ent_name] for ent_name in ent_names})
     for ent in to_summarize:
         summarize.delay(
             ent,
