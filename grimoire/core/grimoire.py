@@ -321,7 +321,8 @@ def save_named_entities(
 ) -> tuple[dict[str, Knowledge], dict[str, str]]:
     unique_ents: list[NamedEntity] = list(set(chain(*entity_list)))
     unique_ent_names = list({ent.name for ent in unique_ents})
-    ent_labels = {ent.name: ent.label for ent in unique_ents}
+
+    ent_labels = {similarity_dict[ent.name]: ent.label for ent in unique_ents}
     filtered_ent_names = list({similarity_dict[name] for name in unique_ent_names})
 
     knowledge_entries = get_knowledge_entities(filtered_ent_names, chat.id, session)
@@ -350,25 +351,6 @@ def save_named_entities(
 
     knowledge_dict = {knowledge.entity: knowledge for knowledge in [*found_knowledge_entries, *new_knowledge]}
 
-    # Link new messages to knowledge and update counter
-    # for db_message in chat.messages:
-    #     if settings.secondary_database.enabled:
-    #         message_identifier = external_id_map[db_message.external_id]
-    #     else:
-    #         message_identifier = db_message.message
-    #
-    #     message_ents = entity_dict[message_identifier]
-    #     ent_names: list[str] = list({ent.name for ent in message_ents})
-    #
-    #     for ent in ent_names:
-    #         coresponding_entity = similarity_dict[ent]
-    #         db_name = db_ent_map[coresponding_entity]
-    #         if db_message not in knowledge_dict[db_name].messages:
-    #             knowledge_dict[db_name].messages.append(db_message)
-    #             knowledge_dict[db_name].update_count += 1
-    #
-    # session.add_all(knowledge_dict.values())
-    # session.commit()
     return knowledge_dict, db_ent_map
 
 
