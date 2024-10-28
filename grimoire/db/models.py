@@ -97,3 +97,12 @@ class Character(Base):
     name = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=False)
     description = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=True)
     character_note = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=True)
+    trigger_texts: Mapped[list["CharacterTriggerText"]] = relationship()
+
+
+class CharacterTriggerText(Base):
+    __tablename__ = "character_trigger_text"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    character_id: Mapped[int] = mapped_column(ForeignKey("character.id"))
+    text = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=False)
