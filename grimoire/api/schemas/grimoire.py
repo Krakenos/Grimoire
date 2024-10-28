@@ -61,12 +61,19 @@ class ChatDataMessage(BaseModel):
     text: str
 
 
+class ChatDataCharacter(BaseModel):
+    name: str
+    description: str | None = None
+    character_note: str | None = None
+
+
 class ChatData(BaseModel):
     external_chat_id: str
     external_user_id: str | None = None
     include_names: bool = False
     max_tokens: int | None = None
     messages: list[ChatDataMessage]
+    characters: list[ChatDataCharacter] | None = None
 
 
 class KnowledgeData(BaseModel):
