@@ -88,3 +88,12 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     external_id: Mapped[str]
     chats: Mapped[list["Chat"]] = relationship()
+
+
+class Character(Base):
+    __tablename__ = "character"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=False)
+    description = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=True)
+    character_note = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=True)
