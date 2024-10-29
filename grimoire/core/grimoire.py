@@ -12,15 +12,15 @@ from rapidfuzz import utils as fuzz_utils
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, with_loader_criteria
 
-from grimoire.api.schemas.grimoire import KnowledgeData
+from grimoire.api.schemas.grimoire import ChatDataCharacter, KnowledgeData
 from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 from grimoire.core.tasks import summarize
 from grimoire.core.vector_embeddings import get_text_embeddings
-from grimoire.db.models import Chat, Knowledge, Message, SpacyNamedEntity, User
-from grimoire.db.queries import get_knowledge_entities, semantic_search
+from grimoire.db.models import Character, Chat, Knowledge, Message, SpacyNamedEntity, User
+from grimoire.db.queries import get_characters, get_knowledge_entities, semantic_search
 
 
 @dataclass(frozen=True, eq=True)
@@ -398,12 +398,36 @@ def get_embeddings(
     return embedding_dict
 
 
+def update_characters(characters: list[ChatDataCharacter], chat_id: int, session: Session) -> None:
+    char_names = [character.name for character in characters]
+    db_characters = get_characters(char_names, chat_id, session)
+
+    to_update = []
+    for request_char, db_char in zip(characters, db_characters, strict=True):
+        if db_char is None:
+            new_char = Character(
+                chat_id=chat_id,
+                name=request_char.name,
+                description=request_char.description,
+                character_note=request_char.character_note,
+            )
+            to_update.append(new_char)
+        else:
+            new_attributes = request_char.model_dump(exclude_unset=True, exclude_none=False)
+            for key, value in new_attributes.items():
+                setattr(db_char, key, value)
+
+    session.add_all(to_update)
+    session.commit()
+
+
 def process_request(
     external_chat_id: str,
     chat_texts: list[str],
     messages_external_ids: list[str],
     messages_names: list[str],
     db_session,
+    characters: list[ChatDataCharacter] | None = None,
     include_names: bool = False,
     external_user_id: str | None = None,
     token_limit: int | None = None,
@@ -418,6 +442,9 @@ def process_request(
 
     if settings.secondary_database.enabled:
         external_message_map = dict(zip(messages_external_ids, chat_texts, strict=True))
+
+    if characters:
+        pass
 
     doc_time = timeit.default_timer()
     entity_list, entity_dict = get_named_entities(chat_texts, messages_external_ids, messages_names, chat)
