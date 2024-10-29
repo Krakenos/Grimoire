@@ -19,7 +19,7 @@ from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 from grimoire.core.tasks import summarize
 from grimoire.core.vector_embeddings import get_text_embeddings
-from grimoire.db.models import Character, Chat, Knowledge, Message, SpacyNamedEntity, User
+from grimoire.db.models import Character, CharacterTriggerText, Chat, Knowledge, Message, SpacyNamedEntity, User
 from grimoire.db.queries import get_characters, get_knowledge_entities, semantic_search
 
 
@@ -398,12 +398,22 @@ def get_embeddings(
     return embedding_dict
 
 
-def update_characters(characters: list[ChatDataCharacter], chat_id: int, session: Session) -> None:
+def update_characters(
+    characters: list[ChatDataCharacter], chat_id: int, similarity_dict: dict[str, str], session: Session
+) -> None:
     char_names = [character.name for character in characters]
     db_characters = get_characters(char_names, chat_id, session)
 
+    mapped_entities = [similarity_dict[name] for name in char_names]
+    trigger_strings = []
+    for entity_name in mapped_entities:
+        entity_trigger_strings = [
+            trigger_string for trigger_string, ent in similarity_dict.items() if ent == entity_name
+        ]
+        trigger_strings.append(entity_trigger_strings)
+
     to_update = []
-    for request_char, db_char in zip(characters, db_characters, strict=True):
+    for request_char, db_char, triggers in zip(characters, db_characters, trigger_strings, strict=True):
         if db_char is None:
             new_char = Character(
                 chat_id=chat_id,
@@ -411,6 +421,8 @@ def update_characters(characters: list[ChatDataCharacter], chat_id: int, session
                 description=request_char.description,
                 character_note=request_char.character_note,
             )
+            for trigger in triggers:
+                new_char.trigger_texts.append(CharacterTriggerText(text=trigger))
             to_update.append(new_char)
         else:
             new_attributes = request_char.model_dump(exclude_unset=True, exclude_none=False)
