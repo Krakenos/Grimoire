@@ -207,9 +207,11 @@ def summarize(
             tokenizer,
             include_names,
         )
+
         if prompt is None:  # Edge case of having 1 message for summary, only may happen at start of chat
             general_logger.info("Skipping entry to summarize, only 1 message for term exists")
             return None
+
         generation_params = {
             "max_length": response_len,
             "max_tokens": response_len,

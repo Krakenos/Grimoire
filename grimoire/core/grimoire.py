@@ -439,6 +439,41 @@ def update_characters(
     session.commit()
 
 
+def get_character_from_names(
+    messages_names: list[str], chat_id: int, similarity_dict: dict[str, str], session: Session
+):
+    char_names = list(set(messages_names))
+    db_characters = get_characters(char_names, chat_id, session)
+
+    mapped_entities = [similarity_dict[name] for name in char_names]
+    trigger_strings = []
+    for entity_name in mapped_entities:
+        entity_trigger_strings = [
+            trigger_string for trigger_string, ent in similarity_dict.items() if ent == entity_name
+        ]
+        trigger_strings.append(entity_trigger_strings)
+
+    to_update = []
+    for char_name, db_char, triggers in zip(char_names, db_characters, trigger_strings, strict=True):
+        if db_char is None:
+            new_char = Character(
+                chat_id=chat_id,
+                name=char_name,
+            )
+
+            for trigger in triggers:
+                new_char.trigger_texts.append(CharacterTriggerText(text=trigger))
+            to_update.append(new_char)
+        else:
+            char_triggers_texts = [trigger_text.text for trigger_text in db_char.trigger_texts]
+            for trigger in triggers:
+                if trigger not in char_triggers_texts:
+                    db_char.trigger_texts.append(CharacterTriggerText(text=trigger))
+
+    session.add_all(to_update)
+    session.commit()
+
+
 def process_request(
     external_chat_id: str,
     chat_texts: list[str],
@@ -484,10 +519,13 @@ def process_request(
         last_messages, last_external_ids, last_names, entity_dict, embedding_dict, chat, db_session
     )
 
-    knowledge_dict, entity_db_map = save_named_entities(chat, last_entities, entity_similarity_dict, db_session)
-    link_knowledge(new_messages, knowledge_dict, entity_db_map, entity_similarity_dict, db_session)
     if characters:
         update_characters(characters, chat.id, entity_similarity_dict, db_session)
+    else:
+        get_character_from_names(messages_names, chat.id, entity_similarity_dict, db_session)
+
+    knowledge_dict, entity_db_map = save_named_entities(chat, last_entities, entity_similarity_dict, db_session)
+    link_knowledge(new_messages, knowledge_dict, entity_db_map, entity_similarity_dict, db_session)
 
     messages_to_summarize = [last_entities[index] for index in new_message_indices]
 
