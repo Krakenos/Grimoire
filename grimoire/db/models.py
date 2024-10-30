@@ -81,6 +81,7 @@ class Chat(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
     messages: Mapped[list["Message"]] = relationship()
     knowledge: Mapped[list["Knowledge"]] = relationship()
+    characters: Mapped[list["Character"]] = relationship()
 
 
 class User(Base):
