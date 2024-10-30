@@ -82,7 +82,7 @@ def make_summary_prompt(
 
     if secondary_database:
         query = (
-            select(Message.external_id, Message.sender_name)
+            select(Message.external_id, Message.character.name)
             .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
             .order_by(Message.message_index)
         )
@@ -107,7 +107,7 @@ def make_summary_prompt(
 
     else:
         query = (
-            select(Message.message, Message.sender_name)
+            select(Message.message, Message.character.name)
             .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
             .order_by(Message.message_index)
         )
