@@ -461,9 +461,6 @@ def process_request(
     if settings.secondary_database.enabled:
         external_message_map = dict(zip(messages_external_ids, chat_texts, strict=True))
 
-    if characters:
-        pass
-
     doc_time = timeit.default_timer()
     entity_list, entity_dict = get_named_entities(chat_texts, messages_external_ids, messages_names, chat)
     doc_end_time = timeit.default_timer()
@@ -489,6 +486,8 @@ def process_request(
 
     knowledge_dict, entity_db_map = save_named_entities(chat, last_entities, entity_similarity_dict, db_session)
     link_knowledge(new_messages, knowledge_dict, entity_db_map, entity_similarity_dict, db_session)
+    if characters:
+        update_characters(characters, chat.id, entity_similarity_dict, db_session)
 
     messages_to_summarize = [last_entities[index] for index in new_message_indices]
 
