@@ -46,6 +46,7 @@ def save_messages(
     messages: list[str],
     messages_external_ids: list[str],
     sender_names: list[str],
+    characters_dict: dict[str, Character],
     entity_dict: dict[str, list[NamedEntity]],
     embedding_dict: dict[str, np.ndarray],
     chat: Chat,
@@ -56,6 +57,7 @@ def save_messages(
     :param messages:
     :param messages_external_ids:
     :param sender_names:
+    :param characters_dict:
     :param entity_dict:
     :param embedding_dict:
     :param chat:
@@ -64,6 +66,7 @@ def save_messages(
     """
     new_messages_indices = []
     new_messages = []
+    chars = [characters_dict[name] for name in sender_names]
     if settings.secondary_database.enabled:
         db_external_ids = [message.external_id for message in chat.messages]
         message_number = 0
@@ -87,7 +90,7 @@ def save_messages(
             ]
             new_message = Message(
                 external_id=messages_external_ids[index],
-                sender_name=sender_names[index],
+                character_id=chars[index].id,
                 message_index=message_number,
                 vector_embedding=embedding,
                 spacy_named_entities=db_named_entities,
@@ -124,7 +127,7 @@ def save_messages(
             ]
             new_message = Message(
                 message=message_to_add,
-                sender_name=sender_names[index],
+                character_id=chars[index].id,
                 message_index=message_number,
                 vector_embedding=embedding,
                 spacy_named_entities=db_named_entities,
@@ -523,14 +526,14 @@ def process_request(
     last_external_ids = messages_external_ids[:-excluded_messages]
     last_entities = entity_list[:-excluded_messages]
 
-    new_message_indices, chat, new_messages = save_messages(
-        last_messages, last_external_ids, last_names, entity_dict, embedding_dict, chat, db_session
-    )
-
     if characters:
-        update_characters(characters, chat.id, entity_similarity_dict, db_session)
+        characters_dict = update_characters(characters, chat.id, entity_similarity_dict, db_session)
     else:
-        get_character_from_names(messages_names, chat.id, entity_similarity_dict, db_session)
+        characters_dict = get_character_from_names(messages_names, chat.id, entity_similarity_dict, db_session)
+
+    new_message_indices, chat, new_messages = save_messages(
+        last_messages, last_external_ids, last_names, characters_dict, entity_dict, embedding_dict, chat, db_session
+    )
 
     knowledge_dict, entity_db_map = save_named_entities(chat, last_entities, entity_similarity_dict, db_session)
     link_knowledge(new_messages, knowledge_dict, entity_db_map, entity_similarity_dict, db_session)
