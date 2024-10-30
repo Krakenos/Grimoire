@@ -421,6 +421,7 @@ def update_characters(
                 description=request_char.description,
                 character_note=request_char.character_note,
             )
+
             for trigger in triggers:
                 new_char.trigger_texts.append(CharacterTriggerText(text=trigger))
             to_update.append(new_char)
@@ -428,6 +429,11 @@ def update_characters(
             new_attributes = request_char.model_dump(exclude_unset=True, exclude_none=False)
             for key, value in new_attributes.items():
                 setattr(db_char, key, value)
+
+            char_triggers_texts = [trigger_text.text for trigger_text in db_char.trigger_texts]
+            for trigger in triggers:
+                if trigger not in char_triggers_texts:
+                    db_char.trigger_texts.append(CharacterTriggerText(text=trigger))
 
     session.add_all(to_update)
     session.commit()
