@@ -11,7 +11,7 @@ from grimoire.common.llm_helpers import generate_text, token_count
 from grimoire.common.loggers import general_logger, summary_logger
 from grimoire.common.redis import redis_manager
 from grimoire.core.settings import ApiSettings, SecondaryDatabaseSettings, SummarizationSettings, settings
-from grimoire.db.models import Knowledge, Message
+from grimoire.db.models import Character, Knowledge, Message
 from grimoire.db.queries import get_knowledge_entity
 from grimoire.db.secondary_database import get_messages_from_external_db
 
@@ -33,6 +33,29 @@ celery_app.conf.task_routes = {"grimoire.core.tasks.summarize": {"queue": "summa
 @celery_app.on_after_configure.connect
 def setup_periodic_tasks(sender, **kwargs):
     sender.add_periodic_task(300.0, queue_logging.s(), name="log queue size every 5 minutes")
+
+
+def get_additional_info(knowledge_entry: Knowledge, session: Session) -> str:
+    additional_info = ""
+    term = knowledge_entry.entity
+    chat_id = knowledge_entry.chat_id
+
+    query = select(Character).where(Character.chat_id == chat_id)
+    chat_characters = session.scalars(query).all()
+
+    detected_char = None
+    for chat_character in chat_characters:
+        triggers = [trigger.text for trigger in chat_character.trigger_texts]
+        if term in triggers:
+            detected_char = chat_character
+            break
+
+    if detected_char:
+        description = f"{detected_char.description}\n" if detected_char.description else ""
+        char_note = f"{detected_char.character_note}\n" if detected_char.character_note else ""
+        additional_info = f"{description}{char_note}"
+
+    return additional_info
 
 
 def make_summary_prompt(
@@ -129,12 +152,17 @@ def make_summary_prompt(
 
     prompt = ""
     reversed_messages = []
+    additional_info = get_additional_info(knowledge_entry, session)
 
     for message in messages[::-1]:
         reversed_messages.append(f"{message}\n")
         messages_text = "".join(reversed_messages[::-1])
         new_prompt = summarization_settings.prompt.format(
-            term=knowledge_entry.entity, previous_summary=summary, messages=messages_text, **instruct_fields
+            term=knowledge_entry.entity,
+            previous_summary=summary,
+            additional_info=additional_info,
+            messages=messages_text,
+            **instruct_fields,
         )
         prompt_without_summary = new_prompt
         if summary:
