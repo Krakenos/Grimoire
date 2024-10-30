@@ -400,7 +400,7 @@ def get_embeddings(
 
 def update_characters(
     characters: list[ChatDataCharacter], chat_id: int, similarity_dict: dict[str, str], session: Session
-) -> None:
+) -> dict[str, Character]:
     char_names = [character.name for character in characters]
     db_characters = get_characters(char_names, chat_id, session)
 
@@ -413,6 +413,7 @@ def update_characters(
         trigger_strings.append(entity_trigger_strings)
 
     to_update = []
+    character_dict = {}
     for request_char, db_char, triggers in zip(characters, db_characters, trigger_strings, strict=True):
         if db_char is None:
             new_char = Character(
@@ -425,6 +426,7 @@ def update_characters(
             for trigger in triggers:
                 new_char.trigger_texts.append(CharacterTriggerText(text=trigger))
             to_update.append(new_char)
+            character_dict[request_char.name] = new_char
         else:
             new_attributes = request_char.model_dump(exclude_unset=True, exclude_none=False)
             for key, value in new_attributes.items():
@@ -434,14 +436,16 @@ def update_characters(
             for trigger in triggers:
                 if trigger not in char_triggers_texts:
                     db_char.trigger_texts.append(CharacterTriggerText(text=trigger))
+            character_dict[request_char.name] = db_char
 
     session.add_all(to_update)
     session.commit()
+    return character_dict
 
 
 def get_character_from_names(
     messages_names: list[str], chat_id: int, similarity_dict: dict[str, str], session: Session
-):
+) -> dict[str, Character]:
     char_names = list(set(messages_names))
     db_characters = get_characters(char_names, chat_id, session)
 
@@ -454,6 +458,7 @@ def get_character_from_names(
         trigger_strings.append(entity_trigger_strings)
 
     to_update = []
+    character_dict = {}
     for char_name, db_char, triggers in zip(char_names, db_characters, trigger_strings, strict=True):
         if db_char is None:
             new_char = Character(
@@ -464,14 +469,17 @@ def get_character_from_names(
             for trigger in triggers:
                 new_char.trigger_texts.append(CharacterTriggerText(text=trigger))
             to_update.append(new_char)
+            character_dict[char_name] = new_char
         else:
             char_triggers_texts = [trigger_text.text for trigger_text in db_char.trigger_texts]
             for trigger in triggers:
                 if trigger not in char_triggers_texts:
                     db_char.trigger_texts.append(CharacterTriggerText(text=trigger))
+            character_dict[char_name] = db_char
 
     session.add_all(to_update)
     session.commit()
+    return character_dict
 
 
 def process_request(
