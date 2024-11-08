@@ -119,6 +119,14 @@ def delete_chat(db_session: Session, chat: Chat) -> None:
         db_session.delete(message)
     db_session.commit()
     db_session.refresh(chat)
+
+    for character in chat.characters:
+        for trigger_text in character.trigger_texts:
+            db_session.delete(trigger_text)
+        db_session.delete(character)
+    db_session.commit()
+    db_session.refresh(chat)
+
     stmt = delete(Knowledge).where(Knowledge.chat_id == chat.id)
     db_session.execute(stmt)
     db_session.refresh(chat)

@@ -12,15 +12,15 @@ from rapidfuzz import utils as fuzz_utils
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, with_loader_criteria
 
-from grimoire.api.schemas.grimoire import KnowledgeData
+from grimoire.api.schemas.grimoire import ChatDataCharacter, KnowledgeData
 from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 from grimoire.core.tasks import summarize
 from grimoire.core.vector_embeddings import get_text_embeddings
-from grimoire.db.models import Chat, Knowledge, Message, SpacyNamedEntity, User
-from grimoire.db.queries import get_knowledge_entities, semantic_search
+from grimoire.db.models import Character, CharacterTriggerText, Chat, Knowledge, Message, SpacyNamedEntity, User
+from grimoire.db.queries import get_characters, get_knowledge_entities, semantic_search
 
 
 @dataclass(frozen=True, eq=True)
@@ -46,6 +46,7 @@ def save_messages(
     messages: list[str],
     messages_external_ids: list[str],
     sender_names: list[str],
+    characters_dict: dict[str, Character],
     entity_dict: dict[str, list[NamedEntity]],
     embedding_dict: dict[str, np.ndarray],
     chat: Chat,
@@ -56,6 +57,7 @@ def save_messages(
     :param messages:
     :param messages_external_ids:
     :param sender_names:
+    :param characters_dict:
     :param entity_dict:
     :param embedding_dict:
     :param chat:
@@ -64,6 +66,7 @@ def save_messages(
     """
     new_messages_indices = []
     new_messages = []
+    chars = [characters_dict[name] for name in sender_names]
     if settings.secondary_database.enabled:
         db_external_ids = [message.external_id for message in chat.messages]
         message_number = 0
@@ -87,7 +90,7 @@ def save_messages(
             ]
             new_message = Message(
                 external_id=messages_external_ids[index],
-                sender_name=sender_names[index],
+                character_id=chars[index].id,
                 message_index=message_number,
                 vector_embedding=embedding,
                 spacy_named_entities=db_named_entities,
@@ -124,7 +127,7 @@ def save_messages(
             ]
             new_message = Message(
                 message=message_to_add,
-                sender_name=sender_names[index],
+                character_id=chars[index].id,
                 message_index=message_number,
                 vector_embedding=embedding,
                 spacy_named_entities=db_named_entities,
@@ -398,12 +401,97 @@ def get_embeddings(
     return embedding_dict
 
 
+def update_characters(
+    characters: list[ChatDataCharacter], chat_id: int, similarity_dict: dict[str, str], session: Session
+) -> dict[str, Character]:
+    char_names = [character.name for character in characters]
+    db_characters = get_characters(char_names, chat_id, session)
+
+    mapped_entities = [similarity_dict[name] for name in char_names]
+    trigger_strings = []
+    for entity_name in mapped_entities:
+        entity_trigger_strings = [
+            trigger_string for trigger_string, ent in similarity_dict.items() if ent == entity_name
+        ]
+        trigger_strings.append(entity_trigger_strings)
+
+    to_update = []
+    character_dict = {}
+    for request_char, db_char, triggers in zip(characters, db_characters, trigger_strings, strict=True):
+        if db_char is None:
+            new_char = Character(
+                chat_id=chat_id,
+                name=request_char.name,
+                description=request_char.description,
+                character_note=request_char.character_note,
+            )
+
+            for trigger in triggers:
+                new_char.trigger_texts.append(CharacterTriggerText(text=trigger))
+            to_update.append(new_char)
+            character_dict[request_char.name] = new_char
+        else:
+            new_attributes = request_char.model_dump(exclude_unset=True, exclude_none=False)
+            for key, value in new_attributes.items():
+                setattr(db_char, key, value)
+
+            char_triggers_texts = [trigger_text.text for trigger_text in db_char.trigger_texts]
+            for trigger in triggers:
+                if trigger not in char_triggers_texts:
+                    db_char.trigger_texts.append(CharacterTriggerText(text=trigger))
+            character_dict[request_char.name] = db_char
+
+    session.add_all(to_update)
+    session.commit()
+    return character_dict
+
+
+def get_character_from_names(
+    messages_names: list[str], chat_id: int, similarity_dict: dict[str, str], session: Session
+) -> dict[str, Character]:
+    char_names = list(set(messages_names))
+    db_characters = get_characters(char_names, chat_id, session)
+
+    mapped_entities = [similarity_dict[name] for name in char_names]
+    trigger_strings = []
+    for entity_name in mapped_entities:
+        entity_trigger_strings = [
+            trigger_string for trigger_string, ent in similarity_dict.items() if ent == entity_name
+        ]
+        trigger_strings.append(entity_trigger_strings)
+
+    to_update = []
+    character_dict = {}
+    for char_name, db_char, triggers in zip(char_names, db_characters, trigger_strings, strict=True):
+        if db_char is None:
+            new_char = Character(
+                chat_id=chat_id,
+                name=char_name,
+            )
+
+            for trigger in triggers:
+                new_char.trigger_texts.append(CharacterTriggerText(text=trigger))
+            to_update.append(new_char)
+            character_dict[char_name] = new_char
+        else:
+            char_triggers_texts = [trigger_text.text for trigger_text in db_char.trigger_texts]
+            for trigger in triggers:
+                if trigger not in char_triggers_texts:
+                    db_char.trigger_texts.append(CharacterTriggerText(text=trigger))
+            character_dict[char_name] = db_char
+
+    session.add_all(to_update)
+    session.commit()
+    return character_dict
+
+
 def process_request(
     external_chat_id: str,
     chat_texts: list[str],
     messages_external_ids: list[str],
     messages_names: list[str],
     db_session,
+    characters: list[ChatDataCharacter] | None = None,
     include_names: bool = False,
     external_user_id: str | None = None,
     token_limit: int | None = None,
@@ -438,8 +526,13 @@ def process_request(
     last_external_ids = messages_external_ids[:-excluded_messages]
     last_entities = entity_list[:-excluded_messages]
 
+    if characters:
+        characters_dict = update_characters(characters, chat.id, entity_similarity_dict, db_session)
+    else:
+        characters_dict = get_character_from_names(messages_names, chat.id, entity_similarity_dict, db_session)
+
     new_message_indices, chat, new_messages = save_messages(
-        last_messages, last_external_ids, last_names, entity_dict, embedding_dict, chat, db_session
+        last_messages, last_external_ids, last_names, characters_dict, entity_dict, embedding_dict, chat, db_session
     )
 
     knowledge_dict, entity_db_map = save_named_entities(chat, last_entities, entity_similarity_dict, db_session)

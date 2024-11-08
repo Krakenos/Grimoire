@@ -11,7 +11,7 @@ from grimoire.common.llm_helpers import generate_text, token_count
 from grimoire.common.loggers import general_logger, summary_logger
 from grimoire.common.redis import redis_manager
 from grimoire.core.settings import ApiSettings, SecondaryDatabaseSettings, SummarizationSettings, settings
-from grimoire.db.models import Knowledge, Message
+from grimoire.db.models import Character, Knowledge, Message
 from grimoire.db.queries import get_knowledge_entity
 from grimoire.db.secondary_database import get_messages_from_external_db
 
@@ -33,6 +33,29 @@ celery_app.conf.task_routes = {"grimoire.core.tasks.summarize": {"queue": "summa
 @celery_app.on_after_configure.connect
 def setup_periodic_tasks(sender, **kwargs):
     sender.add_periodic_task(300.0, queue_logging.s(), name="log queue size every 5 minutes")
+
+
+def get_additional_info(knowledge_entry: Knowledge, session: Session) -> str:
+    additional_info = ""
+    term = knowledge_entry.entity
+    chat_id = knowledge_entry.chat_id
+
+    query = select(Character).where(Character.chat_id == chat_id)
+    chat_characters = session.scalars(query).all()
+
+    detected_char = None
+    for chat_character in chat_characters:
+        triggers = [trigger.text for trigger in chat_character.trigger_texts]
+        if term in triggers:
+            detected_char = chat_character
+            break
+
+    if detected_char:
+        description = f"{detected_char.description}\n" if detected_char.description else ""
+        char_note = f"{detected_char.character_note}\n" if detected_char.character_note else ""
+        additional_info = f"{description}{char_note}"
+
+    return additional_info
 
 
 def make_summary_prompt(
@@ -82,13 +105,13 @@ def make_summary_prompt(
 
     if secondary_database:
         query = (
-            select(Message.external_id, Message.sender_name)
+            select(Message)
             .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
             .order_by(Message.message_index)
         )
-        query_results = session.execute(query).all()
-        external_ids = [row[0] for row in query_results]
-        sender_names = [row[1] for row in query_results]
+        query_results = session.scalars(query).all()
+        external_ids = [mes.external_id for mes in query_results]
+        sender_names = [mes.character.name for mes in query_results]
         db_messages = get_messages_from_external_db(
             external_ids,
             secondary_database_url,
@@ -107,13 +130,13 @@ def make_summary_prompt(
 
     else:
         query = (
-            select(Message.message, Message.sender_name)
+            select(Message)
             .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
             .order_by(Message.message_index)
         )
-        query_results = session.execute(query).all()
-        db_messages = [row[0] for row in query_results]
-        sender_names = [row[1] for row in query_results]
+        query_results = session.scalars(query).all()
+        db_messages = [mes.external_id for mes in query_results]
+        sender_names = [mes.character.name for mes in query_results]
         if include_names:
             messages = []
             for name, message in zip(sender_names, db_messages, strict=True):
@@ -129,12 +152,17 @@ def make_summary_prompt(
 
     prompt = ""
     reversed_messages = []
+    additional_info = get_additional_info(knowledge_entry, session)
 
     for message in messages[::-1]:
         reversed_messages.append(f"{message}\n")
         messages_text = "".join(reversed_messages[::-1])
         new_prompt = summarization_settings.prompt.format(
-            term=knowledge_entry.entity, previous_summary=summary, messages=messages_text, **instruct_fields
+            term=knowledge_entry.entity,
+            previous_summary=summary,
+            additional_info=additional_info,
+            messages=messages_text,
+            **instruct_fields,
         )
         prompt_without_summary = new_prompt
         if summary:
@@ -207,9 +235,11 @@ def summarize(
             tokenizer,
             include_names,
         )
+
         if prompt is None:  # Edge case of having 1 message for summary, only may happen at start of chat
             general_logger.info("Skipping entry to summarize, only 1 message for term exists")
             return None
+
         generation_params = {
             "max_length": response_len,
             "max_tokens": response_len,

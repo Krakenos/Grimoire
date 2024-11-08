@@ -34,7 +34,7 @@ class TokenizationSettings(BaseSettingsModel):
 
 class SummarizationSettings(BaseSettingsModel):
     prompt: str = (
-        "{system_sequence}{previous_summary}{messages}{system_suffix}\n"
+        "{system_sequence}{previous_summary}{additional_info}{messages}{system_suffix}\n"
         "{input_sequence}Describe {term}.{input_suffix}{output_sequence}"
     )
     limit_rate: int = 1

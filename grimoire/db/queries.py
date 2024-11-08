@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
-from grimoire.db.models import Knowledge, Message
+from grimoire.db.models import Character, Knowledge, Message
 
 
 def get_knowledge_entity(term: str, chat_id: int, session: Session) -> Knowledge | None:
@@ -77,3 +77,15 @@ def semantic_search(message_embeddings: np.ndarray, chat_id: int, session: Sessi
     sorted_indices = np.argsort(highest_similarities)[::-1]
     sorted_knowledge = [candidates[i] for i in sorted_indices]
     return sorted_knowledge
+
+
+def get_character(name: str, chat_id: int, session: Session) -> Character | None:
+    return get_characters([name], chat_id, session)[0]
+
+
+def get_characters(names: list[str], chat_id: int, session: Session) -> list[Character | None]:
+    query = select(Character).where(Character.name.in_(names), Character.chat_id == chat_id)
+    query_results = session.scalars(query).all()
+    db_chars = {char.name: char for char in query_results}
+    results = [db_chars[name] if name in db_chars else None for name in names]
+    return results
