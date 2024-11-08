@@ -172,9 +172,18 @@ def patch_knowledge(
     knowledge: KnowledgeDetailPatch, user_id: int, chat_id: int, knowledge_id: int, db: Session = Depends(get_db)
 ):
     db_knowledge = api_utils.get_knowledge(db, user_id=user_id, chat_id=chat_id, knowledge_id=knowledge_id)
+
+    old_summary = db_knowledge.summary
+    new_summary = knowledge.summary
+
     if db_knowledge is None:
         raise HTTPException(status_code=404, detail="Knowledge not found")
+
     db_knowledge = api_utils.update_record(db, db_knowledge, knowledge)
+
+    if new_summary and new_summary != old_summary:
+        pass
+
     return db_knowledge
 
 

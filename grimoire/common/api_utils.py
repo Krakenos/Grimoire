@@ -140,3 +140,10 @@ def delete_user(db_session: Session, user: User) -> None:
     db_session.refresh(user)
     db_session.delete(user)
     db_session.commit()
+
+
+def update_summary_metadata():
+    """
+    Updates summary_entry, token count and vector embedding for knowledge
+    """
+    pass
