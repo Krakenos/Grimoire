@@ -162,7 +162,7 @@ def update_knowledge(
 ):
     db_knowledge = api_utils.get_knowledge(db, user_id=user_id, chat_id=chat_id, knowledge_id=knowledge_id)
     if db_knowledge is None:
-        raise HTTPException(status_code=404, detail="Chat not found")
+        raise HTTPException(status_code=404, detail="Knowledge not found")
     db_knowledge = api_utils.update_record(db, db_knowledge, knowledge)
     return db_knowledge
 
@@ -173,7 +173,7 @@ def patch_knowledge(
 ):
     db_knowledge = api_utils.get_knowledge(db, user_id=user_id, chat_id=chat_id, knowledge_id=knowledge_id)
     if db_knowledge is None:
-        raise HTTPException(status_code=404, detail="Chat not found")
+        raise HTTPException(status_code=404, detail="Knowledge not found")
     db_knowledge = api_utils.update_record(db, db_knowledge, knowledge)
     return db_knowledge
 
@@ -182,7 +182,7 @@ def patch_knowledge(
 def delete_knowledge(user_id: int, chat_id: int, knowledge_id: int, db: Session = Depends(get_db)):
     db_knowledge = api_utils.get_knowledge(db, user_id=user_id, chat_id=chat_id, knowledge_id=knowledge_id)
     if db_knowledge is None:
-        raise HTTPException(status_code=404, detail="Message not found")
+        raise HTTPException(status_code=404, detail="Knowledge not found")
     db.delete(db_knowledge)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
