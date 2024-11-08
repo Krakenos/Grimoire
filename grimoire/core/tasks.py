@@ -105,13 +105,13 @@ def make_summary_prompt(
 
     if secondary_database:
         query = (
-            select(Message.external_id, Message.character.name)
+            select(Message)
             .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
             .order_by(Message.message_index)
         )
-        query_results = session.execute(query).all()
-        external_ids = [row[0] for row in query_results]
-        sender_names = [row[1] for row in query_results]
+        query_results = session.scalars(query).all()
+        external_ids = [mes.external_id for mes in query_results]
+        sender_names = [mes.character.name for mes in query_results]
         db_messages = get_messages_from_external_db(
             external_ids,
             secondary_database_url,
@@ -130,13 +130,13 @@ def make_summary_prompt(
 
     else:
         query = (
-            select(Message.message, Message.character.name)
+            select(Message)
             .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
             .order_by(Message.message_index)
         )
-        query_results = session.execute(query).all()
-        db_messages = [row[0] for row in query_results]
-        sender_names = [row[1] for row in query_results]
+        query_results = session.scalars(query).all()
+        db_messages = [mes.external_id for mes in query_results]
+        sender_names = [mes.character.name for mes in query_results]
         if include_names:
             messages = []
             for name, message in zip(sender_names, db_messages, strict=True):

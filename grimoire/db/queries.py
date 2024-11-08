@@ -84,7 +84,7 @@ def get_character(name: str, chat_id: int, session: Session) -> Character | None
 
 
 def get_characters(names: list[str], chat_id: int, session: Session) -> list[Character | None]:
-    query = select(Character).where(Character.name.in_(names) and Character.chat_id == chat_id)
+    query = select(Character).where(Character.name.in_(names), Character.chat_id == chat_id)
     query_results = session.scalars(query).all()
     db_chars = {char.name: char for char in query_results}
     results = [db_chars[name] if name in db_chars else None for name in names]
