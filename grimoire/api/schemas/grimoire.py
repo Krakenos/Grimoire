@@ -43,6 +43,24 @@ class KnowledgeOut(BaseModel):
     updated_date: datetime
 
 
+class KnowledgeDetailOut(BaseModel):
+    entity: str
+    entity_label: str
+    summary: str
+    enabled: bool
+    frozen: bool
+    updated_date: datetime
+
+
+class KnowledgeDetailPatch(BaseModel):
+    entity: str | None = None
+    entity_label: str | None = None
+    summary: str | None = None
+    enabled: bool | None = None
+    frozen: bool | None = None
+    updated_date: datetime | None = None
+
+
 class KnowledgeIn(BaseModel):
     entity: str
     summary: str

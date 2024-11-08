@@ -11,6 +11,8 @@ from grimoire.api.schemas.grimoire import (
     ChatOut,
     ExternalId,
     KnowledgeData,
+    KnowledgeDetailOut,
+    KnowledgeDetailPatch,
     KnowledgeIn,
     KnowledgeOut,
     UserIn,
@@ -157,6 +159,17 @@ def get_knowledge(user_id: int, chat_id: int, knowledge_id: int, db: Session = D
 @router.put("/users/{user_id}/chats/{chat_id}/knowledge/{knowledge_id}", response_model=KnowledgeOut)
 def update_knowledge(
     knowledge: KnowledgeIn, user_id: int, chat_id: int, knowledge_id: int, db: Session = Depends(get_db)
+):
+    db_knowledge = api_utils.get_knowledge(db, user_id=user_id, chat_id=chat_id, knowledge_id=knowledge_id)
+    if db_knowledge is None:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    db_knowledge = api_utils.update_record(db, db_knowledge, knowledge)
+    return db_knowledge
+
+
+@router.patch("/users/{user_id}/chats/{chat_id}/knowledge/{knowledge_id}", response_model=KnowledgeDetailOut)
+def patch_knowledge(
+    knowledge: KnowledgeDetailPatch, user_id: int, chat_id: int, knowledge_id: int, db: Session = Depends(get_db)
 ):
     db_knowledge = api_utils.get_knowledge(db, user_id=user_id, chat_id=chat_id, knowledge_id=knowledge_id)
     if db_knowledge is None:
