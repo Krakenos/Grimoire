@@ -182,7 +182,7 @@ def patch_knowledge(
     db_knowledge = api_utils.update_record(db, db_knowledge, knowledge)
 
     if new_summary and new_summary != old_summary:
-        pass
+        db_knowledge = api_utils.update_summary_metadata(db, db_knowledge)
 
     return db_knowledge
 

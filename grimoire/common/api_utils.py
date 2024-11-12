@@ -1,9 +1,13 @@
 from collections.abc import Sequence
+from datetime import datetime
 
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from grimoire.common.llm_helpers import token_count
+from grimoire.core.settings import settings
+from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import Base, Chat, Knowledge, Message, User
 
 
@@ -142,8 +146,22 @@ def delete_user(db_session: Session, user: User) -> None:
     db_session.commit()
 
 
-def update_summary_metadata():
+def update_summary_metadata(db_session: Session, knowledge: Knowledge) -> Knowledge:
     """
-    Updates summary_entry, token count and vector embedding for knowledge
+    Updates summary_entry, token count, update_date and vector embedding for knowledge
     """
-    pass
+    knowledge.summary_entry = f"[ {knowledge.entity}: {knowledge.summary} ]"
+    knowledge.token_count = token_count(
+        [knowledge.summary_entry],
+        settings.summarization_api.backend,
+        settings.summarization_api.url,
+        settings.tokenization.local_tokenizer,
+        settings.tokenization.prefer_local_tokenizer,
+        settings.summarization_api.auth_key,
+    )[0]
+    knowledge.updated_date = datetime.now()
+    knowledge.vector_embedding = get_text_embeddings(knowledge.summary)[0]
+    db_session.add(knowledge)
+    db_session.commit()
+    db_session.refresh(knowledge)
+    return knowledge
