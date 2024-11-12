@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import datetime
+from typing import TypeVar
 
 from pydantic import BaseModel
 from sqlalchemy import delete, select
@@ -9,6 +10,8 @@ from grimoire.common.llm_helpers import token_count
 from grimoire.core.settings import settings
 from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import Base, Chat, Knowledge, Message, User
+
+ORMBase = TypeVar("ORMBase", bound=Base)
 
 
 def get_users(db_session: Session, skip: int = 0, limit: int = 100) -> Sequence[User]:
@@ -106,7 +109,7 @@ def get_chat_by_external(db_session: Session, external_id: str, user_id: int) ->
     return result
 
 
-def update_record(db: Session, db_object: Base, request_object: BaseModel) -> Base:
+def update_record(db: Session, db_object: ORMBase, request_object: BaseModel) -> ORMBase:
     new_attributes = request_object.model_dump(exclude_unset=True, exclude_none=True, exclude_defaults=True)
     for key, value in new_attributes.items():
         setattr(db_object, key, value)
