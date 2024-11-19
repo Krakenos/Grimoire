@@ -62,7 +62,7 @@ def semantic_search(message_embeddings: np.ndarray, chat_id: int, session: Sessi
             candidates.extend(message.knowledge)
 
     candidates = list(set(candidates))
-    candidates = [candidate for candidate in candidates if candidate.vector_embedding is not None]
+    candidates = [candidate for candidate in candidates if candidate.vector_embedding is not None and candidate.enabled]
 
     if not candidates:
         return []
