@@ -109,6 +109,7 @@ def get_chat_by_external(db_session: Session, external_id: str, user_id: int) ->
     return result
 
 
+# TODO change to inline TypeVar after updating to newer python
 def update_record(db: Session, db_object: ORMBase, request_object: BaseModel) -> ORMBase:
     new_attributes = request_object.model_dump(exclude_unset=True, exclude_none=True, exclude_defaults=True)
     for key, value in new_attributes.items():
