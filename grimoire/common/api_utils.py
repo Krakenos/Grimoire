@@ -153,6 +153,9 @@ def delete_user(db_session: Session, user: User) -> None:
 def update_summary_metadata(db_session: Session, knowledge: Knowledge) -> Knowledge:
     """
     Updates summary_entry, token count, update_date and vector embedding for knowledge
+    :param db_session: database session
+    :param knowledge: Knowledge object to update metadata
+    :return: Knowledge object with updated metadata
     """
     knowledge.summary_entry = f"[ {knowledge.entity}: {knowledge.summary} ]"
     knowledge.token_count = token_count(
