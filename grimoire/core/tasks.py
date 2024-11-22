@@ -223,6 +223,10 @@ def summarize(
             general_logger.info("Skipping entry to summarize, frozen entity")
             return None
 
+        if not knowledge_entry.enabled:  # Don't summarize if disabled
+            general_logger.info("Skipping entry to summarize, disabled entity")
+            return None
+
         max_prompt_context = context_len - response_len
         prompt = make_summary_prompt(
             session,
