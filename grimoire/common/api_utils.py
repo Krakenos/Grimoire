@@ -75,6 +75,7 @@ def get_all_knowledge(
         select(Knowledge)
         .join(Knowledge.chat)
         .where(Knowledge.chat_id == chat_id, Chat.user_id == user_id, Knowledge.summary.is_not(None))
+        .order_by(Knowledge.id)
         .offset(skip)
         .limit(limit)
     )
