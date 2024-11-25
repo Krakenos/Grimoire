@@ -55,7 +55,8 @@ class Message(Base):
     chat_id: Mapped[int] = mapped_column(ForeignKey("chat.id"))
     chat: Mapped["Chat"] = relationship(back_populates="messages")
     message_index: Mapped[int]
-    sender_name = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=True)
+    character_id: Mapped[int] = mapped_column(ForeignKey("character.id"))
+    character: Mapped["Character"] = relationship()
     message = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=True)
     created_date: Mapped[datetime] = mapped_column(default=datetime.now)
     spacy_named_entities: Mapped[list["SpacyNamedEntity"]] = relationship()
@@ -80,6 +81,7 @@ class Chat(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
     messages: Mapped[list["Message"]] = relationship()
     knowledge: Mapped[list["Knowledge"]] = relationship()
+    characters: Mapped[list["Character"]] = relationship()
 
 
 class User(Base):
@@ -88,3 +90,22 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     external_id: Mapped[str]
     chats: Mapped[list["Chat"]] = relationship()
+
+
+class Character(Base):
+    __tablename__ = "character"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    chat_id: Mapped[int] = mapped_column(ForeignKey("chat.id"))
+    name = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=False)
+    description = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=True)
+    character_note = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=True)
+    trigger_texts: Mapped[list["CharacterTriggerText"]] = relationship()
+
+
+class CharacterTriggerText(Base):
+    __tablename__ = "character_trigger_text"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    character_id: Mapped[int] = mapped_column(ForeignKey("character.id"))
+    text = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=False)

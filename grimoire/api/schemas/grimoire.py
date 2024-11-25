@@ -43,6 +43,24 @@ class KnowledgeOut(BaseModel):
     updated_date: datetime
 
 
+class KnowledgeDetailOut(BaseModel):
+    entity: str
+    entity_label: str
+    summary: str
+    enabled: bool
+    frozen: bool
+    updated_date: datetime
+
+
+class KnowledgeDetailPatch(BaseModel):
+    entity: str | None = None
+    entity_label: str | None = None
+    summary: str | None = None
+    enabled: bool | None = None
+    frozen: bool | None = None
+    updated_date: datetime | None = None
+
+
 class KnowledgeIn(BaseModel):
     entity: str
     summary: str
@@ -61,12 +79,19 @@ class ChatDataMessage(BaseModel):
     text: str
 
 
+class ChatDataCharacter(BaseModel):
+    name: str
+    description: str | None = None
+    character_note: str | None = None
+
+
 class ChatData(BaseModel):
     external_chat_id: str
     external_user_id: str | None = None
     include_names: bool = False
     max_tokens: int | None = None
     messages: list[ChatDataMessage]
+    characters: list[ChatDataCharacter] | None = None
 
 
 class KnowledgeData(BaseModel):

@@ -11,6 +11,8 @@ from grimoire.api.schemas.grimoire import (
     ChatOut,
     ExternalId,
     KnowledgeData,
+    KnowledgeDetailOut,
+    KnowledgeDetailPatch,
     KnowledgeIn,
     KnowledgeOut,
     UserIn,
@@ -160,8 +162,28 @@ def update_knowledge(
 ):
     db_knowledge = api_utils.get_knowledge(db, user_id=user_id, chat_id=chat_id, knowledge_id=knowledge_id)
     if db_knowledge is None:
-        raise HTTPException(status_code=404, detail="Chat not found")
+        raise HTTPException(status_code=404, detail="Knowledge not found")
     db_knowledge = api_utils.update_record(db, db_knowledge, knowledge)
+    return db_knowledge
+
+
+@router.patch("/users/{user_id}/chats/{chat_id}/knowledge/{knowledge_id}", response_model=KnowledgeDetailOut)
+def patch_knowledge(
+    knowledge: KnowledgeDetailPatch, user_id: int, chat_id: int, knowledge_id: int, db: Session = Depends(get_db)
+):
+    db_knowledge = api_utils.get_knowledge(db, user_id=user_id, chat_id=chat_id, knowledge_id=knowledge_id)
+
+    old_summary = db_knowledge.summary
+    new_summary = knowledge.summary
+
+    if db_knowledge is None:
+        raise HTTPException(status_code=404, detail="Knowledge not found")
+
+    db_knowledge = api_utils.update_record(db, db_knowledge, knowledge)
+
+    if new_summary and new_summary != old_summary:
+        db_knowledge = api_utils.update_summary_metadata(db, db_knowledge)
+
     return db_knowledge
 
 
@@ -169,7 +191,7 @@ def update_knowledge(
 def delete_knowledge(user_id: int, chat_id: int, knowledge_id: int, db: Session = Depends(get_db)):
     db_knowledge = api_utils.get_knowledge(db, user_id=user_id, chat_id=chat_id, knowledge_id=knowledge_id)
     if db_knowledge is None:
-        raise HTTPException(status_code=404, detail="Message not found")
+        raise HTTPException(status_code=404, detail="Knowledge not found")
     db.delete(db_knowledge)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -180,6 +202,7 @@ def get_data(chat_data: ChatData, db: Session = Depends(get_db)):
     chat_texts = [message.text for message in chat_data.messages]
     messages_names = [message.sender_name for message in chat_data.messages]
     messages_external_ids = [message.external_id for message in chat_data.messages]
+    characters = chat_data.characters
     include_names = chat_data.include_names
     return process_request(
         chat_data.external_chat_id,
@@ -187,6 +210,7 @@ def get_data(chat_data: ChatData, db: Session = Depends(get_db)):
         messages_external_ids,
         messages_names,
         db,
+        characters,
         include_names,
         chat_data.external_user_id,
         chat_data.max_tokens,
