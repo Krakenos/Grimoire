@@ -89,3 +89,13 @@ def get_characters(names: list[str], chat_id: int, session: Session) -> list[Cha
     db_chars = {char.name: char for char in query_results}
     results = [db_chars[name] if name in db_chars else None for name in names]
     return results
+
+
+def get_messages_by_index(start_index: int, end_index: int, chat_id: int, session: Session) -> list[Message]:
+    query = (
+        select(Message)
+        .where(Message.chat_id == chat_id, Message.message_index >= start_index, Message.message_index <= end_index)
+        .order_by(Message.message_index)
+    )
+    query_results = session.scalars(query).all()
+    return list(query_results)
