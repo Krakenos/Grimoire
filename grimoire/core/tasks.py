@@ -12,7 +12,7 @@ from grimoire.common.loggers import general_logger, summary_logger
 from grimoire.common.redis import redis_manager
 from grimoire.core.settings import ApiSettings, SecondaryDatabaseSettings, SummarizationSettings, settings
 from grimoire.db.models import Character, Knowledge, Message
-from grimoire.db.queries import get_knowledge_entity
+from grimoire.db.queries import get_knowledge_entity, get_messages_by_index
 from grimoire.db.secondary_database import get_messages_from_external_db
 
 broker_url = redis_manager.celery_broker_url()
@@ -296,3 +296,53 @@ def queue_logging() -> None:
     redis_client = redis_manager.get_client()
     queue_length = redis_client.llen(summarization_queue)
     general_logger.info(f"Summarization tasks in queue: {queue_length}")
+
+
+@celery_app.task
+def generate_segmented_memory(
+    chat_id: int, start_index: int, end_index: int, max_retries: int = 50, retry_interval: int = 1
+) -> None:
+    seg_mem_prompt_template = (
+        "{system_sequence}Below is conversation snippet.\n{messages}{system_suffix}{input_sequence}"
+        "Summarize the most important facts and events in the story so far. Limit the summary to one paragraph. "
+        "Your response should include nothing but the summary.{input_suffix}{output_sequence}"
+    )
+
+    db_engine = settings.DB_ENGINE
+    api_settings = settings.summarization_api
+    summarization_settings = settings.summarization
+    tokenization_settings = settings.tokenization
+    secondary_database_settings = settings.secondary_database
+    db = create_engine(db_engine)
+    instruct_fields = {
+        "bos_token": api_settings.bos_token,
+        "system_sequence": api_settings.system_sequence,
+        "system_suffix": api_settings.system_suffix,
+        "input_sequence": api_settings.input_sequence,
+        "input_suffix": api_settings.input_suffix,
+        "output_sequence": api_settings.output_sequence,
+        "output_suffix": api_settings.output_suffix,
+        "first_output_sequence": api_settings.first_output_sequence,
+        "last_output_sequence": api_settings.last_output_sequence,
+    }
+
+    with Session(db) as session:
+        messages = get_messages_by_index(start_index, end_index, chat_id, session)
+
+        if secondary_database_settings.enabled:
+            ids = [mes.external_id for mes in messages]
+            messages_texts = get_messages_from_external_db(
+                ids,
+                secondary_database_settings.db_engine,
+                secondary_database_settings.message_encryption,
+                secondary_database_settings.encryption_key,
+            )
+            texts = [
+                f"{mes.character.name}: {txt}"
+                for txt, mes in zip(messages_texts, messages, strict=False)
+                if txt is not None
+            ]
+        else:
+            texts = [f"{mes.character.name}: {mes.message}" for mes in messages]
+
+        seg_mem_prompt = seg_mem_prompt_template.format(messages="\n".join(texts), **instruct_fields)
