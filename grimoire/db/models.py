@@ -22,6 +22,13 @@ knowledge_message = Table(
     Column("message_id", ForeignKey("message.id"), primary_key=True),
 )
 
+segmented_memories_message = Table(
+    "segmented_memories_message",
+    Base.metadata,
+    Column("segmented_memory_id", ForeignKey("segmented_memories.id"), primary_key=True),
+    Column("message_id", ForeignKey("message.id"), primary_key=True),
+)
+
 
 class Knowledge(Base):
     __tablename__ = "knowledge"
@@ -61,6 +68,9 @@ class Message(Base):
     created_date: Mapped[datetime] = mapped_column(default=datetime.now)
     spacy_named_entities: Mapped[list["SpacyNamedEntity"]] = relationship()
     knowledge: Mapped[list["Knowledge"]] = relationship(secondary=knowledge_message, back_populates="messages")
+    segmented_memories: Mapped[list["SegmentedMemory"]] = relationship(
+        secondary=segmented_memories_message, back_populates="messages"
+    )
     vector_embedding = mapped_column(Vector())
 
 
@@ -110,3 +120,14 @@ class CharacterTriggerText(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     character_id: Mapped[int] = mapped_column(ForeignKey("character.id"))
     text = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=False)
+
+
+class SegmentedMemory(Base):
+    __tablename__ = "segmented_memories"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    chat_id: Mapped[int] = mapped_column(ForeignKey("chat.id"))
+    messages: Mapped[list["Message"]] = relationship(
+        secondary=segmented_memories_message, back_populates="segmented_memories"
+    )
+    summary = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=False)
