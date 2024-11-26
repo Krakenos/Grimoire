@@ -131,3 +131,4 @@ class SegmentedMemory(Base):
         secondary=segmented_memories_message, back_populates="segmented_memories"
     )
     summary = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=False)
+    vector_embedding = mapped_column(Vector())
