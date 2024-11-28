@@ -132,3 +132,5 @@ class SegmentedMemory(Base):
     )
     summary = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=False)
     vector_embedding = mapped_column(Vector())
+    created_date: Mapped[datetime] = mapped_column(default=datetime.now)
+    token_count: Mapped[int]

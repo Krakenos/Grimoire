@@ -385,7 +385,21 @@ def generate_segmented_memory(
             retry_interval,
         )
         vector_embedding = get_text_embeddings(memory_text)[0]
-        new_memory = SegmentedMemory(chat_id=chat_id, summary=memory_text, vector_embedding=vector_embedding)
+        tokens = token_count(
+            [memory_text],
+            summarization_backend,
+            summarization_url,
+            tokenizer,
+            prefer_local_tokenizer,
+            summarization_auth,
+        )[0]
+        new_memory = SegmentedMemory(
+            chat_id=chat_id,
+            summary=memory_text,
+            vector_embedding=vector_embedding,
+            token_count=tokens,
+            created_date=datetime.now(),
+        )
         new_memory.messages.extend(messages)
         session.add(new_memory)
         session.commit()
