@@ -17,7 +17,7 @@ from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
-from grimoire.core.tasks import summarize
+from grimoire.core.tasks import generate_segmented_memory, summarize
 from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import Character, CharacterTriggerText, Chat, Knowledge, Message, SpacyNamedEntity, User
 from grimoire.db.queries import get_characters, get_knowledge_entities, semantic_search
@@ -499,6 +499,15 @@ def get_character_from_names(
     return character_dict
 
 
+def queue_segmented_memories(chat: Chat, new_messages: list[Message]) -> None:
+    memory_interval = chat.segmented_memory_interval
+    for message in new_messages:
+        if message.message_index % memory_interval == 0:
+            generate_segmented_memory.delay(
+                chat_id=chat.id, start_index=message.message_index - memory_interval, end_index=message.message_index
+            )
+
+
 def process_request(
     external_chat_id: str,
     chat_texts: list[str],
@@ -568,6 +577,8 @@ def process_request(
             chat.id,
             include_names,
         )
+
+    queue_segmented_memories(chat, new_messages)
 
     vector_embeddings = np.array([embedding_dict[mes] for mes in chat_texts])
     ordered_knowledge = semantic_search(vector_embeddings, chat.id, db_session)
