@@ -11,7 +11,7 @@ from grimoire.common.llm_helpers import generate_text, token_count
 from grimoire.common.loggers import general_logger, summary_logger
 from grimoire.common.redis import redis_manager
 from grimoire.core.settings import ApiSettings, SecondaryDatabaseSettings, SummarizationSettings, settings
-from grimoire.db.models import Character, Knowledge, Message
+from grimoire.db.models import Character, Knowledge, Message, SegmentedMemory
 from grimoire.db.queries import get_knowledge_entity, get_messages_by_index
 from grimoire.db.secondary_database import get_messages_from_external_db
 
@@ -302,6 +302,8 @@ def queue_logging() -> None:
 def generate_segmented_memory(
     chat_id: int, start_index: int, end_index: int, max_retries: int = 50, retry_interval: int = 1
 ) -> None:
+    from grimoire.core.vector_embeddings import get_text_embeddings
+
     seg_mem_prompt_template = (
         "{system_sequence}Below is conversation snippet.\n{messages}{system_suffix}{input_sequence}"
         "Summarize the most important facts and events in the story so far. Limit the summary to one paragraph. "
@@ -314,6 +316,14 @@ def generate_segmented_memory(
     tokenization_settings = settings.tokenization
     secondary_database_settings = settings.secondary_database
     db = create_engine(db_engine)
+
+    summarization_url = api_settings.url
+    summarization_backend = api_settings.backend
+    summarization_auth = api_settings.auth_key
+    context_len = api_settings.context_length
+    response_len = summarization_settings.max_tokens
+    prefer_local_tokenizer = tokenization_settings.prefer_local_tokenizer
+    tokenizer = tokenization_settings.local_tokenizer
     instruct_fields = {
         "bos_token": api_settings.bos_token,
         "system_sequence": api_settings.system_sequence,
@@ -346,3 +356,36 @@ def generate_segmented_memory(
             texts = [f"{mes.character.name}: {mes.message}" for mes in messages]
 
         seg_mem_prompt = seg_mem_prompt_template.format(messages="\n".join(texts), **instruct_fields)
+
+        generation_params = {
+            "max_length": response_len,
+            "max_tokens": response_len,
+            "truncation_length": context_len,
+            "max_context_length": context_len,
+        }
+        generation_params.update(copy.deepcopy(summarization_settings.params))
+        additional_stops = [
+            api_settings.input_sequence.strip(),
+            api_settings.output_sequence.strip(),
+            api_settings.first_output_sequence.strip(),
+            api_settings.last_output_sequence.strip(),
+            api_settings.input_suffix.strip(),
+            api_settings.output_suffix.strip(),
+        ]
+        additional_stops = [stop for stop in additional_stops if stop]
+        generation_params["stop"].extend(additional_stops)
+        generation_params["stop_sequence"].extend(additional_stops)
+        memory_text, request_json = generate_text(
+            seg_mem_prompt,
+            generation_params,
+            summarization_backend,
+            summarization_url,
+            summarization_auth,
+            max_retries,
+            retry_interval,
+        )
+        vector_embedding = get_text_embeddings(memory_text)[0]
+        new_memory = SegmentedMemory(chat_id=chat_id, summary=memory_text, vector_embedding=vector_embedding)
+        new_memory.messages.extend(messages)
+        session.add(new_memory)
+        session.commit()
