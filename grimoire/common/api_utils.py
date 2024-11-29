@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from grimoire.common.llm_helpers import token_count
 from grimoire.core.settings import settings
 from grimoire.core.vector_embeddings import get_text_embeddings
-from grimoire.db.models import Base, Chat, Knowledge, Message, User
+from grimoire.db.models import Base, Chat, Knowledge, Message, SegmentedMemory, User
 
 
 def get_users(db_session: Session, skip: int = 0, limit: int = 100) -> Sequence[User]:
@@ -78,6 +78,11 @@ def get_all_knowledge(
     )
     results = db_session.scalars(query).all()
     return results
+
+
+def get_all_memories(
+    db_session: Session, user_id: int, chat_id: int, skip: int = 0, limit: int = 100
+) -> Sequence[SegmentedMemory]: ...
 
 
 def get_knowledge(db_session: Session, user_id: int, chat_id: int, knowledge_id: int) -> Knowledge | None:
