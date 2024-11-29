@@ -97,3 +97,16 @@ class ChatData(BaseModel):
 class KnowledgeData(BaseModel):
     text: str
     relevance: int
+
+
+class MemoriesOut(BaseModel):
+    id: int
+    summary: str
+    token_count: int
+    created_date: datetime
+
+
+class MemoriesDetailOut(BaseModel):
+    summary: str
+    token_count: int
+    created_date: datetime
