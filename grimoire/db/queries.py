@@ -1,12 +1,15 @@
 import numpy as np
 from rapidfuzz import fuzz, process, utils
 from sentence_transformers.util import cos_sim
+from spacy.matcher.dependencymatcher import defaultdict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.testing import combinations
 
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 from grimoire.db.models import Character, Knowledge, Message
+import networkx as nx
 
 
 def get_knowledge_entity(term: str, chat_id: int, session: Session) -> Knowledge | None:
@@ -99,3 +102,23 @@ def get_messages_by_index(start_index: int, end_index: int, chat_id: int, sessio
     )
     query_results = session.scalars(query).all()
     return list(query_results)
+
+
+def get_knowledge_graph(chat_id: int, session: Session):
+    query = select(Knowledge).where(Knowledge.chat_id == chat_id).order_by(Knowledge.id)
+    knowledge_entries = list(session.scalars(query).all())
+    knowledge_dict = {knowledge.id: knowledge for knowledge in knowledge_entries}
+    memory_dict = {}
+    G = nx.Graph()
+
+    relations = defaultdict(set)
+    for knowledge in knowledge_entries:
+        G.add_node(f"{knowledge.id} {knowledge.entity}")
+        for mes in knowledge.messages:
+            for memory in mes.segmented_memories:
+                memory_dict[memory.id] = memory
+                relations[memory.id].add(knowledge.id)
+
+    for key, value in relations.items():
+        for a, b in combinations(value, 2):
+            G.add_edge(f"{a} {knowledge_dict[a].entity}", f"{b} {knowledge_dict[b].entity}", label=f"memory {key}")
