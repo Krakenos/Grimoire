@@ -4,7 +4,7 @@ from sentence_transformers.util import cos_sim
 from spacy.matcher.dependencymatcher import defaultdict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from sqlalchemy.testing import combinations
+from itertools import combinations
 
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
@@ -109,16 +109,16 @@ def get_knowledge_graph(chat_id: int, session: Session):
     knowledge_entries = list(session.scalars(query).all())
     knowledge_dict = {knowledge.id: knowledge for knowledge in knowledge_entries}
     memory_dict = {}
-    G = nx.Graph()
+    graph = nx.Graph()
 
     relations = defaultdict(set)
     for knowledge in knowledge_entries:
-        G.add_node(f"{knowledge.id} {knowledge.entity}")
+        graph.add_node(f"{knowledge.id} {knowledge.entity}")
         for mes in knowledge.messages:
             for memory in mes.segmented_memories:
                 memory_dict[memory.id] = memory
                 relations[memory.id].add(knowledge.id)
 
-    for key, value in relations.items():
-        for a, b in combinations(value, 2):
-            G.add_edge(f"{a} {knowledge_dict[a].entity}", f"{b} {knowledge_dict[b].entity}", label=f"memory {key}")
+    for memory_id, knowledge_set in relations.items():
+        for a, b in combinations(knowledge_set, 2):
+            graph.add_edge(f"{a} {knowledge_dict[a].entity}", f"{b} {knowledge_dict[b].entity}", label=f"memory {memory_id}")
