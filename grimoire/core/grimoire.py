@@ -407,7 +407,7 @@ def update_characters(
     char_names = [character.name for character in characters]
     db_characters = get_characters(char_names, chat_id, session)
 
-    mapped_entities = [similarity_dict[name] for name in char_names]
+    mapped_entities = [similarity_dict[name] if name in similarity_dict else name for name in char_names]
     trigger_strings = []
     for entity_name in mapped_entities:
         entity_trigger_strings = [
