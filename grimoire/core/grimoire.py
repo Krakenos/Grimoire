@@ -413,6 +413,9 @@ def update_characters(
         entity_trigger_strings = [
             trigger_string for trigger_string, ent in similarity_dict.items() if ent == entity_name
         ]
+        if not entity_trigger_strings:
+            entity_trigger_strings = [entity_name]
+
         trigger_strings.append(entity_trigger_strings)
 
     to_update = []
