@@ -1,5 +1,5 @@
 alembic~=1.12.1
-aiohttp~=3.9.3
+aiohttp~=3.10.11
 celery~=5.3.6
 celery-singleton~=0.3.1
 cryptography~=43.0.0
@@ -9,7 +9,7 @@ psycopg2-binary~=2.9.9
 pydantic~=2.4.2
 python-dotenv~=1.0.0
 PyYAML~=6.0.1
-requests~=2.31.0
+requests~=2.32.0
 sentence-transformers~=3.1.0
 spacy~=3.7.2
 spacy[cuda12x]
@@ -20,5 +20,5 @@ transformers~=4.43.3
 uvicorn~=0.23.2
 redis~=5.0.3
 rapidfuzz~=3.9.6
-starlette~=0.37.2
+starlette~=0.40.0
 numpy~=1.26.4

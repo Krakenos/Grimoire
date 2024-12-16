@@ -6,10 +6,10 @@ RUN apt-get update -y
 RUN apt-get install -y software-properties-common
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update -y
-RUN apt-get install -y python3.11 python3-pip
+RUN apt-get install -y python3.12 python3-pip
 
-RUN ln -fs /usr/bin/python3.11 /usr/bin/python
-RUN ln -fs /usr/bin/python3.11 /usr/bin/python3
+RUN ln -fs /usr/bin/python3.12 /usr/bin/python
+RUN ln -fs /usr/bin/python3.12 /usr/bin/python3
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
