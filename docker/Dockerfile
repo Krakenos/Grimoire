@@ -16,7 +16,7 @@ FROM base AS deps
 RUN python3.12 -m venv /opt/venv
 ENV PATH=/opt/venv/bin:$PATH
 COPY requirements.txt requirements.txt
-RUN pip install -r requirements.txt --no-cache
+RUN pip install --upgrade pip --no-cache && pip install -r requirements.txt --no-cache
 RUN python -m spacy download en_core_web_trf
 
 FROM deps AS test_deps
