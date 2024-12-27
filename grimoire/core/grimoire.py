@@ -402,9 +402,20 @@ def get_embeddings(
 
 
 def update_characters(
-    characters: list[ChatDataCharacter], chat_id: int, similarity_dict: dict[str, str], session: Session
+    characters: list[ChatDataCharacter],
+    message_names: list[str],
+    chat_id: int,
+    similarity_dict: dict[str, str],
+    session: Session,
 ) -> dict[str, Character]:
     char_names = [character.name for character in characters]
+    message_names = list(set(message_names))
+
+    for name in message_names:
+        if name not in char_names:
+            char_names.append(name)
+            characters.append(ChatDataCharacter(name=name, description="", character_note=""))
+
     db_characters = get_characters(char_names, chat_id, session)
 
     mapped_entities = [similarity_dict[name] if name in similarity_dict else name for name in char_names]
@@ -530,7 +541,7 @@ def process_request(
     last_entities = entity_list[:-excluded_messages]
 
     if characters:
-        characters_dict = update_characters(characters, chat.id, entity_similarity_dict, db_session)
+        characters_dict = update_characters(characters, messages_names, chat.id, entity_similarity_dict, db_session)
     else:
         characters_dict = get_character_from_names(messages_names, chat.id, entity_similarity_dict, db_session)
 
