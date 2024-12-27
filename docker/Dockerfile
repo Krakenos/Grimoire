@@ -6,16 +6,15 @@ RUN apt-get update -y
 RUN apt-get install -y software-properties-common
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update -y
-RUN apt-get install -y python3.11 python3-pip
-
-RUN ln -fs /usr/bin/python3.11 /usr/bin/python
-RUN ln -fs /usr/bin/python3.11 /usr/bin/python3
+RUN apt-get install -y python3.12-dev python3-pip python3.12-venv
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 FROM base AS deps
+RUN python3.12 -m venv /opt/venv
+ENV PATH=/opt/venv/bin:$PATH
 COPY requirements.txt requirements.txt
 RUN pip install --upgrade pip --no-cache && pip install -r requirements.txt --no-cache
 RUN python -m spacy download en_core_web_trf
