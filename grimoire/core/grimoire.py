@@ -2,6 +2,7 @@ import json
 import timeit
 from collections import defaultdict
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from itertools import chain
 
 import numpy as np
@@ -510,10 +511,11 @@ def queue_segmented_memories(chat: Chat, new_messages: list[Message]) -> None:
                     chat_id=chat.id,
                     start_index=message.message_index - (memory_interval + memory_interval // 2),
                     end_index=message.message_index - memory_interval // 2,
+                    create_date=datetime.now()
                 )
 
             generate_segmented_memory.delay(
-                chat_id=chat.id, start_index=message.message_index - memory_interval, end_index=message.message_index
+                chat_id=chat.id, start_index=message.message_index - memory_interval, end_index=message.message_index, create_date=datetime.now()
             )
 
 

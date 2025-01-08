@@ -300,7 +300,7 @@ def queue_logging() -> None:
 
 @celery_app.task
 def generate_segmented_memory(
-    chat_id: int, start_index: int, end_index: int, max_retries: int = 50, retry_interval: int = 1
+    chat_id: int, start_index: int, end_index: int, create_date=datetime, max_retries: int = 50, retry_interval: int = 1
 ) -> None:
     from grimoire.core.vector_embeddings import get_text_embeddings
 
@@ -398,7 +398,7 @@ def generate_segmented_memory(
             summary=memory_text,
             vector_embedding=vector_embedding,
             token_count=tokens,
-            created_date=datetime.now(),
+            created_date=create_date,
         )
         new_memory.messages.extend(messages)
         session.add(new_memory)
