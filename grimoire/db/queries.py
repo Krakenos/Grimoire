@@ -1,15 +1,16 @@
+from itertools import combinations
+
+import networkx as nx
 import numpy as np
 from rapidfuzz import fuzz, process, utils
 from sentence_transformers.util import cos_sim
 from spacy.matcher.dependencymatcher import defaultdict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from itertools import combinations
 
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 from grimoire.db.models import Character, Knowledge, Message
-import networkx as nx
 
 
 def get_knowledge_entity(term: str, chat_id: int, session: Session) -> Knowledge | None:
@@ -121,4 +122,6 @@ def get_knowledge_graph(chat_id: int, session: Session):
 
     for memory_id, knowledge_set in relations.items():
         for a, b in combinations(knowledge_set, 2):
-            graph.add_edge(f"{a} {knowledge_dict[a].entity}", f"{b} {knowledge_dict[b].entity}", label=f"memory {memory_id}")
+            graph.add_edge(
+                f"{a} {knowledge_dict[a].entity}", f"{b} {knowledge_dict[b].entity}", label=f"memory {memory_id}"
+            )
