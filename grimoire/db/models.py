@@ -92,7 +92,8 @@ class Chat(Base):
     messages: Mapped[list["Message"]] = relationship()
     knowledge: Mapped[list["Knowledge"]] = relationship()
     characters: Mapped[list["Character"]] = relationship()
-    segmented_memory_interval: Mapped[int] = mapped_column(default=10)
+    segmented_memory_interval: Mapped[int] = mapped_column(default=5)
+    segmented_memory_messages: Mapped[int] = mapped_column(default=10)
 
 
 class User(Base):

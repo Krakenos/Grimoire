@@ -502,20 +502,11 @@ def get_character_from_names(
 
 def queue_segmented_memories(chat: Chat, new_messages: list[Message]) -> None:
     memory_interval = chat.segmented_memory_interval
+    memory_messages = chat.segmented_memory_messages
     for message in new_messages:
-        if message.message_index % memory_interval == 0:
-            if (
-                message.message_index - (memory_interval + memory_interval // 2) > 0
-            ):  # check if can generate between memories for overlap
-                generate_segmented_memory.delay(
-                    chat_id=chat.id,
-                    start_index=message.message_index - (memory_interval + memory_interval // 2),
-                    end_index=message.message_index - memory_interval // 2,
-                    create_date=datetime.now()
-                )
-
+        if message.message_index % memory_interval == 0 and message.message_index >= memory_messages:
             generate_segmented_memory.delay(
-                chat_id=chat.id, start_index=message.message_index - memory_interval, end_index=message.message_index, create_date=datetime.now()
+                chat_id=chat.id, start_index=message.message_index - memory_messages, end_index=message.message_index, create_date=datetime.now()
             )
 
 
