@@ -16,7 +16,7 @@ spacy[cuda12x]
 SQLAlchemy~=2.0.22
 SQLAlchemy-Utils~=0.41.2
 sseclient-py~=1.8.0
-transformers~=4.43.3
+transformers~=4.48.1
 uvicorn~=0.23.2
 redis~=5.0.3
 rapidfuzz~=3.9.6
