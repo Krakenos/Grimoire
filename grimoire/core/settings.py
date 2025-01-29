@@ -52,6 +52,12 @@ class SummarizationSettings(BaseSettingsModel):
 
         return v
 
+    @field_validator("prompt")
+    @classmethod
+    def replace_newline(cls, v: str) -> str:
+        v = v.replace("\\n", "\n")
+        return v
+
     @field_validator("params", mode="before")
     @classmethod
     def parse_string(cls, v: Any) -> Any:
@@ -75,6 +81,14 @@ class ApiSettings(BaseSettingsModel):
     first_output_sequence: str = ""
     last_output_sequence: str = ""
     bos_token: str = "<s>"
+
+    @field_validator(
+        "system_sequence", "system_suffix", "input_sequence", "input_suffix", "output_sequence", "output_suffix"
+    )
+    @classmethod
+    def replace_newline(cls, v: str) -> str:
+        v = v.replace("\\n", "\n")
+        return v
 
 
 class RedisSettings(BaseSettingsModel):
