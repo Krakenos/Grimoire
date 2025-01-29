@@ -67,7 +67,7 @@ def make_summary_prompt(
     secondary_database_settings: SecondaryDatabaseSettings,
     prefer_local_tokenizer: bool,
     tokenizer: str,
-    include_names: bool = False,
+    include_names: bool = True,
 ) -> str | None:
     summarization_url = api_settings.url
     summarization_backend = api_settings.backend
@@ -186,7 +186,7 @@ def make_summary_prompt(
 def summarize(
     term: str,
     chat_id: int,
-    include_names: bool = False,
+    include_names: bool = True,
     max_retries: int = 50,
     retry_interval: int = 1,
 ) -> None:
