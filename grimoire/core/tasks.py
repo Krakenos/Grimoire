@@ -135,7 +135,7 @@ def make_summary_prompt(
             .order_by(Message.message_index)
         )
         query_results = session.scalars(query).all()
-        db_messages = [mes.external_id for mes in query_results]
+        db_messages = [mes.message for mes in query_results]
         sender_names = [mes.character.name for mes in query_results]
         if include_names:
             messages = []
@@ -287,8 +287,8 @@ def summarize(
         knowledge_entry.update_count = 1
         knowledge_entry.updated_date = datetime.now()
         knowledge_entry.vector_embedding = summary_embedding
-        summary_logger.debug(f"({knowledge_entry.token_count} tokens){term}: {summary_text}\n{request_json}")
-        # summary_logger.debug(f"#### PROMPT ####\n{prompt}\n#### RESPONSE ####\n{summary_text}")
+        # summary_logger.debug(f"({knowledge_entry.token_count} tokens){term}: {summary_text}\n{request_json}")
+        summary_logger.debug(f"#### PROMPT ####\n{prompt}\n#### RESPONSE ####\n{summary_text}")
         session.commit()
 
 
