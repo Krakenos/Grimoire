@@ -287,7 +287,7 @@ def summarize(
         knowledge_entry.update_count = 1
         knowledge_entry.updated_date = datetime.now()
         knowledge_entry.vector_embedding = summary_embedding
-        # summary_logger.debug(f"({knowledge_entry.token_count} tokens){term}: {summary_text}\n{request_json}")
+        summary_logger.debug(f"({knowledge_entry.token_count} tokens){term}: {summary_text}\n{request_json}")
         summary_logger.debug(f"#### PROMPT ####\n{prompt}\n#### RESPONSE ####\n{summary_text}")
         session.commit()
 
