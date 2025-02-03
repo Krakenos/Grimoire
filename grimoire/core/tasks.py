@@ -4,7 +4,7 @@ from datetime import datetime
 
 from celery import Celery
 from celery_singleton import Singleton
-from sqlalchemy import create_engine, select
+from sqlalchemy import NullPool, create_engine, select
 from sqlalchemy.orm import Session
 
 from grimoire.common.llm_helpers import generate_text, token_count
@@ -18,6 +18,8 @@ from grimoire.db.secondary_database import get_messages_from_external_db
 broker_url = redis_manager.celery_broker_url()
 
 celery_app = Celery("tasks", broker=broker_url)
+
+celery_db_engine = create_engine(settings.DB_ENGINE, poolclass=NullPool)
 
 if redis_manager.sentinel:
     transport_options = {"master_name": redis_manager.sentinel_master}
@@ -86,7 +88,6 @@ def make_summary_prompt(
     }
 
     secondary_database = secondary_database_settings.enabled
-    secondary_database_url = secondary_database_settings.db_engine
     secondary_database_encryption_method = secondary_database_settings.message_encryption
     secondary_database_encryption_key = secondary_database_settings.encryption_key
     chat_id = knowledge_entry.chat_id
@@ -114,7 +115,6 @@ def make_summary_prompt(
         sender_names = [mes.character.name for mes in query_results]
         db_messages = get_messages_from_external_db(
             external_ids,
-            secondary_database_url,
             secondary_database_encryption_method,
             secondary_database_encryption_key,
         )
@@ -192,12 +192,10 @@ def summarize(
 ) -> None:
     from grimoire.core.vector_embeddings import get_text_embeddings
 
-    db_engine = settings.DB_ENGINE
     api_settings = settings.summarization_api
     summarization_settings = settings.summarization
     tokenization_settings = settings.tokenization
     secondary_database_settings = settings.secondary_database
-    db = create_engine(db_engine)
 
     summarization_url = api_settings.url
     summarization_backend = api_settings.backend
@@ -208,7 +206,7 @@ def summarize(
     prefer_local_tokenizer = tokenization_settings.prefer_local_tokenizer
     tokenizer = tokenization_settings.local_tokenizer
 
-    with Session(db) as session:
+    with Session(celery_db_engine) as session:
         knowledge_entry = get_knowledge_entity(term, chat_id, session)
 
         if knowledge_entry is None:

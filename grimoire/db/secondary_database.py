@@ -2,13 +2,21 @@ import base64
 from collections import defaultdict
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from sqlalchemy import create_engine, text
+from sqlalchemy import NullPool, create_engine, text
+
+from grimoire.core.settings import settings
+
+if settings.secondary_database.enabled:
+    secondary_db_engine = create_engine(settings.secondary_database.db_engine, poolclass=NullPool)
+else:
+    secondary_db_engine = None
 
 
 def get_messages_from_external_db(
-    message_ids: list[str], database_url: str, encryption_method: str, encryption_key: str
+    message_ids: list[str], encryption_method: str, encryption_key: str
 ) -> list[str | None]:
-    secondary_db_engine = create_engine(database_url)
+    if secondary_db_engine is None:
+        raise ValueError("Secondary database is None.")
 
     messages_content = defaultdict(lambda: [])
     swipe_indices = {}
