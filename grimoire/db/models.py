@@ -92,6 +92,7 @@ class Chat(Base):
     messages: Mapped[list["Message"]] = relationship()
     knowledge: Mapped[list["Knowledge"]] = relationship()
     characters: Mapped[list["Character"]] = relationship()
+    segmented_memmories: Mapped[list["SegmentedMemory"]] = relationship()
     segmented_memory_interval: Mapped[int] = mapped_column(default=5)
     segmented_memory_messages: Mapped[int] = mapped_column(default=10)
 
@@ -128,6 +129,7 @@ class SegmentedMemory(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     chat_id: Mapped[int] = mapped_column(ForeignKey("chat.id"))
+    chat: Mapped[Chat] = relationship(back_populates="segmented_memmories")
     messages: Mapped[list["Message"]] = relationship(
         secondary=segmented_memories_message, back_populates="segmented_memories"
     )

@@ -82,7 +82,19 @@ def get_all_knowledge(
 
 def get_all_memories(
     db_session: Session, user_id: int, chat_id: int, skip: int = 0, limit: int = 100
-) -> Sequence[SegmentedMemory]: ...
+) -> Sequence[SegmentedMemory]:
+    query = (
+        (
+            select(SegmentedMemory)
+            .join(SegmentedMemory.chat)
+            .where(SegmentedMemory.chat_id == chat_id, Chat.user_id == user_id)
+        )
+        .order_by(SegmentedMemory.created_date)
+        .offset(skip)
+        .limit(limit)
+    )
+    results = db_session.scalars(query).all()
+    return results
 
 
 def get_knowledge(db_session: Session, user_id: int, chat_id: int, knowledge_id: int) -> Knowledge | None:
