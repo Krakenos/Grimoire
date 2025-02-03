@@ -306,12 +306,10 @@ def generate_segmented_memory(
 
     seg_mem_prompt_template = settings.summarization.segmented_memory_prompt
 
-    db_engine = settings.DB_ENGINE
     api_settings = settings.summarization_api
     summarization_settings = settings.summarization
     tokenization_settings = settings.tokenization
     secondary_database_settings = settings.secondary_database
-    db = create_engine(db_engine)
 
     summarization_url = api_settings.url
     summarization_backend = api_settings.backend
@@ -332,14 +330,13 @@ def generate_segmented_memory(
         "last_output_sequence": api_settings.last_output_sequence,
     }
 
-    with Session(db) as session:
+    with Session(celery_db_engine) as session:
         messages = get_messages_by_index(start_index, end_index, chat_id, session)
 
         if secondary_database_settings.enabled:
             ids = [mes.external_id for mes in messages]
             messages_texts = get_messages_from_external_db(
                 ids,
-                secondary_database_settings.db_engine,
                 secondary_database_settings.message_encryption,
                 secondary_database_settings.encryption_key,
             )
