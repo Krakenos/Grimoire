@@ -86,7 +86,6 @@ def make_summary_prompt(
     }
 
     secondary_database = secondary_database_settings.enabled
-    secondary_database_url = secondary_database_settings.db_engine
     secondary_database_encryption_method = secondary_database_settings.message_encryption
     secondary_database_encryption_key = secondary_database_settings.encryption_key
     chat_id = knowledge_entry.chat_id
@@ -114,7 +113,6 @@ def make_summary_prompt(
         sender_names = [mes.character.name for mes in query_results]
         db_messages = get_messages_from_external_db(
             external_ids,
-            secondary_database_url,
             secondary_database_encryption_method,
             secondary_database_encryption_key,
         )
