@@ -4,7 +4,7 @@ from datetime import datetime
 
 from celery import Celery
 from celery_singleton import Singleton
-from sqlalchemy import create_engine, select, NullPool
+from sqlalchemy import NullPool, create_engine, select
 from sqlalchemy.orm import Session
 
 from grimoire.common.llm_helpers import generate_text, token_count
