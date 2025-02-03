@@ -37,6 +37,11 @@ class SummarizationSettings(BaseSettingsModel):
         "{system_sequence}{previous_summary}{additional_info}{messages}{system_suffix}\n"
         "{input_sequence}Describe {term}.{input_suffix}{output_sequence}"
     )
+    segmented_memory_prompt: str = (
+        "{system_sequence}Below is conversation snippet.\n{messages}{system_suffix}{input_sequence}"
+        "Summarize the most important facts and events in the story so far. Limit the summary to one paragraph. "
+        "Your response should include nothing but the summary.{input_suffix}{output_sequence}"
+    )
     limit_rate: int = 1
     max_tokens: int = 300
     params: dict = {"min_p": 0.1, "rep_pen": 1.0, "temperature": 0.6, "stop": ["</s>"], "stop_sequence": ["</s>"]}

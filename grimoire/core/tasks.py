@@ -304,11 +304,7 @@ def generate_segmented_memory(
 ) -> None:
     from grimoire.core.vector_embeddings import get_text_embeddings
 
-    seg_mem_prompt_template = (
-        "{system_sequence}Below is conversation snippet.\n{messages}{system_suffix}{input_sequence}"
-        "Summarize the most important facts and events in the story so far. Limit the summary to one paragraph. "
-        "Your response should include nothing but the summary.{input_suffix}{output_sequence}"
-    )
+    seg_mem_prompt_template = settings.summarization.segmented_memory_prompt
 
     db_engine = settings.DB_ENGINE
     api_settings = settings.summarization_api
