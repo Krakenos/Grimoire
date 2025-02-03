@@ -67,7 +67,7 @@ def make_summary_prompt(
     secondary_database_settings: SecondaryDatabaseSettings,
     prefer_local_tokenizer: bool,
     tokenizer: str,
-    include_names: bool = False,
+    include_names: bool = True,
 ) -> str | None:
     summarization_url = api_settings.url
     summarization_backend = api_settings.backend
@@ -135,7 +135,7 @@ def make_summary_prompt(
             .order_by(Message.message_index)
         )
         query_results = session.scalars(query).all()
-        db_messages = [mes.external_id for mes in query_results]
+        db_messages = [mes.message for mes in query_results]
         sender_names = [mes.character.name for mes in query_results]
         if include_names:
             messages = []
@@ -186,7 +186,7 @@ def make_summary_prompt(
 def summarize(
     term: str,
     chat_id: int,
-    include_names: bool = False,
+    include_names: bool = True,
     max_retries: int = 50,
     retry_interval: int = 1,
 ) -> None:
@@ -288,7 +288,7 @@ def summarize(
         knowledge_entry.updated_date = datetime.now()
         knowledge_entry.vector_embedding = summary_embedding
         summary_logger.debug(f"({knowledge_entry.token_count} tokens){term}: {summary_text}\n{request_json}")
-        # summary_logger.debug(f"#### PROMPT ####\n{prompt}\n#### RESPONSE ####\n{summary_text}")
+        summary_logger.debug(f"#### PROMPT ####\n{prompt}\n#### RESPONSE ####\n{summary_text}")
         session.commit()
 
 

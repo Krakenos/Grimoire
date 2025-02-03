@@ -506,7 +506,7 @@ def process_request(
     messages_names: list[str],
     db_session,
     characters: list[ChatDataCharacter] | None = None,
-    include_names: bool = False,
+    include_names: bool = True,
     external_user_id: str | None = None,
     token_limit: int | None = None,
 ) -> list[KnowledgeData]:
