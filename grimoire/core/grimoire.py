@@ -507,7 +507,7 @@ def queue_segmented_memories(chat: Chat, new_messages: list[Message]) -> None:
         if message.message_index % memory_interval == 0 and message.message_index >= memory_messages:
             generate_segmented_memory.delay(
                 chat_id=chat.id,
-                start_index=message.message_index - memory_messages,
+                start_index=message.message_index - memory_messages + 1,
                 end_index=message.message_index,
                 create_date=datetime.now(),
             )
