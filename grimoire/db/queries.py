@@ -13,6 +13,9 @@ from grimoire.core.settings import settings
 from grimoire.db.models import Character, Knowledge, Message
 
 
+from pyvis.network import Network
+
+
 def get_knowledge_entity(term: str, chat_id: int, session: Session) -> Knowledge | None:
     return get_knowledge_entities([term], chat_id, session)[0]
 
@@ -120,8 +123,15 @@ def get_knowledge_graph(chat_id: int, session: Session):
                 memory_dict[memory.id] = memory
                 relations[memory.id].add(knowledge.id)
 
+    links = defaultdict(lambda: defaultdict(lambda: 0))
     for memory_id, knowledge_set in relations.items():
         for a, b in combinations(knowledge_set, 2):
-            graph.add_edge(
-                f"{a} {knowledge_dict[a].entity}", f"{b} {knowledge_dict[b].entity}", label=f"memory {memory_id}"
-            )
+            links[f"{a} {knowledge_dict[a].entity}"][f"{b} {knowledge_dict[b].entity}"] += 1
+
+    for key, values in links.items():
+        for key2, connections in values.items():
+            graph.add_edge(key, key2, weight=connections)
+
+    nt = Network('2000px', '2000px')
+    nt.from_nx(graph)
+    nt.write_html("graph.html")

@@ -21,7 +21,7 @@ from grimoire.core.settings import settings
 from grimoire.core.tasks import generate_segmented_memory, summarize
 from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import Character, CharacterTriggerText, Chat, Knowledge, Message, SpacyNamedEntity, User
-from grimoire.db.queries import get_characters, get_knowledge_entities, semantic_search
+from grimoire.db.queries import get_characters, get_knowledge_entities, semantic_search, get_knowledge_graph
 
 
 @dataclass(frozen=True, eq=True)
@@ -605,4 +605,5 @@ def process_request(
 
     end_time = timeit.default_timer()
     general_logger.info(f"Request processing time: {end_time - start_time}s")
+    get_knowledge_graph(chat.id, db_session)
     return knowledge_data
