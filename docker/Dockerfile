@@ -27,11 +27,7 @@ FROM deps AS project
 COPY /grimoire ./grimoire
 COPY /config ./config
 COPY entrypoint.sh ./entrypoint.sh
-COPY entrypoint-api.sh ./entrypoint-api.sh
-COPY entrypoint-workers.sh ./entrypoint-workers.sh
 RUN chmod +x entrypoint.sh
-RUN chmod +x entrypoint-api.sh
-RUN chmod +x entrypoint-workers.sh
 COPY alembic.ini ./alembic.ini
 COPY run.py ./run.py
 
@@ -43,10 +39,3 @@ COPY /config ./config
 FROM project AS run
 EXPOSE 5005
 ENTRYPOINT ["./entrypoint.sh"]
-
-FROM project AS run-api
-EXPOSE 5005
-ENTRYPOINT ["./entrypoint-api.sh"]
-
-FROM project AS run-workers
-ENTRYPOINT ["./entrypoint-workers.sh"]
