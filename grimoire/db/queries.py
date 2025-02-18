@@ -2,6 +2,7 @@ from itertools import combinations
 
 import networkx as nx
 import numpy as np
+from pyvis.network import Network
 from rapidfuzz import fuzz, process, utils
 from sentence_transformers.util import cos_sim
 from spacy.matcher.dependencymatcher import defaultdict
@@ -10,10 +11,7 @@ from sqlalchemy.orm import Session
 
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
-from grimoire.db.models import Character, Knowledge, Message
-
-
-from pyvis.network import Network
+from grimoire.db.models import Character, Chat, Knowledge, Message
 
 
 def get_knowledge_entity(term: str, chat_id: int, session: Session) -> Knowledge | None:
@@ -108,8 +106,10 @@ def get_messages_by_index(start_index: int, end_index: int, chat_id: int, sessio
     return list(query_results)
 
 
-def get_knowledge_graph(chat_id: int, session: Session):
-    query = select(Knowledge).where(Knowledge.chat_id == chat_id).order_by(Knowledge.id)
+def get_knowledge_graph(chat_id: int, user_id: int, session: Session) -> nx.Graph:
+    query = (
+        select(Knowledge).join(Chat).where(Knowledge.chat_id == chat_id, Chat.user_id == user_id).order_by(Knowledge.id)
+    )
     knowledge_entries = list(session.scalars(query).all())
     knowledge_dict = {knowledge.id: knowledge for knowledge in knowledge_entries}
     memory_dict = {}
@@ -124,7 +124,7 @@ def get_knowledge_graph(chat_id: int, session: Session):
                 relations[memory.id].add(knowledge.id)
 
     links = defaultdict(lambda: defaultdict(lambda: 0))
-    for memory_id, knowledge_set in relations.items():
+    for _memory_id, knowledge_set in relations.items():
         for a, b in combinations(knowledge_set, 2):
             links[f"{a} {knowledge_dict[a].entity}"][f"{b} {knowledge_dict[b].entity}"] += 1
 
@@ -132,6 +132,8 @@ def get_knowledge_graph(chat_id: int, session: Session):
         for key2, connections in values.items():
             graph.add_edge(key, key2, weight=connections)
 
-    nt = Network('2000px', '2000px')
+    nt = Network("2000px", "2000px")
     nt.from_nx(graph)
     nt.write_html("graph.html")
+
+    return graph

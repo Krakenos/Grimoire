@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from datetime import datetime
 
+from networkx.readwrite import json_graph
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -9,6 +10,7 @@ from grimoire.common.llm_helpers import token_count
 from grimoire.core.settings import settings
 from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import Base, Chat, Knowledge, Message, SegmentedMemory, User
+from grimoire.db.queries import get_knowledge_graph
 
 
 def get_users(db_session: Session, skip: int = 0, limit: int = 100) -> Sequence[User]:
@@ -186,3 +188,9 @@ def update_summary_metadata(db_session: Session, knowledge: Knowledge) -> Knowle
     db_session.commit()
     db_session.refresh(knowledge)
     return knowledge
+
+
+def get_memory_graph(db_session: Session, chat_id: int, user_id: int):
+    graph = get_knowledge_graph(chat_id, user_id, db_session)
+    data = json_graph.node_link_data(graph)
+    return data

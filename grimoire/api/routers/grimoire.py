@@ -204,6 +204,11 @@ def get_all_memories(user_id: int, chat_id: int, skip: int = 0, limit: int = 100
     return memories
 
 
+@router.get("/users/{user_id}/chats/{chat_id}/memory_graph", response_model=dict)
+def get_memory_graph(user_id: int, chat_id: int, db: Session = Depends(get_db)):
+    return api_utils.get_memory_graph(db, chat_id, user_id)
+
+
 @router.post("/get_data", response_model=list[KnowledgeData])
 def get_data(chat_data: ChatData, db: Session = Depends(get_db)):
     chat_texts = [message.text for message in chat_data.messages]
