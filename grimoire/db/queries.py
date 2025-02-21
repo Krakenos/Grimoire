@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
-from grimoire.db.models import Character, Chat, Knowledge, Message
+from grimoire.db.models import Character, Chat, Knowledge, Message, SegmentedMemory
 
 
 def get_knowledge_entity(term: str, chat_id: int, session: Session) -> Knowledge | None:
@@ -50,10 +50,13 @@ def get_knowledge_entities(terms: list[str], chat_id: int, session: Session) -> 
 
 
 @time_execution
-def semantic_search(message_embeddings: np.ndarray, chat_id: int, session: Session) -> list[Knowledge]:
+def semantic_search(
+    message_embeddings: np.ndarray, chat_id: int, session: Session
+) -> list[Knowledge | SegmentedMemory]:
     message_amount = len(message_embeddings)
     weights = np.linspace(0.5, 1, num=message_amount)
-    candidates = []
+    knowledge_candidates = []
+    memory_candidates = []
 
     for embedding in message_embeddings:
         query = (
@@ -64,24 +67,30 @@ def semantic_search(message_embeddings: np.ndarray, chat_id: int, session: Sessi
         )
         similar_messages = session.scalars(query)
         for message in similar_messages:
-            candidates.extend(message.knowledge)
+            knowledge_candidates.extend(message.knowledge)
+            memory_candidates.extend(message.segmented_memories)
 
-    candidates = list(set(candidates))
-    candidates = [candidate for candidate in candidates if candidate.vector_embedding is not None and candidate.enabled]
+    knowledge_candidates = list(set(knowledge_candidates))
+    knowledge_candidates = [
+        candidate for candidate in knowledge_candidates if candidate.vector_embedding is not None and candidate.enabled
+    ]
+    memory_candidates = list(set(memory_candidates))
+    memory_candidates = [candidate for candidate in memory_candidates if candidate.vector_embedding is not None]
+    all_candidates: list[Knowledge | SegmentedMemory] = [*knowledge_candidates, *memory_candidates]
 
-    if not candidates:
+    if not all_candidates:
         return []
 
     # Cast as float64
-    candidates_embeddings = np.array([candidate.vector_embedding for candidate in candidates], dtype="float64")
+    candidates_embeddings = np.array([candidate.vector_embedding for candidate in all_candidates], dtype="float64")
     message_embeddings = message_embeddings.astype("float64")
 
     cosine_similarity = cos_sim(message_embeddings, candidates_embeddings)
     weighted_similarity = cosine_similarity.T * weights
     highest_similarities = np.max(weighted_similarity.numpy(), axis=1)
     sorted_indices = np.argsort(highest_similarities)[::-1]
-    sorted_knowledge = [candidates[i] for i in sorted_indices]
-    return sorted_knowledge
+    sorted_entries = [all_candidates[i] for i in sorted_indices]
+    return sorted_entries
 
 
 def get_character(name: str, chat_id: int, session: Session) -> Character | None:
