@@ -381,8 +381,9 @@ def generate_segmented_memory(
             retry_interval,
         )
         vector_embedding = get_text_embeddings(memory_text)[0]
+        memory_entry = f"[ Memory: {memory_text} ]"
         tokens = token_count(
-            [memory_text],
+            [memory_entry],
             summarization_backend,
             summarization_url,
             tokenizer,
@@ -392,6 +393,7 @@ def generate_segmented_memory(
         new_memory = SegmentedMemory(
             chat_id=chat_id,
             summary=memory_text,
+            memory_entry=memory_entry,
             vector_embedding=vector_embedding,
             token_count=tokens,
             created_date=create_date,
