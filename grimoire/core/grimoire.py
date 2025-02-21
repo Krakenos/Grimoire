@@ -20,7 +20,16 @@ from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 from grimoire.core.tasks import generate_segmented_memory, summarize
 from grimoire.core.vector_embeddings import get_text_embeddings
-from grimoire.db.models import Character, CharacterTriggerText, Chat, Knowledge, Message, SpacyNamedEntity, User
+from grimoire.db.models import (
+    Character,
+    CharacterTriggerText,
+    Chat,
+    Knowledge,
+    Message,
+    SegmentedMemory,
+    SpacyNamedEntity,
+    User,
+)
 from grimoire.db.queries import get_characters, get_knowledge_entities, semantic_search
 
 
@@ -586,21 +595,27 @@ def process_request(
     queue_segmented_memories(chat, new_messages)
 
     vector_embeddings = np.array([embedding_dict[mes] for mes in chat_texts])
-    ordered_knowledge = semantic_search(vector_embeddings, chat.id, db_session)
-
+    ordered_entries = semantic_search(vector_embeddings, chat.id, db_session)
+    ordered_memory = []
     knowledge_data = []
+
+    for entry in ordered_entries:
+        if isinstance(entry, SegmentedMemory):
+            ordered_memory.append((entry.memory_entry, entry.token_count))
+        elif isinstance(entry, Knowledge):
+            ordered_memory.append((entry.summary_entry, entry.token_count))
+
     if token_limit:
         current_tokens = 0
-        for index, knowledge in enumerate(ordered_knowledge, 1):
-            current_tokens += knowledge.token_count
+        for index, knowledge in enumerate(ordered_memory, 1):
+            current_tokens += knowledge[1]
             if current_tokens < token_limit:
-                knowledge_data.append(KnowledgeData(text=knowledge.summary_entry, relevance=index))
+                knowledge_data.append(KnowledgeData(text=knowledge[0], relevance=index))
             else:
                 break
     else:
         knowledge_data = [
-            KnowledgeData(text=knowledge.summary_entry, relevance=index)
-            for index, knowledge in enumerate(ordered_knowledge, 1)
+            KnowledgeData(text=knowledge[0], relevance=index) for index, knowledge in enumerate(ordered_memory, 1)
         ]
 
     end_time = timeit.default_timer()
