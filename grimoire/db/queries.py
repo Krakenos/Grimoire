@@ -141,8 +141,9 @@ def get_knowledge_graph(chat_id: int, user_id: int, session: Session) -> nx.Grap
         for key2, connections in values.items():
             graph.add_edge(key, key2, weight=connections)
 
-    nt = Network("2000px", "2000px")
-    nt.from_nx(graph)
-    nt.write_html("graph.html")
+    # Debug stuff for graphs
+    # nt = Network("2000px", "2000px")
+    # nt.from_nx(graph)
+    # nt.write_html("graph.html")
 
     return graph
