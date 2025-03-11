@@ -2,7 +2,6 @@ from itertools import combinations
 
 import networkx as nx
 import numpy as np
-from pyvis.network import Network
 from rapidfuzz import fuzz, process, utils
 from sentence_transformers.util import cos_sim
 from spacy.matcher.dependencymatcher import defaultdict
