@@ -216,6 +216,7 @@ def get_data(chat_data: ChatData, db: Session = Depends(get_db)):
     messages_external_ids = [message.external_id for message in chat_data.messages]
     characters = chat_data.characters
     include_names = chat_data.include_names
+    lorebook_entries = chat_data.lorebook_entries
     return process_request(
         chat_data.external_chat_id,
         chat_texts,
@@ -223,6 +224,7 @@ def get_data(chat_data: ChatData, db: Session = Depends(get_db)):
         messages_names,
         db,
         characters,
+        lorebook_entries,
         include_names,
         chat_data.external_user_id,
         chat_data.max_tokens,

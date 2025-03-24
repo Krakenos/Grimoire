@@ -13,7 +13,7 @@ from rapidfuzz import utils as fuzz_utils
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, with_loader_criteria
 
-from grimoire.api.schemas.grimoire import ChatDataCharacter, KnowledgeData
+from grimoire.api.schemas.grimoire import ChatDataCharacter, KnowledgeData, ChatDataLorebookEntry
 from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
@@ -491,6 +491,7 @@ def process_request(
     messages_names: list[str],
     db_session,
     characters: list[ChatDataCharacter] | None = None,
+    lorebook_entries: list[ChatDataLorebookEntry] | None = None,
     include_names: bool = True,
     external_user_id: str | None = None,
     token_limit: int | None = None,
