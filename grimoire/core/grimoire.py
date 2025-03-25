@@ -495,6 +495,19 @@ def queue_segmented_memories(chat: Chat, new_messages: list[Message]) -> None:
             )
 
 
+def entity_lorebook_map(
+    lorebook_entities: list[list[NamedEntity]], lorebook_texts: list[str], entity_map: dict[str, str]
+) -> dict[str, set[str]]:
+    ent_lorebook_map: defaultdict[str, set[str]] = defaultdict(set)
+
+    for lb_entities, lb_text in zip(lorebook_entities, lorebook_texts, strict=True):
+        for entity in lb_entities:
+            general_entity = entity_map[entity.name]
+            ent_lorebook_map[general_entity].add(lb_text)
+
+    return ent_lorebook_map
+
+
 def process_request(
     external_chat_id: str,
     chat_texts: list[str],
@@ -525,7 +538,9 @@ def process_request(
             lorebook_texts.append(f"[ {keys_text}: {lorebook_entry.description} ]")
 
     doc_time = timeit.default_timer()
-    entity_list, entity_dict = get_named_entities(chat_texts, messages_external_ids, messages_names, lorebook_texts, chat)
+    entity_list, entity_dict = get_named_entities(
+        chat_texts, messages_external_ids, messages_names, lorebook_texts, chat
+    )
     doc_end_time = timeit.default_timer()
     general_logger.debug(f"Getting named entities {doc_end_time - doc_time} seconds")
 
@@ -541,7 +556,8 @@ def process_request(
     last_messages = chat_texts[:-excluded_messages]  # exclude last few messages from saving
     last_names = messages_names[:-excluded_messages]
     last_external_ids = messages_external_ids[:-excluded_messages]
-    last_entities = entity_list[:-excluded_messages-len(lorebook_texts)]
+    last_entities = entity_list[: -excluded_messages - len(lorebook_texts)]  # remove lorebook entities
+    lorebook_entities = entity_list[len(chat_texts) :]
 
     characters_dict = update_characters(characters, messages_names, chat.id, entity_similarity_dict, db_session)
 

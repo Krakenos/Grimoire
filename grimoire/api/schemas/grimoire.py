@@ -84,6 +84,7 @@ class ChatDataCharacter(BaseModel):
     description: str | None = None
     character_note: str | None = None
 
+
 class ChatDataLorebookEntry(BaseModel):
     keys: list[str]
     description: str
