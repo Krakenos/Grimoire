@@ -31,6 +31,7 @@ if redis_manager.sentinel:
 
 celery_app.conf.task_routes = {
     "grimoire.core.tasks.summarize": {"queue": "summarization_queue"},
+    "grimoire.core.tasks.describe_entity": {"queue": "summarization_queue"},
     "grimoire.core.tasks.generate_segmented_memory": {"queue": "summarization_queue"},
 }
 
@@ -186,9 +187,10 @@ def make_summary_prompt(
 
 
 @celery_app.task(base=Singleton, lock_expiry=60)
-def summarize(
+def describe_entity(
     term: str,
     chat_id: int,
+    lorebook_entries: set[str],
     include_names: bool = True,
     max_retries: int = 50,
     retry_interval: int = 1,
@@ -291,6 +293,18 @@ def summarize(
         summary_logger.debug(f"({knowledge_entry.token_count} tokens){term}: {summary_text}\n{request_json}")
         summary_logger.debug(f"#### PROMPT ####\n{prompt}\n#### RESPONSE ####\n{summary_text}")
         session.commit()
+
+
+# TODO old task, remove it later
+@celery_app.task(base=Singleton, lock_expiry=60)
+def summarize(
+    term: str,
+    chat_id: int,
+    include_names: bool = True,
+    max_retries: int = 50,
+    retry_interval: int = 1,
+) -> None:
+    describe_entity(term, chat_id, set(), include_names, max_retries, retry_interval)
 
 
 @celery_app.task

@@ -18,7 +18,7 @@ from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
-from grimoire.core.tasks import generate_segmented_memory, summarize
+from grimoire.core.tasks import generate_segmented_memory, summarize, describe_entity
 from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import (
     Character,
@@ -497,7 +497,7 @@ def queue_segmented_memories(chat: Chat, new_messages: list[Message]) -> None:
 
 def entity_lorebook_map(
     lorebook_entities: list[list[NamedEntity]], lorebook_texts: list[str], entity_map: dict[str, str]
-) -> dict[str, set[str]]:
+) -> defaultdict[str, set[str]]:
     ent_lorebook_map: defaultdict[str, set[str]] = defaultdict(set)
 
     for lb_entities, lb_text in zip(lorebook_entities, lorebook_texts, strict=True):
@@ -559,6 +559,8 @@ def process_request(
     last_entities = entity_list[: -excluded_messages - len(lorebook_texts)]  # remove lorebook entities
     lorebook_entities = entity_list[len(chat_texts) :]
 
+    ent_lb_map = entity_lorebook_map(lorebook_entities, lorebook_texts, entity_similarity_dict)
+
     characters_dict = update_characters(characters, messages_names, chat.id, entity_similarity_dict, db_session)
 
     new_message_indices, chat, new_messages = save_messages(
@@ -578,10 +580,12 @@ def process_request(
             general_logger.debug(f"{entity.name}, {entity.label}, {spacy.explain(entity.label)}")
 
     to_summarize = list({entity_similarity_dict[ent_name] for ent_name in ent_names})
+
     for ent in to_summarize:
-        summarize.delay(
+        describe_entity.delay(
             ent,
             chat.id,
+            ent_lb_map[ent],
             include_names,
         )
 
