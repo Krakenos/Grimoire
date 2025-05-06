@@ -13,12 +13,12 @@ from rapidfuzz import utils as fuzz_utils
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, with_loader_criteria
 
-from grimoire.api.schemas.grimoire import ChatDataCharacter, KnowledgeData, ChatDataLorebookEntry
+from grimoire.api.schemas.grimoire import ChatDataCharacter, ChatDataLorebookEntry, KnowledgeData
 from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
-from grimoire.core.tasks import generate_segmented_memory, summarize, describe_entity
+from grimoire.core.tasks import describe_entity, generate_segmented_memory
 from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import (
     Character,

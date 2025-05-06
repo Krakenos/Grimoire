@@ -73,6 +73,7 @@ def make_summary_prompt(
     secondary_database_settings: SecondaryDatabaseSettings,
     prefer_local_tokenizer: bool,
     tokenizer: str,
+    extra_info: set[str],
     include_names: bool = True,
 ) -> str | None:
     summarization_url = api_settings.url
@@ -157,6 +158,9 @@ def make_summary_prompt(
     prompt = ""
     reversed_messages = []
     additional_info = get_additional_info(knowledge_entry, session)
+    extra_text = "\n".join(extra_info)
+    extra_text = f"{extra_text}\n" if extra_text else ""  # add ending newline if there is extra_text
+    additional_info = f"{additional_info}{extra_text}"
 
     for message in messages[::-1]:
         reversed_messages.append(f"{message}\n")
@@ -240,6 +244,7 @@ def describe_entity(
             secondary_database_settings,
             prefer_local_tokenizer,
             tokenizer,
+            lorebook_entries,
             include_names,
         )
 
