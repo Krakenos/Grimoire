@@ -1,5 +1,6 @@
 import json
 import timeit
+import uuid
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -580,3 +581,41 @@ def process_request(
     end_time = timeit.default_timer()
     general_logger.info(f"Request processing time: {end_time - start_time}s")
     return knowledge_data
+
+def generate_lorebook(input_text: str):
+    request_id = uuid.uuid4()
+
+    entity_dict = {}
+    split_texts = input_text.splitlines()
+    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME", "QUANTITY", "PERCENT"]
+    cached_values = get_cached_entities(split_texts)
+
+    for split_text, cached in zip(split_texts, cached_values, strict=True):
+        if cached is not None:
+            entity_dict[split_text] = cached
+
+    texts_to_process = [split_text for split_text in split_texts if split_text is not None]
+    spacy_docs = list(nlp.pipe(texts_to_process))
+
+    for text, doc in zip(texts_to_process, spacy_docs, strict=True):
+        entities = [NamedEntity(ent.text, ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
+        entity_dict[text] = entities
+
+    values_to_cache = [entity_dict[text] for text in texts_to_process]
+    cache_entities(texts_to_process, values_to_cache)
+
+    entity_list = [entity_dict[text] for text in split_texts]
+
+    unique_ents: list[NamedEntity] = list(set(chain(*entity_list)))
+    unique_ent_names = list({ent.name for ent in unique_ents})
+    entity_similarity_dict = filter_similar_entities(unique_ent_names)
+
+    entity_to_texts_map = defaultdict(list)
+    for text in split_texts:
+        for entity in entity_dict[text]:
+            entity_name = entity_similarity_dict[entity.name]
+            entity_to_texts_map[entity_name].append(text)
+
+    for ent in entity_similarity_dict:
+        # Here task to describe lorebook entries
+        ...
