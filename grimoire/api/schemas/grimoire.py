@@ -138,3 +138,9 @@ class GraphOut(BaseModel):
     graph: dict = {}
     nodes: list[GraphNode]
     edges: list[GraphEdge]
+
+class AutoLorebookRequest(BaseModel):
+    text: str
+
+class AutoLorebookResponse(BaseModel):
+    request_id: str
