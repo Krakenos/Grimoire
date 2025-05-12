@@ -610,6 +610,11 @@ def generate_lorebook(input_text: str):
     unique_ent_names = list({ent.name for ent in unique_ents})
     entity_similarity_dict = filter_similar_entities(unique_ent_names)
 
+    redis_key = f"LOREBOOK_ENTRIES_{str(request_id)}"
+    redis_value = entity_similarity_dict.keys()
+    redis_client = redis_manager.get_client()
+    redis_client.set(redis_key, json.dumps(redis_value), settings.redis.CACHE_EXPIRE_TIME)
+
     entity_to_texts_map = defaultdict(list)
     for text in split_texts:
         for entity in entity_dict[text]:
@@ -620,3 +625,13 @@ def generate_lorebook(input_text: str):
         generate_lorebook_entry.delay(ent, entity_to_texts_map[ent], str(request_id))
 
     return request_id
+
+def lorebook_status(req_id: str):
+    redis_client = redis_manager.get_client()
+    lorebook_entries = json.loads(redis_client.get(f"LOREBOOK_ENTRIES_{req_id}"))
+    lorebook_content = {}
+    for name in lorebook_entries:
+        entry = json.loads(redis_client.get(f"LOREBOOK_ENTRY_{req_id}_{name}"))
+        lorebook_content[name] = entry
+
+    return lorebook_content
