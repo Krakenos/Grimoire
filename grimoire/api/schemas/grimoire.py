@@ -116,3 +116,24 @@ class AutoLorebookRequest(BaseModel):
 
 class AutoLorebookResponse(BaseModel):
     request_id: str
+
+class LorebookEntry(BaseModel):
+    comment: str = "No comment provided"
+    key: list[str] = []
+    keysecondary: list[str] = []
+    content: str = "No content provided"
+    position: int = 0
+    constant: bool = False
+    order: int = 100
+    disable: bool = False
+    selective: bool = True
+    selectiveLogic: int = 0
+
+class Lorebook(BaseModel):
+    name: str = "Automatically generated Lorebook"
+    description: str = "No description provided"
+    entries: dict[str, LorebookEntry] = {}
+
+class LorebookStatusResponse(BaseModel):
+    status: str = "processing"
+    lorebook: Lorebook | None = None
