@@ -19,7 +19,7 @@ from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
-from grimoire.core.tasks import generate_segmented_memory, summarize
+from grimoire.core.tasks import generate_segmented_memory, summarize, generate_lorebook_entry
 from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import (
     Character,
@@ -617,5 +617,6 @@ def generate_lorebook(input_text: str):
             entity_to_texts_map[entity_name].append(text)
 
     for ent in entity_similarity_dict:
-        # Here task to describe lorebook entries
-        ...
+        generate_lorebook_entry.delay(ent, entity_to_texts_map[ent], str(request_id))
+
+    return request_id

@@ -110,3 +110,9 @@ class MemoriesDetailOut(BaseModel):
     summary: str
     token_count: int
     created_date: datetime
+
+class AutoLorebookRequest(BaseModel):
+    text: str
+
+class AutoLorebookResponse(BaseModel):
+    request_id: str
