@@ -17,7 +17,7 @@ from grimoire.api.schemas.grimoire import (
     KnowledgeOut,
     MemoriesOut,
     UserIn,
-    UserOut, AutoLorebookResponse, AutoLorebookRequest,
+    UserOut, AutoLorebookResponse, AutoLorebookRequest, LorebookStatusRequest, LorebookStatusResponse,
 )
 from grimoire.common import api_utils
 from grimoire.core.grimoire import process_request, generate_lorebook
@@ -232,3 +232,8 @@ def get_data(chat_data: ChatData, db: Session = Depends(get_db)):
 def autolorebook_create(req: AutoLorebookRequest):
     request_id = generate_lorebook(req.text)
     return AutoLorebookResponse(request_id=request_id)
+
+
+@router.post("/autolorebook/status", response_model=LorebookStatusResponse)
+def autolorebook_create(req: LorebookStatusRequest):
+    return api_utils.get_autolorebook(req.request_id)
