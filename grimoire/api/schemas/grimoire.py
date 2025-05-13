@@ -142,8 +142,10 @@ class GraphOut(BaseModel):
 class AutoLorebookRequest(BaseModel):
     text: str
 
+
 class AutoLorebookResponse(BaseModel):
     request_id: str
+
 
 class LorebookEntry(BaseModel):
     comment: str = "No comment provided"
@@ -157,14 +159,17 @@ class LorebookEntry(BaseModel):
     selective: bool = True
     selectiveLogic: int = 0
 
+
 class Lorebook(BaseModel):
     name: str = "Automatically generated Lorebook"
     description: str = "No description provided"
     entries: dict[str, LorebookEntry] = {}
 
+
 class LorebookStatusResponse(BaseModel):
     status: str = "processing"
     lorebook: Lorebook | None = None
+
 
 class LorebookStatusRequest(BaseModel):
     request_id: str

@@ -620,6 +620,7 @@ def process_request(
     general_logger.info(f"Request processing time: {end_time - start_time}s")
     return knowledge_data
 
+
 def generate_lorebook(input_text: str):
     request_id = uuid.uuid4()
 
@@ -663,6 +664,7 @@ def generate_lorebook(input_text: str):
         generate_lorebook_entry.delay(ent, entity_to_texts_map[ent], str(request_id))
 
     return request_id
+
 
 def lorebook_status(req_id: str):
     redis_client = redis_manager.get_client()
