@@ -165,3 +165,6 @@ class Lorebook(BaseModel):
 class LorebookStatusResponse(BaseModel):
     status: str = "processing"
     lorebook: Lorebook | None = None
+
+class LorebookStatusRequest(BaseModel):
+    request_id: str
