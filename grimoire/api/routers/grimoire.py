@@ -4,6 +4,8 @@ from starlette import status
 from starlette.responses import Response
 
 from grimoire.api.schemas.grimoire import (
+    AutoLorebookRequest,
+    AutoLorebookResponse,
     ChatData,
     ChatIn,
     ChatMessageIn,
@@ -15,12 +17,14 @@ from grimoire.api.schemas.grimoire import (
     KnowledgeDetailPatch,
     KnowledgeIn,
     KnowledgeOut,
+    LorebookStatusRequest,
+    LorebookStatusResponse,
     MemoriesOut,
     UserIn,
-    UserOut, AutoLorebookResponse, AutoLorebookRequest, LorebookStatusRequest, LorebookStatusResponse,
+    UserOut,
 )
 from grimoire.common import api_utils
-from grimoire.core.grimoire import process_request, generate_lorebook
+from grimoire.core.grimoire import generate_lorebook, process_request
 from grimoire.db.connection import get_db
 
 router = APIRouter(tags=["Grimoire specific endpoints"])
@@ -228,6 +232,7 @@ def get_data(chat_data: ChatData, db: Session = Depends(get_db)):
         chat_data.max_tokens,
     )
 
+
 @router.post("/autolorebook/create", response_model=AutoLorebookResponse)
 def autolorebook_create(req: AutoLorebookRequest):
     request_id = generate_lorebook(req.text)
@@ -235,5 +240,5 @@ def autolorebook_create(req: AutoLorebookRequest):
 
 
 @router.post("/autolorebook/status", response_model=LorebookStatusResponse)
-def autolorebook_create(req: LorebookStatusRequest):
+def autolorebook_status(req: LorebookStatusRequest):
     return api_utils.get_autolorebook(req.request_id)

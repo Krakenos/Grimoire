@@ -405,16 +405,16 @@ def generate_segmented_memory(
 
 
 @celery_app.task
-def generate_lorebook_entry(ent_name: str, texts: list[str], request_id: str, max_retries: int = 50, retry_interval: int = 1) -> None:
+def generate_lorebook_entry(
+    ent_name: str, texts: list[str], request_id: str, max_retries: int = 50, retry_interval: int = 1
+) -> None:
     api_settings = settings.summarization_api
     summarization_settings = settings.summarization
     tokenization_settings = settings.tokenization
-    secondary_database_settings = settings.secondary_database
 
     summarization_url = api_settings.url
     summarization_backend = api_settings.backend
     summarization_auth = api_settings.auth_key
-    limit_rate = summarization_settings.limit_rate
     context_len = api_settings.context_length
     response_len = summarization_settings.max_tokens
     prefer_local_tokenizer = tokenization_settings.prefer_local_tokenizer
@@ -440,7 +440,6 @@ def generate_lorebook_entry(ent_name: str, texts: list[str], request_id: str, ma
     generation_params["stop"].extend(additional_stops)
     generation_params["stop_sequence"].extend(additional_stops)
 
-
     instruct_fields = {
         "bos_token": api_settings.bos_token,
         "system_sequence": api_settings.system_sequence,
@@ -455,13 +454,24 @@ def generate_lorebook_entry(ent_name: str, texts: list[str], request_id: str, ma
 
     texts = [f"{text}\n" for text in texts]
 
-    text_tokens = token_count(texts, summarization_backend, summarization_url, tokenizer, prefer_local_tokenizer, summarization_auth)
+    text_tokens = token_count(
+        texts, summarization_backend, summarization_url, tokenizer, prefer_local_tokenizer, summarization_auth
+    )
 
     prompt = prompt_template.format(term=ent_name, **instruct_fields)
     prompt = prompt.replace("{additional_info}", "")
     prompt = prompt.replace("{previous_summary}", "")
     split_prompt = prompt.split("{messages}")
-    prompt_tokens = sum(token_count(split_prompt, summarization_backend, summarization_url, tokenizer, prefer_local_tokenizer, summarization_auth))
+    prompt_tokens = sum(
+        token_count(
+            split_prompt,
+            summarization_backend,
+            summarization_url,
+            tokenizer,
+            prefer_local_tokenizer,
+            summarization_auth,
+        )
+    )
     max_text_tokens = context_len - prompt_tokens
 
     current_text = ""
@@ -499,7 +509,6 @@ def generate_lorebook_entry(ent_name: str, texts: list[str], request_id: str, ma
                 current_tokens = 0
                 current_text = ""
 
-
     if current_text:
         full_prompt = summarization_settings.prompt.format(
             term=ent_name,
@@ -522,15 +531,13 @@ def generate_lorebook_entry(ent_name: str, texts: list[str], request_id: str, ma
     if lorebook_definition:
         # success
         key = f"LOREBOOK_ENTRY_{request_id}_{ent_name}"
-        value = {"status": "success",
-                 "result": lorebook_definition}
+        value = {"status": "success", "result": lorebook_definition}
         redis_client = redis_manager.get_client()
         redis_client.set(key, json.dumps(value), settings.redis.CACHE_EXPIRE_TIME)
 
     else:
         # failed
         key = f"LOREBOOK_ENTRY_{request_id}_{ent_name}"
-        value = {"status": "failed",
-                 "result": "Failed to create a definition for entry"}
+        value = {"status": "failed", "result": "Failed to create a definition for entry"}
         redis_client = redis_manager.get_client()
         redis_client.set(key, json.dumps(value), settings.redis.CACHE_EXPIRE_TIME)

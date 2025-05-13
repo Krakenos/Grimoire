@@ -19,7 +19,7 @@ from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
-from grimoire.core.tasks import generate_segmented_memory, summarize, generate_lorebook_entry
+from grimoire.core.tasks import generate_lorebook_entry, generate_segmented_memory, summarize
 from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import (
     Character,
@@ -582,6 +582,7 @@ def process_request(
     general_logger.info(f"Request processing time: {end_time - start_time}s")
     return knowledge_data
 
+
 def generate_lorebook(input_text: str):
     request_id = uuid.uuid4()
 
@@ -625,6 +626,7 @@ def generate_lorebook(input_text: str):
         generate_lorebook_entry.delay(ent, entity_to_texts_map[ent], str(request_id))
 
     return request_id
+
 
 def lorebook_status(req_id: str):
     redis_client = redis_manager.get_client()

@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from grimoire.api.schemas.grimoire import LorebookEntry, LorebookStatusResponse, Lorebook
+from grimoire.api.schemas.grimoire import Lorebook, LorebookEntry, LorebookStatusResponse
 from grimoire.common.llm_helpers import token_count
 from grimoire.core.grimoire import lorebook_status
 from grimoire.core.settings import settings
@@ -196,6 +196,7 @@ def get_memory_graph(db_session: Session, chat_id: int, user_id: int):
     graph = get_knowledge_graph(chat_id, user_id, db_session)
     data = json_graph.node_link_data(graph)
     return data
+
 
 def get_autolorebook(req_id: str):
     lb_status = lorebook_status(req_id)
