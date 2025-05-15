@@ -235,7 +235,7 @@ def get_data(chat_data: ChatData, db: Session = Depends(get_db)):
 
 @router.post("/autolorebook/create", response_model=AutoLorebookResponse)
 def autolorebook_create(req: AutoLorebookRequest):
-    request_id = generate_lorebook(req.text)
+    request_id = str(generate_lorebook(req.text))
     return AutoLorebookResponse(request_id=request_id)
 
 

@@ -612,7 +612,7 @@ def generate_lorebook(input_text: str):
     entity_similarity_dict = filter_similar_entities(unique_ent_names)
 
     redis_key = f"LOREBOOK_ENTRIES_{str(request_id)}"
-    redis_value = entity_similarity_dict.keys()
+    redis_value = list(entity_similarity_dict.keys())
     redis_client = redis_manager.get_client()
     redis_client.set(redis_key, json.dumps(redis_value), settings.redis.CACHE_EXPIRE_TIME)
 
