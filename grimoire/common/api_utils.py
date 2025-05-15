@@ -202,8 +202,8 @@ def get_autolorebook(req_id: str):
     lb_status = lorebook_status(req_id)
     entries = {}
     num = 0
-    for entry_name, status in lb_status.items():
-        entries[str(num)] = LorebookEntry(comment=entry_name, key=[entry_name], content=status["result"])
+    for entry_name, entry in lb_status.items():
+        entries[str(num)] = LorebookEntry(comment=entry_name, key=entry["keys"], content=entry["status"]["result"])
         num += 1
     lorebook = Lorebook(entries=entries)
     return LorebookStatusResponse(lorebook=lorebook)
