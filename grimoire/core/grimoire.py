@@ -620,14 +620,17 @@ def generate_lorebook(input_text: str):
     redis_client.set(redis_key, json.dumps(entries_dict), settings.redis.CACHE_EXPIRE_TIME)
 
     entity_to_texts_map = defaultdict(list)
-    for text_index, text in enumerate(split_texts):
-        for entity in entity_dict[text]:
+    iterable_texts = [None, *split_texts, None]
+    for prev_text, current_text, next_text in zip(iterable_texts, iterable_texts[1:], iterable_texts[2:]):
+        for entity in entity_dict[current_text]:
             entity_name = entity_similarity_dict[entity.name]
-            if text_index - 1 > 0:
-                entity_to_texts_map[entity_name].append(split_texts[text_index - 1])
-            entity_to_texts_map[entity_name].append(text)
-            if text_index + 1 < len(split_texts):
-                entity_to_texts_map[entity_name].append(split_texts[text_index + 1])
+            if prev_text is not None:
+                entity_to_texts_map[entity_name].append(prev_text)
+
+            entity_to_texts_map[entity_name].append(current_text)
+
+            if next_text is not None:
+                entity_to_texts_map[entity_name].append(next_text)
 
     # remove duplicate texts from lists
     for name, text_list in entity_to_texts_map.items():
