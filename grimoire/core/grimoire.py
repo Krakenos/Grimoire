@@ -583,6 +583,7 @@ def process_request(
     return knowledge_data
 
 
+@time_execution
 def generate_lorebook(input_text: str):
     request_id = uuid.uuid4()
 
@@ -621,16 +622,10 @@ def generate_lorebook(input_text: str):
 
     entity_to_texts_map = defaultdict(list)
     iterable_texts = [None, *split_texts, None]
-    for prev_text, current_text, next_text in zip(iterable_texts, iterable_texts[1:], iterable_texts[2:]):
-        for entity in entity_dict[current_text]:
+    for elements in zip(iterable_texts, iterable_texts[1:], iterable_texts[2:]):
+        for entity in entity_dict[elements[1]]:
             entity_name = entity_similarity_dict[entity.name]
-            if prev_text is not None:
-                entity_to_texts_map[entity_name].append(prev_text)
-
-            entity_to_texts_map[entity_name].append(current_text)
-
-            if next_text is not None:
-                entity_to_texts_map[entity_name].append(next_text)
+            entity_to_texts_map[entity_name].extend(element for element in elements if element is not None)
 
     # remove duplicate texts from lists
     for name, text_list in entity_to_texts_map.items():
