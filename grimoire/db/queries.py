@@ -119,26 +119,28 @@ def get_knowledge_graph(chat_id: int, user_id: int, session: Session) -> nx.Grap
         select(Knowledge).join(Chat).where(Knowledge.chat_id == chat_id, Chat.user_id == user_id).order_by(Knowledge.id)
     )
     knowledge_entries = list(session.scalars(query).all())
-    knowledge_dict = {knowledge.id: knowledge for knowledge in knowledge_entries}
-    memory_dict = {}
     graph = nx.Graph()
 
     relations = defaultdict(set)
     for knowledge in knowledge_entries:
-        graph.add_node(f"{knowledge.id} {knowledge.entity}")
+        knowledge_memories = set()
         for mes in knowledge.messages:
             for memory in mes.segmented_memories:
-                memory_dict[memory.id] = memory
+                knowledge_memories.add(memory.id)
                 relations[memory.id].add(knowledge.id)
+        graph.add_node(knowledge.id, label=f"{knowledge.entity}", memory_list=sorted(list(knowledge_memories)))
 
-    links = defaultdict(lambda: defaultdict(lambda: 0))
-    for _memory_id, knowledge_set in relations.items():
+    links_amount = defaultdict(lambda: defaultdict(lambda: 0))
+    links_memories = defaultdict(lambda: defaultdict(set))
+    for memory_id, knowledge_set in relations.items():
         for a, b in combinations(knowledge_set, 2):
-            links[f"{a} {knowledge_dict[a].entity}"][f"{b} {knowledge_dict[b].entity}"] += 1
+            links_amount[a][b] += 1
+            links_memories[a][b].add(memory_id)
 
-    for key, values in links.items():
+    for key, values in links_amount.items():
         for key2, connections in values.items():
-            graph.add_edge(key, key2, weight=connections)
+            lab = "1 memory" if connections == 1 else f"{connections} memories"
+            graph.add_edge(key, key2, weight=connections, label=lab, memory_list=sorted(list(links_memories[key][key2])))
 
     # Debug stuff for graphs
     # nt = Network("2000px", "2000px")
