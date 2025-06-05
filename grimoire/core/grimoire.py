@@ -9,6 +9,8 @@ from itertools import chain
 import PyPDF2
 import numpy as np
 import spacy
+import ebooklib
+from ebooklib import epub
 from rapidfuzz import fuzz
 from rapidfuzz import process as fuzz_process
 from rapidfuzz import utils as fuzz_utils
@@ -591,6 +593,17 @@ def extract_text_from_pdf(file_path):
         for page_num in range(reader.numPages):
             page = reader.getPage(page_num)
             text += page.extract_text()
+
+    return text
+
+
+def extract_text_from_epub(file_path):
+    book = epub.read_epub(file_path)
+    text = ""
+
+    for item in book.get_items():
+        if item.get_type() == ebooklib.ITEM_DOCUMENT:
+            text += item.get_body_content().decode('utf-8')
 
     return text
 
