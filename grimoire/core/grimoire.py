@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from itertools import chain
 
+import PyPDF2
 import numpy as np
 import spacy
 from rapidfuzz import fuzz
@@ -581,6 +582,17 @@ def process_request(
     end_time = timeit.default_timer()
     general_logger.info(f"Request processing time: {end_time - start_time}s")
     return knowledge_data
+
+
+def extract_text_from_pdf(file_path):
+    text = ""
+    with open(file_path, "rb") as file:
+        reader = PyPDF2.PdfFileReader(file)
+        for page_num in range(reader.numPages):
+            page = reader.getPage(page_num)
+            text += page.extract_text()
+
+    return text
 
 
 @time_execution
