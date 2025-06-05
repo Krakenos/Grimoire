@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 from starlette import status
 from starlette.responses import Response
@@ -242,3 +242,9 @@ def autolorebook_create(req: AutoLorebookRequest):
 @router.post("/autolorebook/status", response_model=LorebookStatusResponse)
 def autolorebook_status(req: LorebookStatusRequest):
     return api_utils.get_autolorebook(req.request_id)
+
+
+@router.post("/autolorebook/upload_file")
+async def autolorebook_create_from_file(file: UploadFile):
+    return {"filename": file.filename}
+

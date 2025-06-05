@@ -27,3 +27,4 @@ PyPDF2~=3.0.1
 pydantic_core~=2.27.2
 torch~=2.5.1
 EbookLib~=0.19
+python-multipart
