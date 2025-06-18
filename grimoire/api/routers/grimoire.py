@@ -24,7 +24,7 @@ from grimoire.api.schemas.grimoire import (
     UserOut,
 )
 from grimoire.common import api_utils
-from grimoire.core.grimoire import generate_lorebook, process_request
+from grimoire.core.grimoire import generate_lorebook, process_request, extract_text_from_epub, extract_text_from_pdf
 from grimoire.db.connection import get_db
 
 router = APIRouter(tags=["Grimoire specific endpoints"])
@@ -244,7 +244,17 @@ def autolorebook_status(req: LorebookStatusRequest):
     return api_utils.get_autolorebook(req.request_id)
 
 
-@router.post("/autolorebook/upload_file")
+@router.post("/autolorebook/upload_file", response_model=AutoLorebookResponse)
 async def autolorebook_create_from_file(file: UploadFile):
-    return {"filename": file.filename}
+    if file.filename.endswith(".epub"):
+        text = await extract_text_from_epub(file)
+    elif file.filename.endswith(".pdf"):
+        text = await extract_text_from_pdf(file)
+    elif file.filename.endswith(".txt"):
+        content = await file.read()
+        text = content.decode("utf-8", errors="ignore")
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file format. Use .txt, .epub, or .pdf")
 
+    request_id = str(generate_lorebook(text))
+    return AutoLorebookResponse(request_id=request_id)
