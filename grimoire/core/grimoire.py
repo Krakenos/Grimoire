@@ -1,4 +1,5 @@
 import json
+import tempfile
 import timeit
 import uuid
 from collections import defaultdict
@@ -11,6 +12,7 @@ import numpy as np
 import spacy
 import ebooklib
 from ebooklib import epub
+from fastapi import UploadFile
 from rapidfuzz import fuzz
 from rapidfuzz import process as fuzz_process
 from rapidfuzz import utils as fuzz_utils
@@ -624,10 +626,14 @@ def process_request(
     return knowledge_data
 
 
-def extract_text_from_pdf(file_path):
+async def extract_text_from_pdf(upload_file: UploadFile) -> str:
     text = ""
-    with open(file_path, "rb") as file:
-        reader = PyPDF2.PdfFileReader(file)
+    with tempfile.NamedTemporaryFile(delete=True, suffix=".pdf") as tmp:
+        content = await upload_file.read()
+        tmp.write(content)
+        tmp.flush()
+        reader = PyPDF2.PdfFileReader(tmp.name)
+
         for page_num in range(reader.numPages):
             page = reader.getPage(page_num)
             text += page.extract_text()
@@ -635,8 +641,14 @@ def extract_text_from_pdf(file_path):
     return text
 
 
-def extract_text_from_epub(file_path):
-    book = epub.read_epub(file_path)
+async def extract_text_from_epub(upload_file: UploadFile) -> str:
+    with tempfile.NamedTemporaryFile(delete=True, suffix=".epub") as tmp:
+        content = await upload_file.read()
+        tmp.write(content)
+        tmp.flush()
+
+        book = epub.read_epub(tmp.name)
+
     text = ""
 
     for item in book.get_items():
@@ -647,7 +659,7 @@ def extract_text_from_epub(file_path):
 
 
 @time_execution
-def generate_lorebook(input_text: str):
+def generate_lorebook(input_text: str) -> uuid.UUID:
     request_id = uuid.uuid4()
 
     entity_dict = {}
@@ -700,7 +712,7 @@ def generate_lorebook(input_text: str):
     return request_id
 
 
-def lorebook_status(req_id: str):
+def lorebook_status(req_id: str) -> dict:
     redis_client = redis_manager.get_client()
     lorebook_entries = json.loads(redis_client.get(f"LOREBOOK_ENTRIES_{req_id}"))
     lorebook_content = {}
