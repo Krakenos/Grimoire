@@ -28,3 +28,4 @@ pydantic_core~=2.27.2
 torch~=2.5.1
 EbookLib~=0.19
 python-multipart
+beautifulsoup4~=4.13.4
