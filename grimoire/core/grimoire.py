@@ -11,6 +11,7 @@ import PyPDF2
 import numpy as np
 import spacy
 import ebooklib
+from bs4 import BeautifulSoup
 from ebooklib import epub
 from fastapi import UploadFile
 from rapidfuzz import fuzz
@@ -615,7 +616,8 @@ async def extract_text_from_epub(upload_file: UploadFile) -> str:
 
     for item in book.get_items():
         if item.get_type() == ebooklib.ITEM_DOCUMENT:
-            text += item.get_body_content().decode('utf-8')
+            soup = BeautifulSoup(item.get_body_content(), "html.parser")
+            text += soup.get_text()
 
     return text
 
