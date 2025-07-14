@@ -192,5 +192,5 @@ def update_summary_metadata(db_session: Session, knowledge: Knowledge) -> Knowle
 
 def get_memory_graph(db_session: Session, chat_id: int, user_id: int):
     graph = get_knowledge_graph(chat_id, user_id, db_session)
-    data = json_graph.node_link_data(graph)
+    data = json_graph.node_link_data(graph, edges="edges")
     return data
