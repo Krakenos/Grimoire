@@ -128,7 +128,7 @@ def get_knowledge_graph(chat_id: int, user_id: int, session: Session) -> nx.Grap
             for memory in mes.segmented_memories:
                 knowledge_memories.add(memory.id)
                 relations[memory.id].add(knowledge.id)
-        graph.add_node(knowledge.id, label=f"{knowledge.entity}", memory_list=sorted(list(knowledge_memories)))
+        graph.add_node(knowledge.id, label=f"{knowledge.entity}", memory_list=sorted(knowledge_memories))
 
     links_amount = defaultdict(lambda: defaultdict(lambda: 0))
     links_memories = defaultdict(lambda: defaultdict(set))
@@ -140,7 +140,7 @@ def get_knowledge_graph(chat_id: int, user_id: int, session: Session) -> nx.Grap
     for key, values in links_amount.items():
         for key2, connections in values.items():
             lab = "1 memory" if connections == 1 else f"{connections} memories"
-            graph.add_edge(key, key2, weight=connections, label=lab, memory_list=sorted(list(links_memories[key][key2])))
+            graph.add_edge(key, key2, weight=connections, label=lab, memory_list=sorted(links_memories[key][key2]))
 
     # Debug stuff for graphs
     # nt = Network("2000px", "2000px")
