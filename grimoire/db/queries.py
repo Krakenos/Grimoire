@@ -127,8 +127,8 @@ def get_knowledge_graph(chat_id: int, user_id: int, session: Session) -> nx.Grap
         for mes in knowledge.messages:
             for memory in mes.segmented_memories:
                 knowledge_memories.add(memory.id)
-                relations[memory.id].add(knowledge.id)
-        graph.add_node(knowledge.id, label=f"{knowledge.entity}", memory_list=sorted(knowledge_memories))
+                relations[memory.id].add(str(knowledge.id))
+        graph.add_node(str(knowledge.id), label=f"{knowledge.entity}", memory_list=sorted(knowledge_memories))
 
     links_amount = defaultdict(lambda: defaultdict(lambda: 0))
     links_memories = defaultdict(lambda: defaultdict(set))
