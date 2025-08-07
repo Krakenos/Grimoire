@@ -18,6 +18,7 @@ from grimoire.api.schemas.grimoire import (
     MemoriesOut,
     UserIn,
     UserOut,
+    GraphOut,
 )
 from grimoire.common import api_utils
 from grimoire.core.grimoire import process_request
@@ -204,9 +205,10 @@ def get_all_memories(user_id: int, chat_id: int, skip: int = 0, limit: int = 100
     return memories
 
 
-@router.get("/users/{user_id}/chats/{chat_id}/memory_graph", response_model=dict)
+@router.get("/users/{user_id}/chats/{chat_id}/memory_graph", response_model=GraphOut)
 def get_memory_graph(user_id: int, chat_id: int, db: Session = Depends(get_db)):
-    return api_utils.get_memory_graph(db, chat_id, user_id)
+    graph_data = api_utils.get_memory_graph(db, chat_id, user_id)
+    return GraphOut(**graph_data)
 
 
 @router.post("/get_data", response_model=list[KnowledgeData])
