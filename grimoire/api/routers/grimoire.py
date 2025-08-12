@@ -10,6 +10,7 @@ from grimoire.api.schemas.grimoire import (
     ChatMessageOut,
     ChatOut,
     ExternalId,
+    GraphOut,
     KnowledgeData,
     KnowledgeDetailOut,
     KnowledgeDetailPatch,
@@ -18,7 +19,6 @@ from grimoire.api.schemas.grimoire import (
     MemoriesOut,
     UserIn,
     UserOut,
-    GraphOut,
 )
 from grimoire.common import api_utils
 from grimoire.core.grimoire import process_request
