@@ -10,11 +10,13 @@ from grimoire.api.schemas.grimoire import (
     ChatMessageOut,
     ChatOut,
     ExternalId,
+    GraphOut,
     KnowledgeData,
     KnowledgeDetailOut,
     KnowledgeDetailPatch,
     KnowledgeIn,
     KnowledgeOut,
+    MemoriesOut,
     UserIn,
     UserOut,
 )
@@ -195,6 +197,18 @@ def delete_knowledge(user_id: int, chat_id: int, knowledge_id: int, db: Session 
     db.delete(db_knowledge)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/users/{user_id}/chats/{chat_id}/memories", response_model=list[MemoriesOut])
+def get_all_memories(user_id: int, chat_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    memories = api_utils.get_all_memories(db, user_id=user_id, chat_id=chat_id, skip=skip, limit=limit)
+    return memories
+
+
+@router.get("/users/{user_id}/chats/{chat_id}/memory_graph", response_model=GraphOut)
+def get_memory_graph(user_id: int, chat_id: int, db: Session = Depends(get_db)):
+    graph_data = api_utils.get_memory_graph(db, chat_id, user_id)
+    return GraphOut(**graph_data)
 
 
 @router.post("/get_data", response_model=list[KnowledgeData])

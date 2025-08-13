@@ -2,6 +2,7 @@ import json
 import timeit
 from collections import defaultdict
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from itertools import chain
 
 import numpy as np
@@ -17,9 +18,18 @@ from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
-from grimoire.core.tasks import summarize
+from grimoire.core.tasks import generate_segmented_memory, summarize
 from grimoire.core.vector_embeddings import get_text_embeddings
-from grimoire.db.models import Character, CharacterTriggerText, Chat, Knowledge, Message, SpacyNamedEntity, User
+from grimoire.db.models import (
+    Character,
+    CharacterTriggerText,
+    Chat,
+    Knowledge,
+    Message,
+    SegmentedMemory,
+    SpacyNamedEntity,
+    User,
+)
 from grimoire.db.queries import get_characters, get_knowledge_entities, semantic_search
 
 
@@ -402,12 +412,13 @@ def get_embeddings(
 
 
 def update_characters(
-    characters: list[ChatDataCharacter],
+    characters: list[ChatDataCharacter] | None,
     message_names: list[str],
     chat_id: int,
     similarity_dict: dict[str, str],
     session: Session,
 ) -> dict[str, Character]:
+    characters = characters if characters else []
     char_names = [character.name for character in characters]
     message_names = list(set(message_names))
 
@@ -460,43 +471,17 @@ def update_characters(
     return character_dict
 
 
-def get_character_from_names(
-    messages_names: list[str], chat_id: int, similarity_dict: dict[str, str], session: Session
-) -> dict[str, Character]:
-    char_names = list(set(messages_names))
-    db_characters = get_characters(char_names, chat_id, session)
-
-    mapped_entities = [similarity_dict[name] for name in char_names]
-    trigger_strings = []
-    for entity_name in mapped_entities:
-        entity_trigger_strings = [
-            trigger_string for trigger_string, ent in similarity_dict.items() if ent == entity_name
-        ]
-        trigger_strings.append(entity_trigger_strings)
-
-    to_update = []
-    character_dict = {}
-    for char_name, db_char, triggers in zip(char_names, db_characters, trigger_strings, strict=True):
-        if db_char is None:
-            new_char = Character(
-                chat_id=chat_id,
-                name=char_name,
+def queue_segmented_memories(chat: Chat, new_messages: list[Message]) -> None:
+    memory_interval = chat.segmented_memory_interval
+    memory_messages = chat.segmented_memory_messages
+    for message in new_messages:
+        if message.message_index % memory_interval == 0 and message.message_index >= memory_messages:
+            generate_segmented_memory.delay(
+                chat_id=chat.id,
+                start_index=message.message_index - memory_messages + 1,
+                end_index=message.message_index,
+                create_date=datetime.now(),
             )
-
-            for trigger in triggers:
-                new_char.trigger_texts.append(CharacterTriggerText(text=trigger))
-            to_update.append(new_char)
-            character_dict[char_name] = new_char
-        else:
-            char_triggers_texts = [trigger_text.text for trigger_text in db_char.trigger_texts]
-            for trigger in triggers:
-                if trigger not in char_triggers_texts:
-                    db_char.trigger_texts.append(CharacterTriggerText(text=trigger))
-            character_dict[char_name] = db_char
-
-    session.add_all(to_update)
-    session.commit()
-    return character_dict
 
 
 def process_request(
@@ -540,10 +525,7 @@ def process_request(
     last_external_ids = messages_external_ids[:-excluded_messages]
     last_entities = entity_list[:-excluded_messages]
 
-    if characters:
-        characters_dict = update_characters(characters, messages_names, chat.id, entity_similarity_dict, db_session)
-    else:
-        characters_dict = get_character_from_names(messages_names, chat.id, entity_similarity_dict, db_session)
+    characters_dict = update_characters(characters, messages_names, chat.id, entity_similarity_dict, db_session)
 
     new_message_indices, chat, new_messages = save_messages(
         last_messages, last_external_ids, last_names, characters_dict, entity_dict, embedding_dict, chat, db_session
@@ -569,22 +551,30 @@ def process_request(
             include_names,
         )
 
-    vector_embeddings = np.array([embedding_dict[mes] for mes in chat_texts])
-    ordered_knowledge = semantic_search(vector_embeddings, chat.id, db_session)
+    queue_segmented_memories(chat, new_messages)
 
+    vector_embeddings = np.array([embedding_dict[mes] for mes in chat_texts])
+    ordered_entries = semantic_search(vector_embeddings, chat.id, db_session)
+    ordered_memory = []
     knowledge_data = []
+
+    for entry in ordered_entries:
+        if isinstance(entry, SegmentedMemory):
+            ordered_memory.append((entry.memory_entry, entry.token_count))
+        elif isinstance(entry, Knowledge):
+            ordered_memory.append((entry.summary_entry, entry.token_count))
+
     if token_limit:
         current_tokens = 0
-        for index, knowledge in enumerate(ordered_knowledge, 1):
-            current_tokens += knowledge.token_count
+        for index, knowledge in enumerate(ordered_memory, 1):
+            current_tokens += knowledge[1]
             if current_tokens < token_limit:
-                knowledge_data.append(KnowledgeData(text=knowledge.summary_entry, relevance=index))
+                knowledge_data.append(KnowledgeData(text=knowledge[0], relevance=index))
             else:
                 break
     else:
         knowledge_data = [
-            KnowledgeData(text=knowledge.summary_entry, relevance=index)
-            for index, knowledge in enumerate(ordered_knowledge, 1)
+            KnowledgeData(text=knowledge[0], relevance=index) for index, knowledge in enumerate(ordered_memory, 1)
         ]
 
     end_time = timeit.default_timer()

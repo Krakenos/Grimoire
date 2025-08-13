@@ -97,3 +97,38 @@ class ChatData(BaseModel):
 class KnowledgeData(BaseModel):
     text: str
     relevance: int
+
+
+class MemoriesOut(BaseModel):
+    id: int
+    summary: str
+    token_count: int
+    created_date: datetime
+
+
+class MemoriesDetailOut(BaseModel):
+    summary: str
+    token_count: int
+    created_date: datetime
+
+
+class GraphNode(BaseModel):
+    label: str
+    memory_list: list[int]
+    id: str
+
+
+class GraphEdge(BaseModel):
+    weight: int
+    label: str
+    memory_list: list[int]
+    source: str
+    target: str
+
+
+class GraphOut(BaseModel):
+    directed: bool = False
+    multigraph: bool = False
+    graph: dict = {}
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
