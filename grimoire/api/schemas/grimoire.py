@@ -85,6 +85,11 @@ class ChatDataCharacter(BaseModel):
     character_note: str | None = None
 
 
+class ChatDataLorebookEntry(BaseModel):
+    keys: list[str]
+    description: str
+
+
 class ChatData(BaseModel):
     external_chat_id: str
     external_user_id: str | None = None
@@ -92,6 +97,7 @@ class ChatData(BaseModel):
     max_tokens: int | None = None
     messages: list[ChatDataMessage]
     characters: list[ChatDataCharacter] | None = None
+    lorebook_entries: list[ChatDataLorebookEntry] | None = None
 
 
 class KnowledgeData(BaseModel):
