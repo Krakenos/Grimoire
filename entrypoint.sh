@@ -17,11 +17,11 @@ if [ $mode == "all" ]; then
 
   python run.py
 
-elif [ $mode == "api-only"]; then
+elif [ $mode == "api-only" ]; then
   echo "Running grimoire in api-only mode..."
   python run.py
 
-elif [ $mode == "worker-only"]; then
+elif [ $mode == "worker-only" ]; then
   echo "Running grimoire in worker-only mode..."
   celery -A grimoire.core.tasks beat &
   celery -A grimoire.core.tasks worker -l info -c 1 -Q celery --pool=threads &
