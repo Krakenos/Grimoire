@@ -13,12 +13,12 @@ from rapidfuzz import utils as fuzz_utils
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, with_loader_criteria
 
-from grimoire.api.schemas.grimoire import ChatDataCharacter, KnowledgeData
+from grimoire.api.schemas.grimoire import ChatDataCharacter, ChatDataLorebookEntry, KnowledgeData
 from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
-from grimoire.core.tasks import generate_segmented_memory, summarize
+from grimoire.core.tasks import describe_entity, generate_segmented_memory
 from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import (
     Character,
@@ -185,6 +185,7 @@ def get_named_entities(
     messages: list[str],
     messages_external_ids: list[str],
     messages_names: list[str],
+    lorebook_texts: list[str],
     chat: Chat,
 ) -> tuple[list[list[NamedEntity]], dict[str, list[NamedEntity]]]:
     entity_list = []
@@ -217,6 +218,8 @@ def get_named_entities(
         if message not in entity_dict:
             to_check_cache.append(message)
 
+    to_check_cache.extend(lorebook_texts)
+
     cached_values = get_cached_entities(to_check_cache)
     for message, cached in zip(to_check_cache, cached_values, strict=True):
         if cached is not None:
@@ -226,6 +229,11 @@ def get_named_entities(
         if message not in entity_dict:
             to_process_with_names.append(f"{sender_name}: {message}")
             to_process.append(message)
+
+    for lb_text in lorebook_texts:
+        if lb_text not in entity_dict:
+            to_process_with_names.append(lb_text)
+            to_process.append(lb_text)
 
     new_docs = list(nlp.pipe(to_process_with_names))
 
@@ -237,6 +245,9 @@ def get_named_entities(
     cache_entities(to_process, values_to_cache)
     for message in messages:
         entity_list.append(entity_dict[message])
+
+    for lb_text in lorebook_texts:
+        entity_list.append(entity_dict[lb_text])
 
     return entity_list, entity_dict
 
@@ -484,6 +495,19 @@ def queue_segmented_memories(chat: Chat, new_messages: list[Message]) -> None:
             )
 
 
+def entity_lorebook_map(
+    lorebook_entities: list[list[NamedEntity]], lorebook_texts: list[str], entity_map: dict[str, str]
+) -> defaultdict[str, set[str]]:
+    ent_lorebook_map: defaultdict[str, set[str]] = defaultdict(set)
+
+    for lb_entities, lb_text in zip(lorebook_entities, lorebook_texts, strict=True):
+        for entity in lb_entities:
+            general_entity = entity_map[entity.name]
+            ent_lorebook_map[general_entity].add(lb_text)
+
+    return ent_lorebook_map
+
+
 def process_request(
     external_chat_id: str,
     chat_texts: list[str],
@@ -491,6 +515,7 @@ def process_request(
     messages_names: list[str],
     db_session,
     characters: list[ChatDataCharacter] | None = None,
+    lorebook_entries: list[ChatDataLorebookEntry] | None = None,
     include_names: bool = True,
     external_user_id: str | None = None,
     token_limit: int | None = None,
@@ -502,12 +527,20 @@ def process_request(
     chat = get_chat(user, external_chat_id, chat_texts, messages_external_ids, db_session)
 
     external_message_map = {}
+    lorebook_texts = []
 
     if settings.secondary_database.enabled:
         external_message_map = dict(zip(messages_external_ids, chat_texts, strict=True))
 
+    if lorebook_entries:
+        for lorebook_entry in lorebook_entries:
+            keys_text = ", ".join(lorebook_entry.keys)
+            lorebook_texts.append(f"[ {keys_text}: {lorebook_entry.description} ]")
+
     doc_time = timeit.default_timer()
-    entity_list, entity_dict = get_named_entities(chat_texts, messages_external_ids, messages_names, chat)
+    entity_list, entity_dict = get_named_entities(
+        chat_texts, messages_external_ids, messages_names, lorebook_texts, chat
+    )
     doc_end_time = timeit.default_timer()
     general_logger.debug(f"Getting named entities {doc_end_time - doc_time} seconds")
 
@@ -523,7 +556,10 @@ def process_request(
     last_messages = chat_texts[:-excluded_messages]  # exclude last few messages from saving
     last_names = messages_names[:-excluded_messages]
     last_external_ids = messages_external_ids[:-excluded_messages]
-    last_entities = entity_list[:-excluded_messages]
+    last_entities = entity_list[: -excluded_messages - len(lorebook_texts)]  # remove lorebook entities
+    lorebook_entities = entity_list[len(chat_texts) :]
+
+    ent_lb_map = entity_lorebook_map(lorebook_entities, lorebook_texts, entity_similarity_dict)
 
     characters_dict = update_characters(characters, messages_names, chat.id, entity_similarity_dict, db_session)
 
@@ -544,10 +580,12 @@ def process_request(
             general_logger.debug(f"{entity.name}, {entity.label}, {spacy.explain(entity.label)}")
 
     to_summarize = list({entity_similarity_dict[ent_name] for ent_name in ent_names})
+
     for ent in to_summarize:
-        summarize.delay(
+        describe_entity.delay(
             ent,
             chat.id,
+            ent_lb_map[ent],
             include_names,
         )
 
