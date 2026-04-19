@@ -8,7 +8,7 @@ Grimoire collects the messages that are meant to be sent to LLM and analyzes the
 ### Setup
 #### Prerequisites
 To run Grimoire you need to have installed:
-- Python 3.10 or above
+- [uv](https://docs.astral.sh/uv/) (manages Python and dependencies)
 - Docker
 - Linux (for Windows run under WSL)
 
@@ -33,39 +33,41 @@ summarization_api: # Api used for summarization
 
 ### Running from source
 
-Create python virtual environment and enter it
+Install dependencies (creates `.venv` automatically):
 ```bash
-python -m venv venv
-source venv/bin/activate
+uv sync
+```
+
+If you have a CUDA GPU and want GPU acceleration:
+```bash
+uv sync --extra cuda
 ```
 
 Run containers for Grimoire dependencies (redis and postgres):
 ```bash
-docker compose -f /docker/docker-compose-dev.yaml up -d 
+docker compose -f docker/docker-compose-dev.yaml up -d
 ```
 
-Installing Grimoire requirements:
+Download the spacy model:
 ```bash
-pip install -r requirements.txt
-python -m spacy download en_core_web_trf
+uv run python -m spacy download en_core_web_trf
 ```
 
 Setup database:
-
 ```bash
-alembic upgrade head
+uv run alembic upgrade head
 ```
 
 To start a process that will make summarization prompts use the following command:
 
 ```bash
-celery -A grimoire.core.tasks worker --loglevel=INFO --concurrency=1 -Q summarization_queue --pool=threads
+uv run celery -A grimoire.core.tasks worker --loglevel=INFO --concurrency=1 -Q summarization_queue --pool=threads
 ```
 Note: -concurrency=1 refers to how many prompts will be directed to side api at the same time. Leave it at 1 unless you know the backend supports proper queueing or batching.
 
 And to run Grimoire API use:
 ```bash
-python run.py
+uv run python run.py
 ```
 ### Usage
 Following backends are supported:

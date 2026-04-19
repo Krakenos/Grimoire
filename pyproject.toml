@@ -15,33 +15,37 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.12",
 ]
-requires-python = ">=3.10"
-dependencies = [
-    "alembic~=1.12.1",
-    "aiohttp~=3.9.3",
-    "celery~=5.3.6",
-    "celery-singleton~=0.3.1",
-    "cryptography~=43.0.0",
-    "fastapi~=0.110.1",
-    "pgvector~=0.3.3",
-    "psycopg2-binary~=2.9.9",
-    "pydantic~=2.4.2",
-    "python-dotenv~=1.0.0",
-    "PyYAML~=6.0.1",
-    "requests~=2.31.0",
-    "spacy~=3.7.2",
-    "spacy[cuda12x]",
-    "SQLAlchemy~=2.0.22",
-    "SQLAlchemy-Utils~=0.41.2",
-    "sseclient-py~=1.8.0",
-    "transformers~=4.43.3",
-    "uvicorn~=0.23.2",
-    "redis~=5.0.3",
-    "rapidfuzz~=3.9.6",
-    "starlette~=0.37.2",
-    "numpy~=1.26.4",
-]
+requires-python = ">=3.12"
 dynamic = ["version"]
+dependencies = [
+    "alembic>=1.12.1",
+    "celery>=5.3.6",
+    "celery-singleton>=0.3.1",
+    "cryptography>=46.0.6",
+    "fastapi>=0.110.1",
+    "pgvector>=0.3.3",
+    "psycopg2-binary>=2.9.9",
+    "pydantic>=2.10.3",
+    "python-dotenv>=1.0.0",
+    "PyYAML>=6.0.1",
+    "rapidfuzz>=3.9.6",
+    "redis>=5.0.3",
+    "requests>=2.33.1",
+    "sentence-transformers>=3.1.0",
+    "spacy>=3.8.3",
+    "SQLAlchemy>=2.0.22",
+    "SQLAlchemy-Utils>=0.41.2",
+    "transformers>=5.5.4",
+    "uvicorn>=0.23.2",
+    "numpy>=1.26.4",
+    "networkx>=3.6.1",
+]
+
+[project.optional-dependencies]
+cuda = ["spacy[cuda12x]"]
+
+[dependency-groups]
+dev = ["ruff"]
 
 [tool.hatch.version]
 path = "grimoire/__init__.py"
