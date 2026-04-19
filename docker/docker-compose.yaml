@@ -1,8 +1,8 @@
 services:
   grimoire:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
       target: run
     container_name: grimoire
     env_file: .env_template
@@ -29,15 +29,15 @@ services:
 
   test:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
       target: testing
     command: [ "python", "-m", "unittest", "discover" ]
 
   lint:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
       target: testing
     command: [ "ruff", "check", "." ]
 
