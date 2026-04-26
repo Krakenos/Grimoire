@@ -2,15 +2,15 @@ import json
 import tempfile
 import timeit
 import uuid
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from itertools import chain
 
-import PyPDF2
-import numpy as np
-import spacy
 import ebooklib
+import numpy as np
+import PyPDF2
+import spacy
 from bs4 import BeautifulSoup
 from ebooklib import epub
 from fastapi import UploadFile
@@ -25,7 +25,7 @@ from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
-from grimoire.core.tasks import generate_segmented_memory, describe_entity, generate_lorebook_entry
+from grimoire.core.tasks import describe_entity, generate_lorebook_entry, generate_segmented_memory
 from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import (
     Character,
@@ -303,43 +303,62 @@ def get_chat(
     return chat
 
 
-def filter_similar_entities(entity_names: list[str]) -> dict[str, str]:
+def filter_similar_entities(entity_names: list[str], entity_labels: dict[str, str]) -> dict[str, str]:
+    if not entity_names:
+        return {}
+
+    n = len(entity_names)
     result_matrix = fuzz_process.cdist(
         entity_names,
         entity_names,
-        scorer=fuzz.partial_ratio,
+        scorer=fuzz.ratio,
         processor=fuzz_utils.default_process,
     )
-    found_score_cords = np.argwhere(result_matrix >= settings.match_distance)
-    relation_dict = defaultdict(list)
+
+    # Union-Find with path compression
+    parent = list(range(n))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(x: int, y: int) -> None:
+        parent[find(x)] = find(y)
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if entity_labels.get(entity_names[i]) != entity_labels.get(entity_names[j]):
+                continue
+            if result_matrix[i][j] >= settings.match_distance:
+                union(i, j)
+
+    # Group names by cluster root
+    clusters: dict[int, list[str]] = defaultdict(list)
+    for i, name in enumerate(entity_names):
+        clusters[find(i)].append(name)
+
+    score_dict: dict[str, dict[str, float]] = defaultdict(dict)
+    for i, name_i in enumerate(entity_names):
+        for j, name_j in enumerate(entity_names):
+            score_dict[name_i][name_j] = result_matrix[i][j]
+
     results = {}
-
-    score_dict = defaultdict(dict)
-    for i, word_1 in enumerate(entity_names):
-        for j, word_2 in enumerate(entity_names):
-            score_dict[word_1][word_2] = result_matrix[i, j]
-
-    for cords in found_score_cords:
-        x = cords[0]
-        y = cords[1]
-        relation_dict[entity_names[x]].append((entity_names[y], result_matrix[x][y]))
-
-    for entity, related_entities in relation_dict.items():
-        if len(related_entities) > 1:
-            related_names = [ent[0] for ent in related_entities]
-
-            # Get mean score for each entity in relation to other ones in group
-            mean_scores = []
-            for ent_1 in related_names:
-                ent_scores = [score_dict[ent_1][ent_2] for ent_2 in related_names]
-                mean_scores.append((ent_1, np.mean(ent_scores)))
-
-            # sorts by highest score, then shortest entity, then lexically
-            sorted_entities = sorted(mean_scores, key=lambda x: (-x[1], len(x[0]), x[0]))
-            top_name, _ = sorted_entities[0]
-            results[entity] = top_name
+    for cluster_names in clusters.values():
+        if len(cluster_names) == 1:
+            results[cluster_names[0]] = cluster_names[0]
         else:
-            results[entity] = related_entities[0][0]
+            mean_scores = []
+            for name in cluster_names:
+                scores = [score_dict[name][other] for other in cluster_names]
+                mean_scores.append((name, np.mean(scores)))
+            # shortest first, then highest mean intra-cluster score, then lexical
+            sorted_names = sorted(mean_scores, key=lambda x: (len(x[0]), -x[1], x[0]))
+            canonical = sorted_names[0][0]
+            for name in cluster_names:
+                results[name] = canonical
+
     return results
 
 
@@ -558,7 +577,11 @@ def process_request(
 
     unique_ents: list[NamedEntity] = list(set(chain(*entity_list)))
     unique_ent_names = list({ent.name for ent in unique_ents})
-    entity_similarity_dict = filter_similar_entities(unique_ent_names)
+    name_label_counts: dict[str, Counter] = defaultdict(Counter)
+    for ent in unique_ents:
+        name_label_counts[ent.name][ent.label] += 1
+    entity_labels = {name: counts.most_common(1)[0][0] for name, counts in name_label_counts.items()}
+    entity_similarity_dict = filter_similar_entities(unique_ent_names, entity_labels)
 
     last_messages = chat_texts[:-excluded_messages]  # exclude last few messages from saving
     last_names = messages_names[:-excluded_messages]
@@ -687,7 +710,11 @@ def generate_lorebook(input_text: str) -> uuid.UUID:
 
     unique_ents: list[NamedEntity] = list(set(chain(*entity_list)))
     unique_ent_names = list({ent.name for ent in unique_ents})
-    entity_similarity_dict = filter_similar_entities(unique_ent_names)
+    name_label_counts: dict[str, Counter] = defaultdict(Counter)
+    for ent in unique_ents:
+        name_label_counts[ent.name][ent.label] += 1
+    entity_labels = {name: counts.most_common(1)[0][0] for name, counts in name_label_counts.items()}
+    entity_similarity_dict = filter_similar_entities(unique_ent_names, entity_labels)
 
     redis_key = f"LOREBOOK_ENTRIES_{str(request_id)}"
     entries_dict = defaultdict(list)
