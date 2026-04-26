@@ -39,6 +39,9 @@ dependencies = [
     "uvicorn>=0.23.2",
     "numpy>=1.26.4",
     "networkx>=3.6.1",
+    "pypdf2>=3.0.1",
+    "ebooklib>=0.20",
+    "beautifulsoup4>=4.14.3",
 ]
 
 [project.optional-dependencies]
