@@ -116,7 +116,10 @@ def get_messages_by_index(start_index: int, end_index: int, chat_id: int, sessio
 
 def get_knowledge_graph(chat_id: int, user_id: int, session: Session) -> nx.Graph:
     query = (
-        select(Knowledge).join(Chat).where(Knowledge.chat_id == chat_id, Chat.user_id == user_id).order_by(Knowledge.id)
+        select(Knowledge)
+        .join(Chat)
+        .where(Knowledge.chat_id == chat_id, Chat.user_id == user_id, Knowledge.summary.is_not(None))
+        .order_by(Knowledge.id)
     )
     knowledge_entries = list(session.scalars(query).all())
     graph = nx.Graph()
