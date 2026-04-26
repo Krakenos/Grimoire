@@ -42,6 +42,7 @@ dependencies = [
     "pypdf2>=3.0.1",
     "ebooklib>=0.20",
     "beautifulsoup4>=4.14.3",
+    "en-core-web-trf",
 ]
 
 [project.optional-dependencies]
@@ -87,6 +88,9 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
 docstring-code-line-length = "dynamic"
+
+[tool.uv.sources]
+en-core-web-trf = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.8.0/en_core_web_trf-3.8.0-py3-none-any.whl" }
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.params.Depends", "fastapi.Query", "fastapi.params.Query"]
