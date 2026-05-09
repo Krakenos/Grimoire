@@ -43,6 +43,7 @@ dependencies = [
     "ebooklib>=0.20",
     "beautifulsoup4>=4.14.3",
     "en-core-web-trf",
+    "python-multipart>=0.0.27",
 ]
 
 [project.optional-dependencies]

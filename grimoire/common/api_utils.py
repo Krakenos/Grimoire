@@ -203,6 +203,8 @@ def get_autolorebook(req_id: str):
     entries = {}
     num = 0
     for entry_name, entry in lb_status.items():
+        if not isinstance(entry["status"], dict):
+            continue
         entries[str(num)] = LorebookEntry(comment=entry_name, key=entry["keys"], content=entry["status"]["result"])
         num += 1
     lorebook = Lorebook(entries=entries)

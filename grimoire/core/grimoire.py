@@ -743,10 +743,14 @@ def generate_lorebook(input_text: str) -> uuid.UUID:
 
 def lorebook_status(req_id: str) -> dict:
     redis_client = redis_manager.get_client()
-    lorebook_entries = json.loads(redis_client.get(f"LOREBOOK_ENTRIES_{req_id}"))
+    entries_raw = redis_client.get(f"LOREBOOK_ENTRIES_{req_id}")
+    if entries_raw is None:
+        return {}
+    lorebook_entries = json.loads(entries_raw)
     lorebook_content = {}
     for name, activation_keys in lorebook_entries.items():
-        status = json.loads(redis_client.get(f"LOREBOOK_ENTRY_{req_id}_{name}"))
+        entry_raw = redis_client.get(f"LOREBOOK_ENTRY_{req_id}_{name}")
+        status = json.loads(entry_raw) if entry_raw is not None else "pending"
         lorebook_content[name] = {"status": status, "keys": activation_keys}
 
     return lorebook_content
