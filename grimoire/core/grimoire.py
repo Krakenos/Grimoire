@@ -695,8 +695,10 @@ def generate_lorebook(input_text: str) -> uuid.UUID:
     for split_text, cached in zip(split_texts, cached_values, strict=True):
         if cached is not None:
             entity_dict[split_text] = cached
+        elif not split_text.strip():
+            entity_dict[split_text] = []
 
-    texts_to_process = [split_text for split_text in split_texts if split_text is not None]
+    texts_to_process = [split_text for split_text in split_texts if split_text.strip() and split_text not in entity_dict]
     spacy_docs = list(nlp.pipe(texts_to_process))
 
     for text, doc in zip(texts_to_process, spacy_docs, strict=True):
