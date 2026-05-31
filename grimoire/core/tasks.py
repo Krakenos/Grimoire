@@ -73,7 +73,7 @@ def make_summary_prompt(
     secondary_database_settings: SecondaryDatabaseSettings,
     prefer_local_tokenizer: bool,
     tokenizer: str,
-    extra_info: set[str],
+    extra_info: list[str],
     include_names: bool = True,
 ) -> str | None:
     summarization_url = api_settings.url
@@ -194,7 +194,7 @@ def make_summary_prompt(
 def describe_entity(
     term: str,
     chat_id: int,
-    lorebook_entries: set[str],
+    lorebook_entries: list[str],
     include_names: bool = True,
     max_retries: int = 50,
     retry_interval: int = 1,
