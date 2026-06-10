@@ -25,7 +25,13 @@ from grimoire.api.schemas.grimoire import (
     UserOut,
 )
 from grimoire.common import api_utils
-from grimoire.core.grimoire import generate_lorebook, process_request, extract_text_from_epub, extract_text_from_pdf
+from grimoire.core.grimoire import (
+    _normalize_text,
+    extract_text_from_epub,
+    extract_text_from_pdf,
+    generate_lorebook,
+    process_request,
+)
 from grimoire.db.connection import get_db
 
 router = APIRouter(tags=["Grimoire specific endpoints"])
@@ -256,7 +262,7 @@ async def autolorebook_create_from_file(file: UploadFile):
         text = await extract_text_from_pdf(file)
     elif file.filename.endswith(".txt"):
         content = await file.read()
-        text = content.decode("utf-8", errors="ignore")
+        text = _normalize_text(content.decode("utf-8", errors="ignore"))
     else:
         raise HTTPException(status_code=400, detail="Unsupported file format. Use .txt, .epub, or .pdf")
 

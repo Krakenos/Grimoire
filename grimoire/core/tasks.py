@@ -478,11 +478,9 @@ def generate_lorebook_entry(
         texts, summarization_backend, summarization_url, tokenizer, prefer_local_tokenizer, summarization_auth
     )
 
-    prompt = prompt_template.format(term=ent_name,
-                                    additional_info="",
-                                    previous_summary="",
-                                    messages="<temp>",
-                                    **instruct_fields)
+    prompt = prompt_template.format(
+        term=ent_name, additional_info="", previous_summary="", messages="<temp>", **instruct_fields
+    )
     split_prompt = prompt.split("<temp>")
     prompt_tokens = sum(
         token_count(

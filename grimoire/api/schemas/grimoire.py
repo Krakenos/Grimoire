@@ -139,6 +139,7 @@ class GraphOut(BaseModel):
     nodes: list[GraphNode]
     edges: list[GraphEdge]
 
+
 class AutoLorebookRequest(BaseModel):
     text: str
 

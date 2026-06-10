@@ -1,6 +1,8 @@
 import json
+import re
 import tempfile
 import timeit
+import unicodedata
 import uuid
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
@@ -14,9 +16,6 @@ import spacy
 from bs4 import BeautifulSoup
 from ebooklib import epub
 from fastapi import UploadFile
-from rapidfuzz import fuzz
-from rapidfuzz import process as fuzz_process
-from rapidfuzz import utils as fuzz_utils
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, with_loader_criteria
 
@@ -24,6 +23,11 @@ from grimoire.api.schemas.grimoire import ChatDataCharacter, ChatDataLorebookEnt
 from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
+from grimoire.core.entity_filters import (
+    _clean_entity_text,
+    _is_acceptable_entity,
+    filter_similar_entities,
+)
 from grimoire.core.settings import settings
 from grimoire.core.tasks import describe_entity, generate_lorebook_entry, generate_segmented_memory
 from grimoire.core.vector_embeddings import get_text_embeddings
@@ -44,6 +48,14 @@ from grimoire.db.queries import get_characters, get_knowledge_entities, semantic
 class NamedEntity:
     name: str
     label: str
+
+
+def _normalize_text(s: str) -> str:
+    """Normalize whitespace and Unicode in extracted plaintext before NLP."""
+    s = unicodedata.normalize("NFKC", s)
+    s = re.sub(r"[ \t]+", " ", s)
+    s = re.sub(r"\n{3,}", "\n\n", s)
+    return s.strip()
 
 
 if settings.prefer_gpu:
@@ -200,7 +212,6 @@ def get_named_entities(
     to_check_cache = []
     to_process = []
     to_process_with_names = []
-    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME", "QUANTITY", "PERCENT"]
     external_id_map = {}
 
     if settings.secondary_database.enabled:
@@ -245,7 +256,11 @@ def get_named_entities(
     new_docs = list(nlp.pipe(to_process_with_names))
 
     for text, doc in zip(to_process, new_docs, strict=True):
-        entities = [NamedEntity(ent.text, ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
+        entities = [
+            NamedEntity(_clean_entity_text(ent.text), ent.label_)
+            for ent in doc.ents
+            if _is_acceptable_entity(ent, ent.label_)
+        ]
         entity_dict[text] = entities
 
     values_to_cache = [entity_dict[text] for text in to_process]
@@ -301,65 +316,6 @@ def get_chat(
         session.commit()
 
     return chat
-
-
-def filter_similar_entities(entity_names: list[str], entity_labels: dict[str, str]) -> dict[str, str]:
-    if not entity_names:
-        return {}
-
-    n = len(entity_names)
-    result_matrix = fuzz_process.cdist(
-        entity_names,
-        entity_names,
-        scorer=fuzz.ratio,
-        processor=fuzz_utils.default_process,
-    )
-
-    # Union-Find with path compression
-    parent = list(range(n))
-
-    def find(x: int) -> int:
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
-
-    def union(x: int, y: int) -> None:
-        parent[find(x)] = find(y)
-
-    for i in range(n):
-        for j in range(i + 1, n):
-            if entity_labels.get(entity_names[i]) != entity_labels.get(entity_names[j]):
-                continue
-            if result_matrix[i][j] >= settings.match_distance:
-                union(i, j)
-
-    # Group names by cluster root
-    clusters: dict[int, list[str]] = defaultdict(list)
-    for i, name in enumerate(entity_names):
-        clusters[find(i)].append(name)
-
-    score_dict: dict[str, dict[str, float]] = defaultdict(dict)
-    for i, name_i in enumerate(entity_names):
-        for j, name_j in enumerate(entity_names):
-            score_dict[name_i][name_j] = result_matrix[i][j]
-
-    results = {}
-    for cluster_names in clusters.values():
-        if len(cluster_names) == 1:
-            results[cluster_names[0]] = cluster_names[0]
-        else:
-            mean_scores = []
-            for name in cluster_names:
-                scores = [score_dict[name][other] for other in cluster_names]
-                mean_scores.append((name, np.mean(scores)))
-            # shortest first, then highest mean intra-cluster score, then lexical
-            sorted_names = sorted(mean_scores, key=lambda x: (len(x[0]), -x[1], x[0]))
-            canonical = sorted_names[0][0]
-            for name in cluster_names:
-                results[name] = canonical
-
-    return results
 
 
 @time_execution
@@ -581,7 +537,8 @@ def process_request(
     for ent in unique_ents:
         name_label_counts[ent.name][ent.label] += 1
     entity_labels = {name: counts.most_common(1)[0][0] for name, counts in name_label_counts.items()}
-    entity_similarity_dict = filter_similar_entities(unique_ent_names, entity_labels)
+    name_counts = Counter(ent.name for ent in chain(*entity_list))
+    entity_similarity_dict = filter_similar_entities(unique_ent_names, entity_labels, name_counts)
 
     last_messages = chat_texts[:-excluded_messages]  # exclude last few messages from saving
     last_names = messages_names[:-excluded_messages]
@@ -651,18 +608,17 @@ def process_request(
 
 
 async def extract_text_from_pdf(upload_file: UploadFile) -> str:
-    text = ""
+    pages = []
     with tempfile.NamedTemporaryFile(delete=True, suffix=".pdf") as tmp:
         content = await upload_file.read()
         tmp.write(content)
         tmp.flush()
-        reader = PyPDF2.PdfFileReader(tmp.name)
+        reader = PyPDF2.PdfReader(tmp.name)
+        for page in reader.pages:
+            page_text = page.extract_text() or ""
+            pages.append(page_text)
 
-        for page_num in range(reader.numPages):
-            page = reader.getPage(page_num)
-            text += page.extract_text()
-
-    return text
+    return _normalize_text("\n\n".join(pages))
 
 
 async def extract_text_from_epub(upload_file: UploadFile) -> str:
@@ -670,17 +626,15 @@ async def extract_text_from_epub(upload_file: UploadFile) -> str:
         content = await upload_file.read()
         tmp.write(content)
         tmp.flush()
-
         book = epub.read_epub(tmp.name)
 
-    text = ""
-
+    chapters = []
     for item in book.get_items():
         if item.get_type() == ebooklib.ITEM_DOCUMENT:
             soup = BeautifulSoup(item.get_body_content(), "html.parser")
-            text += soup.get_text()
+            chapters.append(soup.get_text(separator=" ", strip=True))
 
-    return text
+    return _normalize_text("\n\n".join(chapters))
 
 
 @time_execution
@@ -689,7 +643,6 @@ def generate_lorebook(input_text: str) -> uuid.UUID:
 
     entity_dict = {}
     split_texts = input_text.splitlines()
-    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME", "QUANTITY", "PERCENT"]
     cached_values = get_cached_entities(split_texts)
 
     for split_text, cached in zip(split_texts, cached_values, strict=True):
@@ -698,11 +651,17 @@ def generate_lorebook(input_text: str) -> uuid.UUID:
         elif not split_text.strip():
             entity_dict[split_text] = []
 
-    texts_to_process = [split_text for split_text in split_texts if split_text.strip() and split_text not in entity_dict]
+    texts_to_process = [
+        split_text for split_text in split_texts if split_text.strip() and split_text not in entity_dict
+    ]
     spacy_docs = list(nlp.pipe(texts_to_process))
 
     for text, doc in zip(texts_to_process, spacy_docs, strict=True):
-        entities = [NamedEntity(ent.text, ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
+        entities = [
+            NamedEntity(_clean_entity_text(ent.text), ent.label_)
+            for ent in doc.ents
+            if _is_acceptable_entity(ent, ent.label_)
+        ]
         entity_dict[text] = entities
 
     values_to_cache = [entity_dict[text] for text in texts_to_process]
@@ -716,7 +675,8 @@ def generate_lorebook(input_text: str) -> uuid.UUID:
     for ent in unique_ents:
         name_label_counts[ent.name][ent.label] += 1
     entity_labels = {name: counts.most_common(1)[0][0] for name, counts in name_label_counts.items()}
-    entity_similarity_dict = filter_similar_entities(unique_ent_names, entity_labels)
+    name_counts = Counter(ent.name for ent in chain(*entity_list))
+    entity_similarity_dict = filter_similar_entities(unique_ent_names, entity_labels, name_counts)
 
     redis_key = f"LOREBOOK_ENTRIES_{str(request_id)}"
     entries_dict = defaultdict(list)
@@ -728,7 +688,7 @@ def generate_lorebook(input_text: str) -> uuid.UUID:
 
     entity_to_texts_map = defaultdict(list)
     iterable_texts = [None, *split_texts, None]
-    for elements in zip(iterable_texts, iterable_texts[1:], iterable_texts[2:]):
+    for elements in zip(iterable_texts, iterable_texts[1:], iterable_texts[2:], strict=False):
         for entity in entity_dict[elements[1]]:
             entity_name = entity_similarity_dict[entity.name]
             entity_to_texts_map[entity_name].extend(element for element in elements if element is not None)
