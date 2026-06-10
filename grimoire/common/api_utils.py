@@ -200,12 +200,19 @@ def get_memory_graph(db_session: Session, chat_id: int, user_id: int):
 
 def get_autolorebook(req_id: str):
     lb_status = lorebook_status(req_id)
+    if not lb_status:  # unknown or expired request_id
+        return LorebookStatusResponse(status="error")
+
     entries = {}
     num = 0
+    all_done = True
     for entry_name, entry in lb_status.items():
-        if not isinstance(entry["status"], dict):
+        if not isinstance(entry["status"], dict):  # still "pending"
+            all_done = False
             continue
         entries[str(num)] = LorebookEntry(comment=entry_name, key=entry["keys"], content=entry["status"]["result"])
         num += 1
+
+    status = "done" if all_done else "processing"
     lorebook = Lorebook(entries=entries)
-    return LorebookStatusResponse(lorebook=lorebook)
+    return LorebookStatusResponse(status=status, lorebook=lorebook)
