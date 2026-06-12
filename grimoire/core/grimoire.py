@@ -1,15 +1,21 @@
 import json
+import re
+import tempfile
 import timeit
-from collections import defaultdict
+import unicodedata
+import uuid
+from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from itertools import chain
 
+import ebooklib
 import numpy as np
+import PyPDF2
 import spacy
-from rapidfuzz import fuzz
-from rapidfuzz import process as fuzz_process
-from rapidfuzz import utils as fuzz_utils
+from bs4 import BeautifulSoup
+from ebooklib import epub
+from fastapi import UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, with_loader_criteria
 
@@ -17,8 +23,13 @@ from grimoire.api.schemas.grimoire import ChatDataCharacter, ChatDataLorebookEnt
 from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
+from grimoire.core.entity_filters import (
+    _clean_entity_text,
+    _is_acceptable_entity,
+    filter_similar_entities,
+)
 from grimoire.core.settings import settings
-from grimoire.core.tasks import describe_entity, generate_segmented_memory
+from grimoire.core.tasks import describe_entity, generate_lorebook_entry, generate_segmented_memory
 from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import (
     Character,
@@ -37,6 +48,14 @@ from grimoire.db.queries import get_characters, get_knowledge_entities, semantic
 class NamedEntity:
     name: str
     label: str
+
+
+def _normalize_text(s: str) -> str:
+    """Normalize whitespace and Unicode in extracted plaintext before NLP."""
+    s = unicodedata.normalize("NFKC", s)
+    s = re.sub(r"[ \t]+", " ", s)
+    s = re.sub(r"\n{3,}", "\n\n", s)
+    return s.strip()
 
 
 if settings.prefer_gpu:
@@ -193,7 +212,6 @@ def get_named_entities(
     to_check_cache = []
     to_process = []
     to_process_with_names = []
-    banned_labels = ["DATE", "CARDINAL", "ORDINAL", "TIME", "QUANTITY", "PERCENT"]
     external_id_map = {}
 
     if settings.secondary_database.enabled:
@@ -238,7 +256,11 @@ def get_named_entities(
     new_docs = list(nlp.pipe(to_process_with_names))
 
     for text, doc in zip(to_process, new_docs, strict=True):
-        entities = [NamedEntity(ent.text, ent.label_) for ent in doc.ents if ent.label_ not in banned_labels]
+        entities = [
+            NamedEntity(_clean_entity_text(ent.text), ent.label_)
+            for ent in doc.ents
+            if _is_acceptable_entity(ent, ent.label_)
+        ]
         entity_dict[text] = entities
 
     values_to_cache = [entity_dict[text] for text in to_process]
@@ -294,46 +316,6 @@ def get_chat(
         session.commit()
 
     return chat
-
-
-def filter_similar_entities(entity_names: list[str]) -> dict[str, str]:
-    result_matrix = fuzz_process.cdist(
-        entity_names,
-        entity_names,
-        scorer=fuzz.partial_ratio,
-        processor=fuzz_utils.default_process,
-    )
-    found_score_cords = np.argwhere(result_matrix >= settings.match_distance)
-    relation_dict = defaultdict(list)
-    results = {}
-
-    score_dict = defaultdict(dict)
-    for i, word_1 in enumerate(entity_names):
-        for j, word_2 in enumerate(entity_names):
-            score_dict[word_1][word_2] = result_matrix[i, j]
-
-    for cords in found_score_cords:
-        x = cords[0]
-        y = cords[1]
-        relation_dict[entity_names[x]].append((entity_names[y], result_matrix[x][y]))
-
-    for entity, related_entities in relation_dict.items():
-        if len(related_entities) > 1:
-            related_names = [ent[0] for ent in related_entities]
-
-            # Get mean score for each entity in relation to other ones in group
-            mean_scores = []
-            for ent_1 in related_names:
-                ent_scores = [score_dict[ent_1][ent_2] for ent_2 in related_names]
-                mean_scores.append((ent_1, np.mean(ent_scores)))
-
-            # sorts by highest score, then shortest entity, then lexically
-            sorted_entities = sorted(mean_scores, key=lambda x: (-x[1], len(x[0]), x[0]))
-            top_name, _ = sorted_entities[0]
-            results[entity] = top_name
-        else:
-            results[entity] = related_entities[0][0]
-    return results
 
 
 @time_execution
@@ -551,7 +533,12 @@ def process_request(
 
     unique_ents: list[NamedEntity] = list(set(chain(*entity_list)))
     unique_ent_names = list({ent.name for ent in unique_ents})
-    entity_similarity_dict = filter_similar_entities(unique_ent_names)
+    name_label_counts: dict[str, Counter] = defaultdict(Counter)
+    for ent in unique_ents:
+        name_label_counts[ent.name][ent.label] += 1
+    entity_labels = {name: counts.most_common(1)[0][0] for name, counts in name_label_counts.items()}
+    name_counts = Counter(ent.name for ent in chain(*entity_list))
+    entity_similarity_dict = filter_similar_entities(unique_ent_names, entity_labels, name_counts)
 
     last_messages = chat_texts[:-excluded_messages]  # exclude last few messages from saving
     last_names = messages_names[:-excluded_messages]
@@ -618,3 +605,114 @@ def process_request(
     end_time = timeit.default_timer()
     general_logger.info(f"Request processing time: {end_time - start_time}s")
     return knowledge_data
+
+
+async def extract_text_from_pdf(upload_file: UploadFile) -> str:
+    pages = []
+    with tempfile.NamedTemporaryFile(delete=True, suffix=".pdf") as tmp:
+        content = await upload_file.read()
+        tmp.write(content)
+        tmp.flush()
+        reader = PyPDF2.PdfReader(tmp.name)
+        for page in reader.pages:
+            page_text = page.extract_text() or ""
+            pages.append(page_text)
+
+    return _normalize_text("\n\n".join(pages))
+
+
+async def extract_text_from_epub(upload_file: UploadFile) -> str:
+    with tempfile.NamedTemporaryFile(delete=True, suffix=".epub") as tmp:
+        content = await upload_file.read()
+        tmp.write(content)
+        tmp.flush()
+        book = epub.read_epub(tmp.name)
+
+    chapters = []
+    for item in book.get_items():
+        if item.get_type() == ebooklib.ITEM_DOCUMENT:
+            soup = BeautifulSoup(item.get_body_content(), "html.parser")
+            chapters.append(soup.get_text(separator=" ", strip=True))
+
+    return _normalize_text("\n\n".join(chapters))
+
+
+@time_execution
+def generate_lorebook(input_text: str) -> uuid.UUID:
+    request_id = uuid.uuid4()
+
+    entity_dict = {}
+    split_texts = input_text.splitlines()
+    cached_values = get_cached_entities(split_texts)
+
+    for split_text, cached in zip(split_texts, cached_values, strict=True):
+        if cached is not None:
+            entity_dict[split_text] = cached
+        elif not split_text.strip():
+            entity_dict[split_text] = []
+
+    texts_to_process = [
+        split_text for split_text in split_texts if split_text.strip() and split_text not in entity_dict
+    ]
+    spacy_docs = list(nlp.pipe(texts_to_process))
+
+    for text, doc in zip(texts_to_process, spacy_docs, strict=True):
+        entities = [
+            NamedEntity(_clean_entity_text(ent.text), ent.label_)
+            for ent in doc.ents
+            if _is_acceptable_entity(ent, ent.label_)
+        ]
+        entity_dict[text] = entities
+
+    values_to_cache = [entity_dict[text] for text in texts_to_process]
+    cache_entities(texts_to_process, values_to_cache)
+
+    entity_list = [entity_dict[text] for text in split_texts]
+
+    unique_ents: list[NamedEntity] = list(set(chain(*entity_list)))
+    unique_ent_names = list({ent.name for ent in unique_ents})
+    name_label_counts: dict[str, Counter] = defaultdict(Counter)
+    for ent in unique_ents:
+        name_label_counts[ent.name][ent.label] += 1
+    entity_labels = {name: counts.most_common(1)[0][0] for name, counts in name_label_counts.items()}
+    name_counts = Counter(ent.name for ent in chain(*entity_list))
+    entity_similarity_dict = filter_similar_entities(unique_ent_names, entity_labels, name_counts)
+
+    redis_key = f"LOREBOOK_ENTRIES_{str(request_id)}"
+    entries_dict = defaultdict(list)
+    for key, val in entity_similarity_dict.items():
+        entries_dict[val].append(key)
+
+    redis_client = redis_manager.get_client()
+    redis_client.set(redis_key, json.dumps(entries_dict), settings.redis.CACHE_EXPIRE_TIME)
+
+    entity_to_texts_map = defaultdict(list)
+    iterable_texts = [None, *split_texts, None]
+    for elements in zip(iterable_texts, iterable_texts[1:], iterable_texts[2:], strict=False):
+        for entity in entity_dict[elements[1]]:
+            entity_name = entity_similarity_dict[entity.name]
+            entity_to_texts_map[entity_name].extend(element for element in elements if element is not None)
+
+    # remove duplicate texts from lists
+    for name, text_list in entity_to_texts_map.items():
+        entity_to_texts_map[name] = list(dict.fromkeys(text_list))
+
+    for ent in entity_similarity_dict:
+        generate_lorebook_entry.delay(ent, entity_to_texts_map[ent], str(request_id))
+
+    return request_id
+
+
+def lorebook_status(req_id: str) -> dict:
+    redis_client = redis_manager.get_client()
+    entries_raw = redis_client.get(f"LOREBOOK_ENTRIES_{req_id}")
+    if entries_raw is None:
+        return {}
+    lorebook_entries = json.loads(entries_raw)
+    lorebook_content = {}
+    for name, activation_keys in lorebook_entries.items():
+        entry_raw = redis_client.get(f"LOREBOOK_ENTRY_{req_id}_{name}")
+        status = json.loads(entry_raw) if entry_raw is not None else "pending"
+        lorebook_content[name] = {"status": status, "keys": activation_keys}
+
+    return lorebook_content

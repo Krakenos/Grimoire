@@ -131,6 +131,7 @@ class Settings(BaseSettingsModel):
     EMBEDDING_MODEL_REVISION: str | None = None
     prefer_gpu: bool = False
     match_distance: int = 80
+    match_distance_short: int = 95
     redis: RedisSettings = RedisSettings()
     summarization_api: ApiSettings = ApiSettings()
     summarization: SummarizationSettings = SummarizationSettings()

@@ -6,7 +6,9 @@ from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from grimoire.api.schemas.grimoire import Lorebook, LorebookEntry, LorebookStatusResponse
 from grimoire.common.llm_helpers import token_count
+from grimoire.core.grimoire import lorebook_status
 from grimoire.core.settings import settings
 from grimoire.core.vector_embeddings import get_text_embeddings
 from grimoire.db.models import Base, Chat, Knowledge, Message, SegmentedMemory, User
@@ -194,3 +196,23 @@ def get_memory_graph(db_session: Session, chat_id: int, user_id: int):
     graph = get_knowledge_graph(chat_id, user_id, db_session)
     data = json_graph.node_link_data(graph, edges="edges")
     return data
+
+
+def get_autolorebook(req_id: str):
+    lb_status = lorebook_status(req_id)
+    if not lb_status:  # unknown or expired request_id
+        return LorebookStatusResponse(status="error")
+
+    entries = {}
+    num = 0
+    all_done = True
+    for entry_name, entry in lb_status.items():
+        if not isinstance(entry["status"], dict):  # still "pending"
+            all_done = False
+            continue
+        entries[str(num)] = LorebookEntry(comment=entry_name, key=entry["keys"], content=entry["status"]["result"])
+        num += 1
+
+    status = "done" if all_done else "processing"
+    lorebook = Lorebook(entries=entries)
+    return LorebookStatusResponse(status=status, lorebook=lorebook)

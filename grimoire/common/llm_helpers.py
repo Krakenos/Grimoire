@@ -9,18 +9,28 @@ from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import settings
 
+_tokenizer_cache: dict[str, AutoTokenizer] = {}
+
+
+def _load_tokenizer(tokenizer_name: str) -> AutoTokenizer:
+    if tokenizer_name in _tokenizer_cache:
+        return _tokenizer_cache[tokenizer_name]
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, token=settings.HF_TOKEN or None)
+    except OSError as s:
+        general_logger.warning(f"Could not load {tokenizer_name} tokenizer, defaulting to llama-tokenizer")
+        general_logger.warning(s)
+        tokenizer = AutoTokenizer.from_pretrained("oobabooga/llama-tokenizer")
+    _tokenizer_cache[tokenizer_name] = tokenizer
+    return tokenizer
+
 
 def local_tokenization(texts: str | list[str], tokenizer_name: str) -> int | list[int]:
     general_logger.debug("using local tokenization")
     text = ""
     if texts is str:
         text = texts
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, token=settings.HF_TOKEN)
-    except OSError as s:
-        general_logger.warning(f"Could not load {tokenizer_name} tokenizer, defaulting to llama-tokenizer")
-        general_logger.warning(s)
-        tokenizer = AutoTokenizer.from_pretrained("oobabooga/llama-tokenizer")
+    tokenizer = _load_tokenizer(tokenizer_name)
     if text:
         encoded = tokenizer(text)
         token_amount = len(encoded["input_ids"])
