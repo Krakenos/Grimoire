@@ -13,6 +13,9 @@ ENCRYPTION_KEY: !env ENCRYPTION_KEY
 HF_TOKEN: "" # Huggingface user token, used to access tokenizer from restricted repository
 EMBEDDING_MODEL: "Alibaba-NLP/gte-base-en-v1.5"
 EMBEDDING_MODEL_REVISION: "a8e4f3e0ee719c75bc30d12b8eae0f8440502718" # Points to specific commit in repo for security purposes
+# The trust_remote_code model code (modeling.py) is loaded from a *separate* repo (Alibaba-NLP/new-impl)
+# via auto_map. EMBEDDING_MODEL_REVISION does NOT pin that, so pin the executable code commit here too.
+EMBEDDING_MODEL_CODE_REVISION: "40ced75c3017eb27626c9d4ea981bde21a2662f4" # Pins remote code for security purposes
 prefer_gpu: False
 match_distance: 80
 match_distance_short: 95  # stricter threshold applied when the shorter name is ≤4 chars
