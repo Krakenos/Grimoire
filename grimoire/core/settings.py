@@ -128,7 +128,14 @@ class Settings(BaseSettingsModel):
     ENCRYPTION_KEY: str = "sample-database-encryption-key"
     HF_TOKEN: str | None = None
     EMBEDDING_MODEL: str = "Alibaba-NLP/gte-base-en-v1.5"
-    EMBEDDING_MODEL_REVISION: str | None = None
+    # Pinned to a specific commit for security (avoids pulling unreviewed remote code via
+    # trust_remote_code). This is also the fallback when EMBEDDING_MODEL_REVISION is unset in
+    # the env-mapped config path, so the revision never silently floats to the latest.
+    EMBEDDING_MODEL_REVISION: str | None = "a8e4f3e0ee719c75bc30d12b8eae0f8440502718"
+    # The auto_map remote code (modeling.py) is hosted in a separate repo (Alibaba-NLP/new-impl)
+    # that EMBEDDING_MODEL_REVISION does not cover. Pin the code commit so the executed
+    # trust_remote_code never floats to that repo's latest main.
+    EMBEDDING_MODEL_CODE_REVISION: str | None = "40ced75c3017eb27626c9d4ea981bde21a2662f4"
     prefer_gpu: bool = False
     match_distance: int = 80
     match_distance_short: int = 95
