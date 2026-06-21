@@ -141,6 +141,13 @@ class Settings(BaseSettingsModel):
     tokenization: TokenizationSettings = TokenizationSettings()
     secondary_database: SecondaryDatabaseSettings = SecondaryDatabaseSettings()
 
+    @field_validator("CORS_ALLOW_ORIGINS", mode="before")
+    @classmethod
+    def parse_origins(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+
 
 def envvar_constructor(loader: yaml.Loader, node: yaml.ScalarNode):
     """
