@@ -3,6 +3,12 @@ DEBUG: False
 LOG_PROMPTS: False
 LOG_FILES: False
 AUTH_KEY: ""
+# Origins allowed to make cross-origin requests from a browser (e.g. the SillyTavern tab).
+# Add your ST origin here if you run ST on a non-default port or host.
+# Set to ["*"] to allow all origins (convenient but less secure).
+CORS_ALLOW_ORIGINS:
+  - "http://127.0.0.1:8000"
+  - "http://localhost:8000"
 ENCRYPTION_KEY: !env ENCRYPTION_KEY
 HF_TOKEN: "" # Huggingface user token, used to access tokenizer from restricted repository
 EMBEDDING_MODEL: "Alibaba-NLP/gte-base-en-v1.5"

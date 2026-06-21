@@ -132,6 +132,9 @@ class Settings(BaseSettingsModel):
     prefer_gpu: bool = False
     match_distance: int = 80
     match_distance_short: int = 95
+    # Origins allowed to make cross-origin requests (e.g. the SillyTavern browser tab).
+    # Set to ["*"] to allow all origins, or list specific origins for better security.
+    CORS_ALLOW_ORIGINS: list[str] = ["http://127.0.0.1:8000", "http://localhost:8000"]
     redis: RedisSettings = RedisSettings()
     summarization_api: ApiSettings = ApiSettings()
     summarization: SummarizationSettings = SummarizationSettings()
