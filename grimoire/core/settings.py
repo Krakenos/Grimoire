@@ -132,11 +132,21 @@ class Settings(BaseSettingsModel):
     prefer_gpu: bool = False
     match_distance: int = 80
     match_distance_short: int = 95
+    # Origins allowed to make cross-origin requests (e.g. the SillyTavern browser tab).
+    # Set to ["*"] to allow all origins, or list specific origins for better security.
+    CORS_ALLOW_ORIGINS: list[str] = ["http://127.0.0.1:8000", "http://localhost:8000"]
     redis: RedisSettings = RedisSettings()
     summarization_api: ApiSettings = ApiSettings()
     summarization: SummarizationSettings = SummarizationSettings()
     tokenization: TokenizationSettings = TokenizationSettings()
     secondary_database: SecondaryDatabaseSettings = SecondaryDatabaseSettings()
+
+    @field_validator("CORS_ALLOW_ORIGINS", mode="before")
+    @classmethod
+    def parse_origins(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
 
 def envvar_constructor(loader: yaml.Loader, node: yaml.ScalarNode):
