@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grimoire Panel</title>
+  <link rel="stylesheet" href="/panel/style.css">
+</head>
+<body>
+
+<nav id="sidebar">
+  <h1>Grimoire</h1>
+  <div id="sidebar-actions">
+    <button id="lorebook-btn" class="btn btn-ghost">⚡ Lorebook Generator</button>
+  </div>
+  <div id="sidebar-tree">
+    <div id="empty-state" style="padding:20px;font-size:0.85rem;">Loading…</div>
+  </div>
+</nav>
+
+<div id="main">
+  <div id="no-chat-msg">
+    <span>Select a chat from the sidebar to get started.</span>
+  </div>
+
+  <div id="lorebook-view" style="display:none;">
+    <div id="lorebook-header">
+      <h2>Lorebook Generator</h2>
+      <p>Generate a SillyTavern-compatible lorebook from raw text or an uploaded file (.txt, .epub, .pdf).</p>
+    </div>
+
+    <div id="lorebook-inputs">
+      <div class="lb-section">
+        <label for="lb-text">Paste text</label>
+        <textarea id="lb-text" placeholder="Paste a chat log, book excerpt, or any text with named entities…"></textarea>
+        <button id="lb-gen-text" class="btn btn-primary">Generate from text</button>
+      </div>
+
+      <div class="lb-divider">or</div>
+
+      <div class="lb-section">
+        <label for="lb-file">Upload a file</label>
+        <input type="file" id="lb-file" accept=".txt,.epub,.pdf">
+        <button id="lb-gen-file" class="btn btn-primary">Upload &amp; Generate</button>
+      </div>
+    </div>
+
+    <div id="lb-status" style="display:none;"></div>
+
+    <div id="lb-results" style="display:none;">
+      <div id="lb-results-header">
+        <span id="lb-entry-count"></span>
+        <button id="lb-download" class="btn btn-primary">Download .json</button>
+      </div>
+      <table class="data-table" id="lb-table">
+        <thead>
+          <tr>
+            <th>Entity</th>
+            <th>Keys</th>
+            <th>Content</th>
+          </tr>
+        </thead>
+        <tbody id="lb-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="panel-view" style="display:none;height:100%;flex-direction:column;display:none;">
+    <div id="tabs">
+      <button class="tab-btn active" data-tab="messages">Messages</button>
+      <button class="tab-btn" data-tab="knowledge">Knowledge</button>
+      <button class="tab-btn" data-tab="memories">Memories</button>
+      <button class="tab-btn" data-tab="graph">Graph</button>
+    </div>
+
+    <div id="content">
+      <div class="tab-pane active" id="tab-messages">
+        <div id="messages-loading" style="color:var(--text-muted);">Loading…</div>
+        <table class="data-table" id="messages-table" style="display:none;">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Date</th>
+              <th>Message</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="messages-body"></tbody>
+        </table>
+      </div>
+
+      <div class="tab-pane" id="tab-knowledge">
+        <div id="knowledge-loading" style="color:var(--text-muted);">Loading…</div>
+        <table class="data-table" id="knowledge-table" style="display:none;">
+          <thead>
+            <tr>
+              <th>Entity</th>
+              <th>Label</th>
+              <th>Summary</th>
+              <th>Enabled</th>
+              <th>Frozen</th>
+              <th>Updated</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="knowledge-body"></tbody>
+        </table>
+      </div>
+
+      <div class="tab-pane" id="tab-memories">
+        <div id="memories-loading" style="color:var(--text-muted);">Loading…</div>
+        <table class="data-table" id="memories-table" style="display:none;">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Created</th>
+              <th>Tokens</th>
+              <th>Summary</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="memories-body"></tbody>
+        </table>
+      </div>
+
+      <div class="tab-pane" id="tab-graph">
+        <div id="graph-canvas"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="/panel/vendor/vis-network.min.js"></script>
+<script src="/panel/app.js"></script>
+</body>
+</html>

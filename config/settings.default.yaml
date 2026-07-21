@@ -2,6 +2,7 @@ DB_ENGINE: "postgresql+psycopg2://grimoire:secretpassword@127.0.0.1:5430/grimoir
 DEBUG: False
 LOG_PROMPTS: False
 LOG_FILES: False
+enable_management_panel: False
 AUTH_KEY: ""
 # Origins allowed to make cross-origin requests from a browser (e.g. the SillyTavern tab).
 # Add your ST origin here if you run ST on a non-default port or host.

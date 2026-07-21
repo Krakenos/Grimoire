@@ -118,6 +118,10 @@ class MemoriesDetailOut(BaseModel):
     created_date: datetime
 
 
+class MemoryPatch(BaseModel):
+    summary: str
+
+
 class GraphNode(BaseModel):
     label: str
     memory_list: list[int]

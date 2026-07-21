@@ -11,7 +11,7 @@ from grimoire.common.llm_helpers import token_count
 from grimoire.core.grimoire import lorebook_status
 from grimoire.core.settings import settings
 from grimoire.core.vector_embeddings import get_text_embeddings
-from grimoire.db.models import Base, Chat, Knowledge, Message, SegmentedMemory, User
+from grimoire.db.models import Base, Chat, Knowledge, Message, SegmentedMemory, User, segmented_memories_message
 from grimoire.db.queries import get_knowledge_graph
 
 
@@ -52,6 +52,7 @@ def get_messages(db_session: Session, user_id: int, chat_id: int, skip: int = 0,
         select(Message)
         .join(Message.chat)
         .where(Message.chat_id == chat_id, Chat.user_id == user_id)
+        .order_by(Message.message_index)
         .offset(skip)
         .limit(limit)
     )
@@ -99,6 +100,15 @@ def get_all_memories(
     )
     results = db_session.scalars(query).all()
     return results
+
+
+def get_memory(db_session: Session, user_id: int, chat_id: int, memory_id: int) -> SegmentedMemory | None:
+    query = (
+        select(SegmentedMemory)
+        .join(SegmentedMemory.chat)
+        .where(SegmentedMemory.chat_id == chat_id, SegmentedMemory.id == memory_id, Chat.user_id == user_id)
+    )
+    return db_session.scalar(query)
 
 
 def get_knowledge(db_session: Session, user_id: int, chat_id: int, knowledge_id: int) -> Knowledge | None:
@@ -190,6 +200,42 @@ def update_summary_metadata(db_session: Session, knowledge: Knowledge) -> Knowle
     db_session.commit()
     db_session.refresh(knowledge)
     return knowledge
+
+
+def update_memory_metadata(db_session: Session, memory: SegmentedMemory) -> SegmentedMemory:
+    """
+    Recomputes memory_entry, token_count, and vector_embedding after a summary edit.
+    Mirrors the formatting used in grimoire/core/tasks.py when creating SegmentedMemory rows.
+    :param db_session: database session
+    :param memory: SegmentedMemory object to update
+    :return: updated SegmentedMemory object
+    """
+    memory.memory_entry = f"[ Memory: {memory.summary} ]"
+    memory.token_count = token_count(
+        [memory.memory_entry],
+        settings.summarization_api.backend,
+        settings.summarization_api.url,
+        settings.tokenization.local_tokenizer,
+        settings.tokenization.prefer_local_tokenizer,
+        settings.summarization_api.auth_key,
+    )[0]
+    memory.vector_embedding = get_text_embeddings(memory.summary)[0]
+    db_session.add(memory)
+    db_session.commit()
+    db_session.refresh(memory)
+    return memory
+
+
+def delete_memory(db_session: Session, memory: SegmentedMemory) -> None:
+    """
+    Deletes a SegmentedMemory row after clearing its message association links.
+    :param db_session: database session
+    :param memory: SegmentedMemory object to delete
+    """
+    stmt = delete(segmented_memories_message).where(segmented_memories_message.c.segmented_memory_id == memory.id)
+    db_session.execute(stmt)
+    db_session.delete(memory)
+    db_session.commit()
 
 
 def get_memory_graph(db_session: Session, chat_id: int, user_id: int):

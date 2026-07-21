@@ -124,6 +124,7 @@ class Settings(BaseSettingsModel):
     DEBUG: bool = False
     LOG_PROMPTS: bool = False
     LOG_FILES: bool = False
+    enable_management_panel: bool = False
     AUTH_KEY: str | None = None
     ENCRYPTION_KEY: str = "sample-database-encryption-key"
     HF_TOKEN: str | None = None

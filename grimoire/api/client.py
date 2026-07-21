@@ -20,6 +20,11 @@ app.add_middleware(
 )
 app.include_router(grimoire.router, prefix="/grimoire")
 
+if settings.enable_management_panel:
+    from grimoire.api.panel import panel_app  # noqa: PLC0415
+
+    app.mount("/panel", panel_app)
+
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):

@@ -15,7 +15,7 @@ import PyPDF2
 import spacy
 from bs4 import BeautifulSoup
 from ebooklib import epub
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, with_loader_criteria
 
@@ -635,6 +635,22 @@ async def extract_text_from_epub(upload_file: UploadFile) -> str:
             chapters.append(soup.get_text(separator=" ", strip=True))
 
     return _normalize_text("\n\n".join(chapters))
+
+
+async def extract_text_from_upload(file: UploadFile) -> str:
+    """Dispatch an UploadFile to the appropriate text-extraction helper.
+
+    Supports .txt, .epub, and .pdf.  Raises HTTP 400 for anything else.
+    """
+    if file.filename.endswith(".epub"):
+        return await extract_text_from_epub(file)
+    elif file.filename.endswith(".pdf"):
+        return await extract_text_from_pdf(file)
+    elif file.filename.endswith(".txt"):
+        content = await file.read()
+        return _normalize_text(content.decode("utf-8", errors="ignore"))
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file format. Use .txt, .epub, or .pdf")
 
 
 @time_execution
