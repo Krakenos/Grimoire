@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from grimoire.common.llm_helpers import generate_text, token_count
 from grimoire.common.loggers import general_logger, summary_logger
 from grimoire.common.redis import redis_manager
+from grimoire.core.runtime_settings import get_effective_settings
 from grimoire.core.settings import ApiSettings, SecondaryDatabaseSettings, SummarizationSettings, settings
 from grimoire.db.models import Character, Knowledge, Message, SegmentedMemory
 from grimoire.db.queries import get_knowledge_entity, get_messages_by_index
@@ -203,10 +204,11 @@ def describe_entity(
 ) -> None:
     from grimoire.core.vector_embeddings import get_text_embeddings
 
-    api_settings = settings.summarization_api
-    summarization_settings = settings.summarization
-    tokenization_settings = settings.tokenization
-    secondary_database_settings = settings.secondary_database
+    runtime_settings = get_effective_settings()
+    api_settings = runtime_settings.summarization_api
+    summarization_settings = runtime_settings.summarization
+    tokenization_settings = runtime_settings.tokenization
+    secondary_database_settings = runtime_settings.secondary_database
 
     summarization_url = api_settings.url
     summarization_backend = api_settings.backend
@@ -328,12 +330,13 @@ def generate_segmented_memory(
 ) -> None:
     from grimoire.core.vector_embeddings import get_text_embeddings
 
-    seg_mem_prompt_template = settings.summarization.segmented_memory_prompt
+    runtime_settings = get_effective_settings()
+    seg_mem_prompt_template = runtime_settings.summarization.segmented_memory_prompt
 
-    api_settings = settings.summarization_api
-    summarization_settings = settings.summarization
-    tokenization_settings = settings.tokenization
-    secondary_database_settings = settings.secondary_database
+    api_settings = runtime_settings.summarization_api
+    summarization_settings = runtime_settings.summarization
+    tokenization_settings = runtime_settings.tokenization
+    secondary_database_settings = runtime_settings.secondary_database
 
     summarization_url = api_settings.url
     summarization_backend = api_settings.backend
@@ -428,9 +431,10 @@ def generate_segmented_memory(
 def generate_lorebook_entry(
     ent_name: str, texts: list[str], request_id: str, max_retries: int = 50, retry_interval: int = 1
 ) -> None:
-    api_settings = settings.summarization_api
-    summarization_settings = settings.summarization
-    tokenization_settings = settings.tokenization
+    runtime_settings = get_effective_settings()
+    api_settings = runtime_settings.summarization_api
+    summarization_settings = runtime_settings.summarization
+    tokenization_settings = runtime_settings.tokenization
 
     summarization_url = api_settings.url
     summarization_backend = api_settings.backend

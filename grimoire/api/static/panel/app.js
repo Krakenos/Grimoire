@@ -25,35 +25,74 @@ function showToast(msg, type = 'ok') {
 // -------------------------------------------------------------------------
 // API helpers
 // -------------------------------------------------------------------------
+const PANEL_KEY_STORAGE = 'grimoire_panel_key';
+
+function getPanelKey() {
+  return localStorage.getItem(PANEL_KEY_STORAGE) || '';
+}
+
+function authHeaders() {
+  const key = getPanelKey();
+  return key ? { Authorization: `Bearer ${key}` } : {};
+}
+
+// Prompts once for the panel key and retries `run`. If the retry still 401s, clears the
+// stored key so the next request prompts again rather than looping silently.
+async function withKeyPrompt(run) {
+  try {
+    return await run();
+  } catch (e) {
+    if (e.status !== 401) throw e;
+    const key = window.prompt('Panel key required (Authorization: Bearer <key>):', getPanelKey());
+    if (key === null) throw e;
+    localStorage.setItem(PANEL_KEY_STORAGE, key);
+    try {
+      return await run();
+    } catch (e2) {
+      if (e2.status === 401) localStorage.removeItem(PANEL_KEY_STORAGE);
+      throw e2;
+    }
+  }
+}
+
 async function api(method, path, body) {
   const opts = {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
+    headers: { ...authHeaders(), ...(body ? { 'Content-Type': 'application/json' } : {}) },
   };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(BASE + path, opts);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || res.statusText);
-  }
-  if (res.status === 204) return null;
-  return res.json();
+  return withKeyPrompt(async () => {
+    const res = await fetch(BASE + path, opts);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      const error = new Error(err.detail || res.statusText);
+      error.status = res.status;
+      throw error;
+    }
+    if (res.status === 204) return null;
+    return res.json();
+  });
 }
 
 const get   = (path)        => api('GET',    path);
 const del   = (path)        => api('DELETE', path);
 const patch = (path, body)  => api('PATCH',  path, body);
 const post  = (path, body)  => api('POST',   path, body);
+const put   = (path, body)  => api('PUT',    path, body);
 
 async function uploadFile(path, file) {
   const form = new FormData();
   form.append('file', file);
-  const res = await fetch(BASE + path, { method: 'POST', body: form });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || res.statusText);
-  }
-  return res.json();
+  return withKeyPrompt(async () => {
+    const res = await fetch(BASE + path, { method: 'POST', headers: authHeaders(), body: form });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      const error = new Error(err.detail || res.statusText);
+      error.status = res.status;
+      throw error;
+    }
+    return res.json();
+  });
 }
 
 // -------------------------------------------------------------------------
@@ -108,11 +147,13 @@ function selectChat(user, chat, el) {
   currentUser = user;
   currentChat = chat;
 
-  const noMsg  = document.getElementById('no-chat-msg');
-  const panelV = document.getElementById('panel-view');
-  const lbView = document.getElementById('lorebook-view');
+  const noMsg   = document.getElementById('no-chat-msg');
+  const panelV  = document.getElementById('panel-view');
+  const lbView  = document.getElementById('lorebook-view');
+  const settV   = document.getElementById('settings-view');
   if (noMsg) noMsg.style.display = 'none';
   lbView.style.display = 'none';
+  settV.style.display = 'none';
   panelV.style.display = 'flex';
   panelV.style.flexDirection = 'column';
 
@@ -534,8 +575,10 @@ function showLorebook() {
   const noMsg     = document.getElementById('no-chat-msg');
   const panelV    = document.getElementById('panel-view');
   const lbView    = document.getElementById('lorebook-view');
+  const settV     = document.getElementById('settings-view');
   if (noMsg)   noMsg.style.display   = 'none';
   panelV.style.display = 'none';
+  settV.style.display  = 'none';
   lbView.style.display = 'flex';
 }
 
@@ -657,6 +700,148 @@ document.getElementById('lb-download').addEventListener('click', () => {
   a.download = `${_lbLorebook.name || 'lorebook'}.json`;
   a.click();
   URL.revokeObjectURL(url);
+});
+
+// -------------------------------------------------------------------------
+// Settings
+// -------------------------------------------------------------------------
+const SETTINGS_SECTIONS = ['summarization_api', 'summarization', 'tokenization'];
+
+function showSettings() {
+  document.querySelectorAll('.tree-chat').forEach(c => c.classList.remove('active'));
+  currentUser = null;
+  currentChat = null;
+
+  const noMsg  = document.getElementById('no-chat-msg');
+  const panelV = document.getElementById('panel-view');
+  const lbView = document.getElementById('lorebook-view');
+  const settV  = document.getElementById('settings-view');
+  if (noMsg) noMsg.style.display = 'none';
+  panelV.style.display = 'none';
+  lbView.style.display = 'none';
+  settV.style.display  = 'block';
+
+  loadSettings();
+}
+
+function _settingsField(section, name) {
+  return document.querySelector(`fieldset[data-section="${section}"] [data-field="${name}"]`);
+}
+
+function _fillSettingsForm(data) {
+  for (const [name, value] of Object.entries(data.summarization_api)) {
+    if (name === 'auth_key_set') continue;
+    const el = _settingsField('summarization_api', name);
+    if (el) el.value = value;
+  }
+  _settingsField('summarization_api', 'auth_key').placeholder =
+    data.summarization_api.auth_key_set ? 'unchanged (key is set)' : 'unchanged (no key set)';
+
+  for (const [name, value] of Object.entries(data.summarization)) {
+    const el = _settingsField('summarization', name);
+    if (!el) continue;
+    el.value = name === 'params' ? JSON.stringify(value, null, 2) : value;
+  }
+
+  for (const [name, value] of Object.entries(data.tokenization)) {
+    const el = _settingsField('tokenization', name);
+    if (!el) continue;
+    if (el.type === 'checkbox') el.checked = value;
+    else el.value = value;
+  }
+
+  for (const section of SETTINGS_SECTIONS) {
+    const badge = document.querySelector(`[data-badge="${section}"]`);
+    const isOverridden = data.overridden_sections.includes(section);
+    badge.textContent = isOverridden ? 'overridden' : 'default';
+    badge.className = `section-badge ${isOverridden ? 'section-badge-on' : ''}`;
+  }
+}
+
+async function loadSettings() {
+  const loading = document.getElementById('settings-loading');
+  const form    = document.getElementById('settings-form');
+  loading.style.display = 'block';
+  form.style.display = 'none';
+
+  let data;
+  try {
+    data = await get('/settings');
+  } catch (e) {
+    loading.textContent = `Error: ${e.message}`;
+    return;
+  }
+
+  _fillSettingsForm(data);
+  loading.style.display = 'none';
+  form.style.display = 'flex';
+}
+
+function _readSection(section) {
+  const fieldset = document.querySelector(`fieldset[data-section="${section}"]`);
+  const out = {};
+  fieldset.querySelectorAll('[data-field]').forEach(el => {
+    const name = el.dataset.field;
+    if (el.type === 'checkbox') {
+      out[name] = el.checked;
+    } else if (el.type === 'number') {
+      if (el.value !== '') out[name] = Number(el.value);
+    } else if (name === 'auth_key') {
+      if (el.value) out[name] = el.value;  // blank = leave unchanged
+    } else if (name === 'params') {
+      out[name] = JSON.parse(el.value);    // let JSON errors surface to the caller
+    } else {
+      out[name] = el.value;
+    }
+  });
+  return out;
+}
+
+async function saveSettings(e) {
+  e.preventDefault();
+  const saveBtn = document.getElementById('settings-save');
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving…';
+
+  try {
+    let params;
+    try {
+      params = _readSection('summarization');
+    } catch (parseErr) {
+      throw new Error(`Sampler params must be valid JSON: ${parseErr.message}`);
+    }
+
+    const body = {
+      summarization_api: _readSection('summarization_api'),
+      summarization: params,
+      tokenization: _readSection('tokenization'),
+    };
+    const data = await put('/settings', body);
+    _fillSettingsForm(data);
+    showToast('Settings saved', 'ok');
+  } catch (e2) {
+    showToast(`Error: ${e2.message}`, 'error');
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save changes';
+  }
+}
+
+async function resetSection(section) {
+  if (!confirm(`Reset "${section}" settings to the file default?`)) return;
+  try {
+    const data = await post('/settings/reset', { section });
+    _fillSettingsForm(data);
+    showToast('Reset to default', 'ok');
+  } catch (e) {
+    showToast(`Error: ${e.message}`, 'error');
+  }
+}
+
+document.getElementById('settings-btn').addEventListener('click', showSettings);
+document.getElementById('settings-form').addEventListener('submit', saveSettings);
+document.querySelectorAll('.settings-reset').forEach(btn => {
+  btn.addEventListener('click', () => resetSection(btn.dataset.reset));
 });
 
 // -------------------------------------------------------------------------

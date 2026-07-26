@@ -126,6 +126,9 @@ class Settings(BaseSettingsModel):
     LOG_FILES: bool = False
     enable_management_panel: bool = False
     AUTH_KEY: str | None = None
+    # Bearer key required to access the management panel's API. Falls back to AUTH_KEY when unset;
+    # if neither is set the panel API is unauthenticated (see grimoire/api/auth.py:check_panel_key).
+    PANEL_KEY: str | None = None
     ENCRYPTION_KEY: str = "sample-database-encryption-key"
     HF_TOKEN: str | None = None
     EMBEDDING_MODEL: str = "Alibaba-NLP/gte-base-en-v1.5"

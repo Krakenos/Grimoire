@@ -4,6 +4,9 @@ LOG_PROMPTS: False
 LOG_FILES: False
 enable_management_panel: False
 AUTH_KEY: ""
+# Bearer key required to access the management panel's API (/panel/api/...). Falls back to
+# AUTH_KEY when unset; if neither is set the panel API is left unauthenticated.
+PANEL_KEY: !env PANEL_KEY
 # Origins allowed to make cross-origin requests from a browser (e.g. the SillyTavern tab).
 # Add your ST origin here if you run ST on a non-default port or host.
 # Set to ["*"] to allow all origins (convenient but less secure).

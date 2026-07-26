@@ -178,3 +178,85 @@ class LorebookStatusResponse(BaseModel):
 
 class LorebookStatusRequest(BaseModel):
     request_id: str
+
+
+# ---------------------------------------------------------------------------
+# Management panel — editable settings
+# ---------------------------------------------------------------------------
+
+
+class SummarizationApiSettingsOut(BaseModel):
+    backend: str
+    model: str
+    url: str
+    auth_key_set: bool  # auth_key itself is never sent back to the client
+    context_length: int
+    system_sequence: str
+    system_suffix: str
+    input_sequence: str
+    input_suffix: str
+    output_sequence: str
+    output_suffix: str
+    first_output_sequence: str
+    last_output_sequence: str
+    bos_token: str
+
+
+class SummarizationApiSettingsIn(BaseModel):
+    backend: str | None = None
+    model: str | None = None
+    url: str | None = None
+    auth_key: str | None = None  # blank/omitted preserves the currently stored value
+    context_length: int | None = None
+    system_sequence: str | None = None
+    system_suffix: str | None = None
+    input_sequence: str | None = None
+    input_suffix: str | None = None
+    output_sequence: str | None = None
+    output_suffix: str | None = None
+    first_output_sequence: str | None = None
+    last_output_sequence: str | None = None
+    bos_token: str | None = None
+
+
+class SummarizationPromptSettingsOut(BaseModel):
+    prompt: str
+    segmented_memory_prompt: str
+    limit_rate: int
+    max_tokens: int
+    params: dict
+
+
+class SummarizationPromptSettingsIn(BaseModel):
+    prompt: str | None = None
+    segmented_memory_prompt: str | None = None
+    limit_rate: int | None = None
+    max_tokens: int | None = None
+    params: dict | None = None
+
+
+class TokenizationSettingsOut(BaseModel):
+    prefer_local_tokenizer: bool
+    local_tokenizer: str
+
+
+class TokenizationSettingsIn(BaseModel):
+    prefer_local_tokenizer: bool | None = None
+    local_tokenizer: str | None = None
+
+
+class PanelSettingsOut(BaseModel):
+    summarization_api: SummarizationApiSettingsOut
+    summarization: SummarizationPromptSettingsOut
+    tokenization: TokenizationSettingsOut
+    overridden_sections: list[str]  # sections currently backed by a DB override, vs. file defaults
+
+
+class PanelSettingsIn(BaseModel):
+    summarization_api: SummarizationApiSettingsIn | None = None
+    summarization: SummarizationPromptSettingsIn | None = None
+    tokenization: TokenizationSettingsIn | None = None
+
+
+class SettingsResetRequest(BaseModel):
+    section: str

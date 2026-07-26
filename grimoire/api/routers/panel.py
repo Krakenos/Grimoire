@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from starlette import status
 from starlette.responses import Response
@@ -16,10 +17,24 @@ from grimoire.api.schemas.grimoire import (
     LorebookStatusResponse,
     MemoriesOut,
     MemoryPatch,
+    PanelSettingsIn,
+    PanelSettingsOut,
+    SettingsResetRequest,
+    SummarizationApiSettingsOut,
+    SummarizationPromptSettingsOut,
+    TokenizationSettingsOut,
     UserOut,
 )
 from grimoire.common import api_utils
 from grimoire.core.grimoire import extract_text_from_upload, generate_lorebook
+from grimoire.core.runtime_settings import (
+    EDITABLE_SECTIONS,
+    delete_override,
+    get_effective_settings,
+    get_overridden_sections,
+    upsert_override,
+)
+from grimoire.core.settings import ApiSettings, SummarizationSettings, TokenizationSettings
 from grimoire.db.connection import get_db
 
 router = APIRouter(tags=["Management panel"])
@@ -194,3 +209,98 @@ def get_memory_graph(user_id: int, chat_id: int, db: Session = Depends(get_db)):
     if chat is None:
         raise HTTPException(status_code=404, detail="Chat not found")
     return api_utils.get_memory_graph(db, chat_id=chat_id, user_id=user_id)
+
+
+# ---------------------------------------------------------------------------
+# Settings (summarization API, prompts, sampler params, tokenization)
+# ---------------------------------------------------------------------------
+
+
+def _build_settings_out(db: Session) -> PanelSettingsOut:
+    runtime_settings = get_effective_settings(db)
+    api_settings = runtime_settings.summarization_api
+    summarization_settings = runtime_settings.summarization
+    tokenization_settings = runtime_settings.tokenization
+
+    return PanelSettingsOut(
+        summarization_api=SummarizationApiSettingsOut(
+            backend=api_settings.backend,
+            model=api_settings.model,
+            url=api_settings.url,
+            auth_key_set=bool(api_settings.auth_key),
+            context_length=api_settings.context_length,
+            system_sequence=api_settings.system_sequence,
+            system_suffix=api_settings.system_suffix,
+            input_sequence=api_settings.input_sequence,
+            input_suffix=api_settings.input_suffix,
+            output_sequence=api_settings.output_sequence,
+            output_suffix=api_settings.output_suffix,
+            first_output_sequence=api_settings.first_output_sequence,
+            last_output_sequence=api_settings.last_output_sequence,
+            bos_token=api_settings.bos_token,
+        ),
+        summarization=SummarizationPromptSettingsOut(
+            prompt=summarization_settings.prompt,
+            segmented_memory_prompt=summarization_settings.segmented_memory_prompt,
+            limit_rate=summarization_settings.limit_rate,
+            max_tokens=summarization_settings.max_tokens,
+            params=summarization_settings.params,
+        ),
+        tokenization=TokenizationSettingsOut(
+            prefer_local_tokenizer=tokenization_settings.prefer_local_tokenizer,
+            local_tokenizer=tokenization_settings.local_tokenizer,
+        ),
+        overridden_sections=sorted(get_overridden_sections(db)),
+    )
+
+
+@router.get("/settings", response_model=PanelSettingsOut)
+def get_panel_settings(db: Session = Depends(get_db)):
+    return _build_settings_out(db)
+
+
+@router.put("/settings", response_model=PanelSettingsOut)
+def update_panel_settings(body: PanelSettingsIn, db: Session = Depends(get_db)):
+    current = get_effective_settings(db)
+
+    if body.summarization_api is not None:
+        merged = current.summarization_api.model_dump()
+        updates = body.summarization_api.model_dump(exclude_unset=True, exclude_none=True)
+        if not updates.get("auth_key"):  # blank/omitted auth_key means "leave unchanged"
+            updates.pop("auth_key", None)
+        merged.update(updates)
+        try:
+            ApiSettings(**merged)
+        except ValidationError as e:
+            raise HTTPException(status_code=422, detail=e.errors()) from e
+        upsert_override(db, "summarization_api", merged)
+
+    if body.summarization is not None:
+        merged = current.summarization.model_dump()
+        updates = body.summarization.model_dump(exclude_unset=True, exclude_none=True)
+        merged.update(updates)
+        try:
+            SummarizationSettings(**merged)
+        except ValidationError as e:
+            raise HTTPException(status_code=422, detail=e.errors()) from e
+        upsert_override(db, "summarization", merged)
+
+    if body.tokenization is not None:
+        merged = current.tokenization.model_dump()
+        updates = body.tokenization.model_dump(exclude_unset=True, exclude_none=True)
+        merged.update(updates)
+        try:
+            TokenizationSettings(**merged)
+        except ValidationError as e:
+            raise HTTPException(status_code=422, detail=e.errors()) from e
+        upsert_override(db, "tokenization", merged)
+
+    return _build_settings_out(db)
+
+
+@router.post("/settings/reset", response_model=PanelSettingsOut)
+def reset_panel_settings(body: SettingsResetRequest, db: Session = Depends(get_db)):
+    if body.section not in EDITABLE_SECTIONS:
+        raise HTTPException(status_code=400, detail=f"Unknown settings section: {body.section}")
+    delete_override(db, body.section)
+    return _build_settings_out(db)
