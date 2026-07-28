@@ -138,3 +138,26 @@ The panel prompts for it in the browser on the first request and remembers it. `
 be the same value as `AUTH_KEY` — `AUTH_KEY` is the key you give to chat clients, so reusing it
 would make every client key a key over every user's data. Grimoire refuses to start if they match,
 and logs a warning when the panel is enabled with no key at all.
+
+With the panel disabled its endpoints do not exist at all — the sub-application is never mounted, so
+`/panel` and everything under it returns 404 rather than being merely access-controlled.
+
+#### Settings edited in the panel outlive it
+
+Settings changed through the panel are saved to the `setting_override` database table and layered
+over `settings.yaml` every time they are read, including by the Celery worker. **Disabling the panel
+stops further edits but does not revert edits already made.** If you change the summarization backend
+in the panel and later set `enable_management_panel: False`, the worker keeps using the overridden
+value and your `settings.yaml` will appear to be ignored.
+
+Only `summarization_api`, `summarization` and `tokenization` can be overridden this way. To go back
+to what is in the file, either use the panel's reset control while it is still enabled, or clear the
+rows directly:
+
+```bash
+docker compose -f docker/docker-compose-dev.yaml exec postgres \
+  psql -U grimoire -d grimoire -c "DELETE FROM setting_override;"
+```
+
+Overrides are read from the database on each use rather than cached at startup, so this takes effect
+on the next summarization with no restart needed.
