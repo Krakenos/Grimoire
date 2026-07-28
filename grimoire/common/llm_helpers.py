@@ -1,16 +1,20 @@
 import time
 from dataclasses import dataclass
+from typing import cast
 from urllib.parse import urljoin
 
 import requests
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
 from grimoire.core.settings import ApiSettings, settings
 
-_tokenizer_cache: dict[str, AutoTokenizer] = {}
+_tokenizer_cache: dict[str, PreTrainedTokenizerBase] = {}
+
+_FALLBACK_TOKENIZER = "oobabooga/llama-tokenizer"
+_TOKENIZER_PROBE_TEXT = "The quick brown fox jumps over the lazy dog."
 
 # Keys Grimoire injects for Kobold-style text completion that OpenAI-style chat completion
 # endpoints don't understand and may reject.
@@ -59,15 +63,60 @@ def split_reasoning(
     return text.strip(), ""
 
 
-def _load_tokenizer(tokenizer_name: str) -> AutoTokenizer:
-    if tokenizer_name in _tokenizer_cache:
-        return _tokenizer_cache[tokenizer_name]
+def _tokenizer_is_usable(tokenizer: PreTrainedTokenizerBase) -> bool:
+    """Whether a loaded tokenizer actually has a vocabulary behind it.
+
+    Repositories holding only GGUF quants often ship a ``config.json`` without any tokenizer
+    files. ``AutoTokenizer`` resolves the class from that config and returns an empty tokenizer
+    instead of raising, which then counts every text as 0 tokens - silently disabling every
+    context-length check downstream. Encoding a probe is the cheapest reliable check.
+    """
     try:
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, token=settings.HF_TOKEN or None)
-    except OSError as s:
+        if tokenizer.vocab_size <= 1:
+            return False
+        return len(tokenizer.encode(_TOKENIZER_PROBE_TEXT)) > 0
+    except Exception as e:
+        general_logger.warning(f"Tokenizer failed to encode probe text: {e}")
+        return False
+
+
+def _from_pretrained(tokenizer_name: str, **kwargs) -> PreTrainedTokenizerBase:
+    """Typed wrapper around the ``AutoTokenizer`` factory.
+
+    ``AutoTokenizer.from_pretrained`` carries an unannotated decorator, so type checkers infer
+    None as its return type and flag every use of the loaded tokenizer. Routing it through
+    ``object`` once here restores the real type instead of spreading casts over each call site.
+    """
+    tokenizer: object = AutoTokenizer.from_pretrained(tokenizer_name, **kwargs)
+    return cast(PreTrainedTokenizerBase, tokenizer)
+
+
+def _try_load_tokenizer(tokenizer_name: str) -> PreTrainedTokenizerBase | None:
+    """Load a tokenizer, returning None when it is missing or unusable."""
+    try:
+        tokenizer = _from_pretrained(tokenizer_name, token=settings.HF_TOKEN or None)
+    except Exception as s:
         general_logger.warning(f"Could not load {tokenizer_name} tokenizer, defaulting to llama-tokenizer")
         general_logger.warning(s)
-        tokenizer = AutoTokenizer.from_pretrained("oobabooga/llama-tokenizer")
+        return None
+
+    if not _tokenizer_is_usable(tokenizer):
+        general_logger.warning(
+            f"Tokenizer {tokenizer_name} loaded without a usable vocabulary "
+            f"(repositories with GGUF quants often lack tokenizer files), defaulting to llama-tokenizer"
+        )
+        return None
+
+    return tokenizer
+
+
+def _load_tokenizer(tokenizer_name: str) -> PreTrainedTokenizerBase:
+    if tokenizer_name in _tokenizer_cache:
+        return _tokenizer_cache[tokenizer_name]
+
+    tokenizer = _try_load_tokenizer(tokenizer_name)
+    if tokenizer is None:
+        tokenizer = _from_pretrained(_FALLBACK_TOKENIZER)
     _tokenizer_cache[tokenizer_name] = tokenizer
     return tokenizer
 
