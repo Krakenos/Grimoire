@@ -5,7 +5,7 @@ from typing import Any
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from pydantic_core.core_schema import ValidationInfo
 
 load_dotenv()
@@ -126,6 +126,10 @@ class Settings(BaseSettingsModel):
     LOG_FILES: bool = False
     enable_management_panel: bool = False
     AUTH_KEY: str | None = None
+    # Optional bearer key for the management panel's API; unset leaves the panel open, which is
+    # fine only because the panel is meant to be local (see grimoire/api/auth.py:check_panel_key).
+    # Must not be AUTH_KEY, which is handed out to chat clients.
+    PANEL_KEY: str | None = None
     ENCRYPTION_KEY: str = "sample-database-encryption-key"
     HF_TOKEN: str | None = None
     EMBEDDING_MODEL: str = "Alibaba-NLP/gte-base-en-v1.5"
@@ -155,6 +159,21 @@ class Settings(BaseSettingsModel):
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
+
+    @model_validator(mode="after")
+    def check_panel_key_distinct(self) -> "Settings":
+        """Reject PANEL_KEY reusing AUTH_KEY.
+
+        PANEL_KEY is optional — the panel is a local tool and needs no key on a machine only you
+        can reach. But setting it to AUTH_KEY is never what anyone wants: AUTH_KEY is handed to
+        every chat client, so it would turn each client key into a key over every user's data.
+        """
+        if self.enable_management_panel and self.AUTH_KEY and self.PANEL_KEY == self.AUTH_KEY:
+            raise ValueError(
+                "PANEL_KEY must differ from AUTH_KEY. AUTH_KEY is distributed to chat clients, so "
+                "reusing it would give every client full read/write access to the panel."
+            )
+        return self
 
 
 def envvar_constructor(loader: yaml.Loader, node: yaml.ScalarNode):

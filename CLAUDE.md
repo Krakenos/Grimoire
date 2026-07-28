@@ -69,6 +69,26 @@ Celery workers consume `summarization_queue`. The `describe_entity` task:
 
 `generate_segmented_memory` summarizes fixed message windows into `SegmentedMemory` rows.
 
+### Management panel (`grimoire/api/panel.py`)
+
+Optional, off by default (`enable_management_panel`). Mounted at `/panel` as a **separate FastAPI
+sub-application**, which is the detail that matters when touching auth: Starlette does not propagate
+the parent app's `dependencies=[Depends(check_api_key)]` into a mounted sub-app, so the panel API is
+gated by its own `check_panel_key` dependency (`grimoire/api/auth.py`). The static SPA under
+`grimoire/api/static/panel/` is served ungated — it holds no secrets and prompts for the key in the
+browser, storing it in `localStorage`.
+
+**The panel is a local administration tool; the supported production setup is to leave it off.** It
+has no per-user access control — any caller reads and edits every user's chats and can rewrite the
+summarization backend URL. Do not "fix" that by adding auth and calling it production-ready, and do
+not reintroduce an `AUTH_KEY` fallback for `PANEL_KEY`: `AUTH_KEY` is distributed to chat clients, so
+accepting it would make every client key an admin key. `PANEL_KEY` is optional (unset = open, fine
+for localhost-only) but validated to differ from `AUTH_KEY`.
+
+Panel settings writes go through `grimoire/core/runtime_settings.py`, which persists overrides to the
+`SettingOverride` table and restricts them to `EDITABLE_SECTIONS` (`summarization_api`,
+`summarization`, `tokenization`) — top-level keys like `PANEL_KEY` are deliberately not editable.
+
 ### Key modules
 
 | Path | Role |
@@ -80,7 +100,12 @@ Celery workers consume `summarization_queue`. The `describe_entity` task:
 | `grimoire/common/llm_helpers.py` | LLM API calls, tokenization (local HF or remote API) |
 | `grimoire/db/models.py` | SQLAlchemy ORM: `Knowledge`, `Message`, `Chat`, `User`, `Character`, `SegmentedMemory` |
 | `grimoire/db/queries.py` | Semantic search (cosine sim via pgvector + weighted recency) |
-| `grimoire/api/routers/grimoire.py` | All FastAPI endpoints |
+| `grimoire/api/client.py` | Main FastAPI app: CORS, auth dependency, optional panel mount |
+| `grimoire/api/routers/grimoire.py` | Main API endpoints (`/grimoire/...`) |
+| `grimoire/api/auth.py` | `check_api_key` (main API) and `check_panel_key` (panel sub-app) |
+| `grimoire/api/panel.py` | Panel sub-app: gated `/panel/api` router + static SPA mount |
+| `grimoire/api/routers/panel.py` | Panel endpoints (users, chats, knowledge, memories, settings) |
+| `grimoire/core/runtime_settings.py` | DB-persisted settings overrides; `EDITABLE_SECTIONS` allowlist |
 
 ### Data model highlights
 
@@ -98,6 +123,11 @@ Celery workers consume `summarization_queue`. The `describe_entity` task:
 - `secondary_database`: optional separate DB where raw messages are stored (for privacy); only external IDs are stored in the main DB
 - `match_distance`: fuzzy match threshold (0–100) for entity deduplication
 - `prefer_gpu`: controls spaCy and embedding model device
+- `AUTH_KEY`: bearer key for the main API, distributed to chat clients
+- `enable_management_panel` / `PANEL_KEY`: see the management panel section above — off by default,
+  local-only tool, `PANEL_KEY` optional but must differ from `AUTH_KEY`
+- `CORS_ALLOW_ORIGINS`: browser origins allowed to call the API (defaults to localhost:8000 for
+  SillyTavern); `["*"]` is accepted but pairs badly with an unauthenticated panel
 
 ### Docker
 

@@ -4,6 +4,12 @@ LOG_PROMPTS: False
 LOG_FILES: False
 enable_management_panel: False
 AUTH_KEY: ""
+# Optional bearer key for the management panel's API (/panel/api/...). The panel is a local
+# admin tool that can read every user's chats, so the supported production setup is
+# enable_management_panel: False, not a key. Leave this empty when the panel is only reachable
+# from your own machine; set it if the host is reachable by anyone else. It must not be the same
+# value as AUTH_KEY, which is shared with chat clients.
+PANEL_KEY: !env PANEL_KEY
 # Origins allowed to make cross-origin requests from a browser (e.g. the SillyTavern tab).
 # Add your ST origin here if you run ST on a non-default port or host.
 # Set to ["*"] to allow all origins (convenient but less secure).

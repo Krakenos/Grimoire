@@ -12,6 +12,7 @@
   <h1>Grimoire</h1>
   <div id="sidebar-actions">
     <button id="lorebook-btn" class="btn btn-ghost">⚡ Lorebook Generator</button>
+    <button id="settings-btn" class="btn btn-ghost">⚙ Settings</button>
   </div>
   <div id="sidebar-tree">
     <div id="empty-state" style="padding:20px;font-size:0.85rem;">Loading…</div>
@@ -63,6 +64,106 @@
         <tbody id="lb-body"></tbody>
       </table>
     </div>
+  </div>
+
+  <div id="settings-view" style="display:none;">
+    <div id="settings-header">
+      <h2>Settings</h2>
+      <p>Changes apply to the next summarization run — no restart needed. Other config (database, encryption, embedding model, etc.) stays file-only.</p>
+    </div>
+
+    <div id="settings-loading" style="color:var(--text-muted);">Loading…</div>
+
+    <form id="settings-form" style="display:none;">
+      <fieldset class="settings-section" data-section="summarization_api">
+        <legend>Summarization API <span class="section-badge" data-badge="summarization_api"></span></legend>
+        <div class="settings-grid">
+          <label>Backend
+            <input type="text" data-field="backend">
+          </label>
+          <label>Model
+            <input type="text" data-field="model" placeholder="(auto-detect if empty)">
+          </label>
+          <label>URL
+            <input type="text" data-field="url">
+          </label>
+          <label>Auth key
+            <input type="password" data-field="auth_key" placeholder="unchanged">
+          </label>
+          <label>Context length
+            <input type="number" data-field="context_length">
+          </label>
+          <label>BOS token
+            <input type="text" data-field="bos_token">
+          </label>
+          <label>System sequence
+            <input type="text" data-field="system_sequence">
+          </label>
+          <label>System suffix
+            <input type="text" data-field="system_suffix">
+          </label>
+          <label>Input sequence
+            <input type="text" data-field="input_sequence">
+          </label>
+          <label>Input suffix
+            <input type="text" data-field="input_suffix">
+          </label>
+          <label>Output sequence
+            <input type="text" data-field="output_sequence">
+          </label>
+          <label>Output suffix
+            <input type="text" data-field="output_suffix">
+          </label>
+          <label>First output sequence
+            <input type="text" data-field="first_output_sequence">
+          </label>
+          <label>Last output sequence
+            <input type="text" data-field="last_output_sequence">
+          </label>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm settings-reset" data-reset="summarization_api">Reset to default</button>
+      </fieldset>
+
+      <fieldset class="settings-section" data-section="summarization">
+        <legend>Prompts <span class="section-badge" data-badge="summarization"></span></legend>
+        <label>Summary prompt
+          <textarea data-field="prompt" rows="4"></textarea>
+        </label>
+        <label>Segmented memory prompt
+          <textarea data-field="segmented_memory_prompt" rows="4"></textarea>
+        </label>
+        <div class="settings-grid">
+          <label>Limit rate
+            <input type="number" data-field="limit_rate">
+          </label>
+          <label>Max tokens
+            <input type="number" data-field="max_tokens">
+          </label>
+        </div>
+        <label>Sampler params (JSON)
+          <textarea data-field="params" rows="4" class="mono"></textarea>
+        </label>
+        <button type="button" class="btn btn-ghost btn-sm settings-reset" data-reset="summarization">Reset to default</button>
+      </fieldset>
+
+      <fieldset class="settings-section" data-section="tokenization">
+        <legend>Tokenization <span class="section-badge" data-badge="tokenization"></span></legend>
+        <div class="settings-grid">
+          <label class="checkbox-label">
+            <input type="checkbox" data-field="prefer_local_tokenizer">
+            Prefer local tokenizer
+          </label>
+          <label>Local tokenizer
+            <input type="text" data-field="local_tokenizer">
+          </label>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm settings-reset" data-reset="tokenization">Reset to default</button>
+      </fieldset>
+
+      <div id="settings-actions">
+        <button type="submit" class="btn btn-primary" id="settings-save">Save changes</button>
+      </div>
+    </form>
   </div>
 
   <div id="panel-view" style="display:none;height:100%;flex-direction:column;display:none;">

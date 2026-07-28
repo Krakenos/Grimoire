@@ -124,6 +124,21 @@ class CharacterTriggerText(Base):
     text = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=False)
 
 
+class SettingOverride(Base):
+    """DB-backed override for one editable settings section (e.g. "summarization_api").
+
+    Layered on top of the file/env config by grimoire.core.runtime_settings.get_effective_settings()
+    so operators can tune summarization settings from the management panel without a process restart.
+    """
+
+    __tablename__ = "setting_override"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    section: Mapped[str] = mapped_column(unique=True, index=True)
+    value = Column(StringEncryptedType(Unicode, encryption_key, AesEngine, "pkcs5"), nullable=False)  # JSON string
+    updated_date: Mapped[datetime] = mapped_column(default=datetime.now)
+
+
 class SegmentedMemory(Base):
     __tablename__ = "segmented_memories"
 
