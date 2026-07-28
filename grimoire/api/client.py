@@ -23,6 +23,12 @@ app.include_router(grimoire.router, prefix="/grimoire")
 if settings.enable_management_panel:
     from grimoire.api.panel import panel_app  # noqa: PLC0415
 
+    if not settings.PANEL_KEY:
+        general_logger.warning(
+            "Management panel is enabled without PANEL_KEY: /panel is unauthenticated and exposes "
+            "every user's chats. Fine on a machine only you can reach; if this host is reachable "
+            "by anyone else, set PANEL_KEY or turn enable_management_panel off."
+        )
     app.mount("/panel", panel_app)
 
 
