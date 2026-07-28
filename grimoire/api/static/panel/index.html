@@ -93,6 +93,12 @@
           <label>Context length
             <input type="number" data-field="context_length">
           </label>
+          <label>API mode
+            <select data-field="api_mode">
+              <option value="text">text (completions)</option>
+              <option value="chat">chat (chat completions)</option>
+            </select>
+          </label>
           <label>BOS token
             <input type="text" data-field="bos_token">
           </label>
@@ -120,17 +126,42 @@
           <label>Last output sequence
             <input type="text" data-field="last_output_sequence">
           </label>
+          <label>Reasoning effort
+            <input type="text" data-field="reasoning_effort" placeholder="(unset = omit) low / medium / high">
+          </label>
+          <label>Thinking budget
+            <input type="number" data-field="thinking_budget" placeholder="extra tokens reserved for thinking">
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" data-field="strip_reasoning">
+            Strip &lt;think&gt; reasoning from output
+          </label>
         </div>
+        <label>Chat template kwargs (JSON)
+          <textarea data-field="chat_template_kwargs" data-json rows="2" class="mono" placeholder='{"enable_thinking": false}'></textarea>
+        </label>
         <button type="button" class="btn btn-ghost btn-sm settings-reset" data-reset="summarization_api">Reset to default</button>
       </fieldset>
 
       <fieldset class="settings-section" data-section="summarization">
         <legend>Prompts <span class="section-badge" data-badge="summarization"></span></legend>
-        <label>Summary prompt
+        <label>Summary prompt (text mode)
           <textarea data-field="prompt" rows="4"></textarea>
         </label>
-        <label>Segmented memory prompt
+        <label>Segmented memory prompt (text mode)
           <textarea data-field="segmented_memory_prompt" rows="4"></textarea>
+        </label>
+        <label>Summary system prompt (chat mode)
+          <textarea data-field="chat_system_prompt" rows="3"></textarea>
+        </label>
+        <label>Summary user prompt (chat mode)
+          <textarea data-field="chat_user_prompt" rows="2"></textarea>
+        </label>
+        <label>Segmented memory system prompt (chat mode)
+          <textarea data-field="segmented_memory_chat_system_prompt" rows="3"></textarea>
+        </label>
+        <label>Segmented memory user prompt (chat mode)
+          <textarea data-field="segmented_memory_chat_user_prompt" rows="2"></textarea>
         </label>
         <div class="settings-grid">
           <label>Limit rate
@@ -141,7 +172,7 @@
           </label>
         </div>
         <label>Sampler params (JSON)
-          <textarea data-field="params" rows="4" class="mono"></textarea>
+          <textarea data-field="params" data-json rows="4" class="mono"></textarea>
         </label>
         <button type="button" class="btn btn-ghost btn-sm settings-reset" data-reset="summarization">Reset to default</button>
       </fieldset>

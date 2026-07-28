@@ -31,6 +31,37 @@ summarization_api: # Api used for summarization
   output_suffix: "\n"
 ```
 
+#### Chat completions and reasoning/thinking models
+
+By default Grimoire talks to the summarization backend with plain text completions
+(`/v1/completions`, or Kobold's native `/api/v1/generate`). Set `api_mode: chat` to instead use
+chat completions (`/v1/chat/completions`), which most modern OpenAI-compatible servers (vLLM,
+Aphrodite, Tabby, GenericOAI) support alongside text completions. KoboldAI/KoboldCPP have no chat
+endpoint, so they always use text completions regardless of `api_mode`.
+
+```yaml
+summarization_api:
+  backend: GenericOAI
+  api_mode: chat # "text" (default) or "chat"
+  reasoning_effort: "" # OpenAI/vLLM reasoning effort knob, e.g. "low"/"medium"/"high"; empty omits it
+  chat_template_kwargs: {} # extra chat kwargs, e.g. {enable_thinking: false} for Qwen/vLLM/Aphrodite
+  thinking_budget: 0 # extra tokens added on top of summarization.max_tokens to leave room for reasoning
+  strip_reasoning: true # strip <think>...</think> (or an orphaned closing tag) from generated text
+
+summarization:
+  # Used only in chat mode, in place of `prompt` / `segmented_memory_prompt`. Same placeholders,
+  # but no instruct sequences - the server applies its own chat template.
+  chat_system_prompt: "{previous_summary}{additional_info}{messages}"
+  chat_user_prompt: "Describe {term}."
+  segmented_memory_chat_system_prompt: "Below is conversation snippet.\n{messages}"
+  segmented_memory_chat_user_prompt: "Summarize the most important facts and events in the story so far. Limit the summary to one paragraph. Your response should include nothing but the summary."
+```
+
+For reasoning models that emit `<think>...</think>` blocks, Grimoire captures that separately
+(from a server's `reasoning_content`/`reasoning` field in chat mode, or by parsing it out of the
+generated text otherwise) and never stores it in the summary - it's only logged for debugging.
+Set `strip_reasoning: false` to disable this and keep the raw output as-is.
+
 ### Running from source
 
 Install dependencies (creates `.venv` automatically):

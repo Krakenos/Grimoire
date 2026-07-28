@@ -1,4 +1,6 @@
+import re
 import time
+from dataclasses import dataclass
 from urllib.parse import urljoin
 
 import requests
@@ -7,9 +9,44 @@ from transformers import AutoTokenizer
 from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
-from grimoire.core.settings import settings
+from grimoire.core.settings import ApiSettings, settings
 
 _tokenizer_cache: dict[str, AutoTokenizer] = {}
+
+# Keys Grimoire injects for Kobold-style text completion that OpenAI-style chat completion
+# endpoints don't understand and may reject.
+_TEXT_ONLY_PARAM_KEYS = ("max_length", "truncation_length", "max_context_length", "stop_sequence")
+
+_THINK_TAG_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+@dataclass
+class GenerationResult:
+    text: str
+    reasoning: str
+    request_body: dict
+
+
+def split_reasoning(text: str, strip_reasoning: bool = True) -> tuple[str, str]:
+    """Split reasoning-model output into (content, reasoning).
+
+    Handles two shapes:
+    - a full ``<think>...</think>`` block anywhere in the text
+    - an orphaned closing ``</think>`` with no opening tag, which happens when the prompt
+      prefills the opening tag itself (a common workaround for models that always think)
+
+    When ``strip_reasoning`` is False, the text is returned unchanged with no reasoning captured.
+    """
+    if not strip_reasoning or not text:
+        return text, ""
+
+    if "</think>" in text:
+        reasoning, _, content = text.rpartition("</think>")
+        reasoning = reasoning.replace("<think>", "").strip()
+        return content.strip(), reasoning
+
+    content = _THINK_TAG_RE.sub("", text).strip()
+    return content, ""
 
 
 def _load_tokenizer(tokenizer_name: str) -> AutoTokenizer:
@@ -144,6 +181,18 @@ def get_context_length(api_url: str) -> int:
     return value
 
 
+_KOBOLD_BACKENDS = ("koboldai", "koboldcpp")
+
+
+def is_chat_mode(api_settings: ApiSettings) -> bool:
+    """Whether generate_text will use the chat-completions endpoint for these settings.
+
+    Kobold backends have no chat-completions endpoint, so chat mode always falls back to text
+    there regardless of api_mode.
+    """
+    return api_settings.api_mode == "chat" and api_settings.backend.lower() not in _KOBOLD_BACKENDS
+
+
 def get_model_name(api_url: str, api_key, api_type):
     if api_type.lower() == "tabby":
         model_endpoint = urljoin(api_url, "/v1/model")
@@ -157,22 +206,43 @@ def get_model_name(api_url: str, api_key, api_type):
 
 
 def generate_text(
-    prompt: str,
+    prompt: str | list[dict],
     params: dict,
-    api_type: str,
-    api_url: str,
-    api_key: str = None,
+    api_settings: ApiSettings,
     max_retries: int = 50,
     retry_interval: int = 1,
-):
-    if api_type.lower() in ("koboldai", "koboldcpp"):
+) -> GenerationResult:
+    api_type = api_settings.backend
+    api_url = api_settings.url
+    api_key = api_settings.auth_key
+    chat_mode = is_chat_mode(api_settings)
+
+    if api_settings.api_mode == "chat" and not chat_mode:
+        general_logger.warning(f"{api_type} does not support chat completions, falling back to text completion")
+
+    if api_type.lower() in _KOBOLD_BACKENDS:
         request_body = {"prompt": prompt}
         request_body.update(params)
         endpoint = urljoin(api_url, "/api/v1/generate")
+    elif chat_mode:
+        if api_settings.model:
+            model_name = api_settings.model
+        else:
+            model_name = get_model_name(api_url, api_key, api_type)
+        chat_params = {k: v for k, v in params.items() if k not in _TEXT_ONLY_PARAM_KEYS}
+        if api_settings.thinking_budget > 0 and "max_tokens" in chat_params:
+            chat_params["max_tokens"] = chat_params["max_tokens"] + api_settings.thinking_budget
+        if api_settings.reasoning_effort:
+            chat_params["reasoning_effort"] = api_settings.reasoning_effort
+        if api_settings.chat_template_kwargs:
+            chat_params["chat_template_kwargs"] = api_settings.chat_template_kwargs
+        request_body = {"model": model_name, "messages": prompt}
+        request_body.update(chat_params)
+        endpoint = urljoin(api_url, "/v1/chat/completions")
     else:
         request_body = {"prompt": prompt}
-        if settings.summarization_api.model:
-            model_name = settings.summarization_api.model
+        if api_settings.model:
+            model_name = api_settings.model
         else:
             model_name = get_model_name(api_url, api_key, api_type)
         request_body["model"] = model_name
@@ -197,9 +267,20 @@ def generate_text(
         raise Exception("Could not generate text, max retries exceeded")
 
     response_json = response.json()
-    if api_type.lower() in ("koboldai", "koboldcpp"):
+    reasoning = ""
+    if api_type.lower() in _KOBOLD_BACKENDS:
         generated_text = response_json["results"][0]["text"]
+    elif chat_mode:
+        message = response_json["choices"][0]["message"]
+        generated_text = message.get("content") or ""
+        reasoning = message.get("reasoning_content") or message.get("reasoning") or ""
     else:
         generated_text = response_json["choices"][0]["text"]
 
-    return generated_text, request_body
+    if not reasoning:
+        generated_text, split_out_reasoning = split_reasoning(generated_text, api_settings.strip_reasoning)
+        reasoning = split_out_reasoning
+    elif api_settings.strip_reasoning:
+        generated_text = generated_text.strip()
+
+    return GenerationResult(text=generated_text, reasoning=reasoning, request_body=request_body)

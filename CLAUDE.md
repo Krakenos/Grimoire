@@ -69,6 +69,17 @@ Celery workers consume `summarization_queue`. The `describe_entity` task:
 
 `generate_segmented_memory` summarizes fixed message windows into `SegmentedMemory` rows.
 
+`grimoire/common/llm_helpers.py:generate_text` is the single call site that talks to the backend.
+`summarization_api.api_mode` picks text completions (`/v1/completions`, default) or chat completions
+(`/v1/chat/completions`, `api_mode: chat`) — `is_chat_mode()` decides per-call, and always resolves
+to text for koboldai/koboldcpp since they have no chat endpoint. Chat mode uses the dedicated
+`summarization.chat_system_prompt`/`chat_user_prompt` (and `segmented_memory_chat_*`) templates
+instead of the instruct-sequence-based `prompt`/`segmented_memory_prompt`. Reasoning-model output
+(`<think>...</think>`, or a server's `reasoning_content`/`reasoning` field) is split out by
+`split_reasoning()` and returned separately in `GenerationResult.reasoning` — logged for debugging,
+never stored in `Knowledge.summary`/`summary_entry`. `ApiSettings.thinking_budget` adds extra tokens
+on top of `summarization.max_tokens` so reasoning doesn't eat into the response budget.
+
 ### Management panel (`grimoire/api/panel.py`)
 
 Optional, off by default (`enable_management_panel`). Mounted at `/panel` as a **separate FastAPI
