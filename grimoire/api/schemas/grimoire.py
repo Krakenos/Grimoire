@@ -205,6 +205,8 @@ class SummarizationApiSettingsOut(BaseModel):
     chat_template_kwargs: dict
     thinking_budget: int
     strip_reasoning: bool
+    reasoning_start_token: str
+    reasoning_end_token: str
 
 
 class SummarizationApiSettingsIn(BaseModel):
@@ -227,6 +229,8 @@ class SummarizationApiSettingsIn(BaseModel):
     chat_template_kwargs: dict | None = None
     thinking_budget: int | None = None
     strip_reasoning: bool | None = None
+    reasoning_start_token: str | None = None
+    reasoning_end_token: str | None = None
 
 
 class SummarizationPromptSettingsOut(BaseModel):

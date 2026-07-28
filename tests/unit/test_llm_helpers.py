@@ -63,6 +63,33 @@ class TestSplitReasoning(TestCase):
     def test_empty_text(self):
         self.assertEqual(split_reasoning(""), ("", ""))
 
+    def test_custom_tokens(self):
+        text = "<reasoning>pondering things</reasoning>The actual answer."
+        content, reasoning = split_reasoning(text, start_token="<reasoning>", end_token="</reasoning>")
+        self.assertEqual(content, "The actual answer.")
+        self.assertEqual(reasoning, "pondering things")
+
+    def test_custom_tokens_ignore_default_tags(self):
+        text = "<think>pondering things</think>The actual answer."
+        content, reasoning = split_reasoning(text, start_token="<reasoning>", end_token="</reasoning>")
+        self.assertEqual(content, text)
+        self.assertEqual(reasoning, "")
+
+    def test_custom_orphan_end_token(self):
+        content, reasoning = split_reasoning(
+            "pondering things<|end|>The actual answer.",
+            start_token="<|start|>",
+            end_token="<|end|>",
+        )
+        self.assertEqual(content, "The actual answer.")
+        self.assertEqual(reasoning, "pondering things")
+
+    def test_empty_end_token_disables_splitting(self):
+        text = "<think>pondering</think>answer"
+        content, reasoning = split_reasoning(text, start_token="", end_token="")
+        self.assertEqual(content, text)
+        self.assertEqual(reasoning, "")
+
 
 class TestGenerateTextTextMode(TestCase):
     @mock.patch("requests.post")
@@ -117,6 +144,26 @@ class TestGenerateTextTextMode(TestCase):
 
         called_json = mock_post.call_args.kwargs["json"]
         self.assertEqual(called_json["model"], "overridden-model")
+
+    @mock.patch("requests.post")
+    def test_configured_reasoning_tokens_are_split_out(self, mock_post):
+        mock_post.return_value = MockResponse({"choices": [{"text": "<reason>pondering</reason>a summary"}]})
+        api_settings = _api_settings(reasoning_start_token="<reason>", reasoning_end_token="</reason>")
+
+        result = generate_text("a flat prompt", {"max_tokens": 300}, api_settings)
+
+        self.assertEqual(result.text, "a summary")
+        self.assertEqual(result.reasoning, "pondering")
+
+    @mock.patch("requests.post")
+    def test_default_think_tags_kept_when_other_tokens_configured(self, mock_post):
+        mock_post.return_value = MockResponse({"choices": [{"text": "<think>pondering</think>a summary"}]})
+        api_settings = _api_settings(reasoning_start_token="<reason>", reasoning_end_token="</reason>")
+
+        result = generate_text("a flat prompt", {"max_tokens": 300}, api_settings)
+
+        self.assertEqual(result.text, "<think>pondering</think>a summary")
+        self.assertEqual(result.reasoning, "")
 
 
 class TestGenerateTextChatMode(TestCase):

@@ -110,12 +110,23 @@ class ApiSettings(BaseSettingsModel):
     chat_template_kwargs: dict = {}
     # Extra tokens added on top of summarization.max_tokens to leave room for reasoning output.
     thinking_budget: int = 0
-    # Strip <think>...</think> (or an orphaned closing tag, for prefilled-thinking setups) from
+    # Strip the reasoning block (or an orphaned end token, for prefilled-thinking setups) from
     # generated text so reasoning never ends up in the stored summary.
     strip_reasoning: bool = True
+    # Delimiters of the reasoning block in raw generated text; these differ per model, so set them
+    # to whatever yours emits. An empty end token disables text-based reasoning splitting entirely.
+    reasoning_start_token: str = "<think>"
+    reasoning_end_token: str = "</think>"
 
     @field_validator(
-        "system_sequence", "system_suffix", "input_sequence", "input_suffix", "output_sequence", "output_suffix"
+        "system_sequence",
+        "system_suffix",
+        "input_sequence",
+        "input_suffix",
+        "output_sequence",
+        "output_suffix",
+        "reasoning_start_token",
+        "reasoning_end_token",
     )
     @classmethod
     def replace_newline(cls, v: str) -> str:

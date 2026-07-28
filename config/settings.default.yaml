@@ -56,7 +56,10 @@ summarization_api:
   reasoning_effort: "" # OpenAI/vLLM reasoning effort knob (e.g. "low"/"medium"/"high"); empty omits it
   chat_template_kwargs: {} # extra chat kwargs, e.g. {enable_thinking: false} for Qwen/vLLM/Aphrodite
   thinking_budget: 0 # extra tokens added on top of summarization.max_tokens to leave room for reasoning
-  strip_reasoning: True # strip <think>...</think> (or an orphaned closing tag) from generated text
+  strip_reasoning: True # strip the reasoning block (or an orphaned end token) from generated text
+  # Reasoning delimiters emitted by your model in raw text; empty end token disables splitting
+  reasoning_start_token: "<think>"
+  reasoning_end_token: "</think>"
 
 summarization:
   prompt: "{system_sequence}{previous_summary}{additional_info}{messages}{system_suffix}\n{input_sequence}Describe {term}.{input_suffix}{output_sequence}"

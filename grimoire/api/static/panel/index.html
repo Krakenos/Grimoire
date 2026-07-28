@@ -132,9 +132,15 @@
           <label>Thinking budget
             <input type="number" data-field="thinking_budget" placeholder="extra tokens reserved for thinking">
           </label>
+          <label>Reasoning start token
+            <input type="text" data-field="reasoning_start_token" placeholder="&lt;think&gt;">
+          </label>
+          <label>Reasoning end token
+            <input type="text" data-field="reasoning_end_token" placeholder="&lt;/think&gt; (empty = never split)">
+          </label>
           <label class="checkbox-label">
             <input type="checkbox" data-field="strip_reasoning">
-            Strip &lt;think&gt; reasoning from output
+            Strip reasoning from output
           </label>
         </div>
         <label>Chat template kwargs (JSON)
