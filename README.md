@@ -46,7 +46,9 @@ summarization_api:
   reasoning_effort: "" # OpenAI/vLLM reasoning effort knob, e.g. "low"/"medium"/"high"; empty omits it
   chat_template_kwargs: {} # extra chat kwargs, e.g. {enable_thinking: false} for Qwen/vLLM/Aphrodite
   thinking_budget: 0 # extra tokens added on top of summarization.max_tokens to leave room for reasoning
-  strip_reasoning: true # strip <think>...</think> (or an orphaned closing tag) from generated text
+  strip_reasoning: true # strip the reasoning block (or an orphaned end token) from generated text
+  reasoning_start_token: "<think>" # reasoning delimiters your model emits in raw text
+  reasoning_end_token: "</think>"  # empty disables text-based splitting
 
 summarization:
   # Used only in chat mode, in place of `prompt` / `segmented_memory_prompt`. Same placeholders,
@@ -57,10 +59,14 @@ summarization:
   segmented_memory_chat_user_prompt: "Summarize the most important facts and events in the story so far. Limit the summary to one paragraph. Your response should include nothing but the summary."
 ```
 
-For reasoning models that emit `<think>...</think>` blocks, Grimoire captures that separately
-(from a server's `reasoning_content`/`reasoning` field in chat mode, or by parsing it out of the
-generated text otherwise) and never stores it in the summary - it's only logged for debugging.
-Set `strip_reasoning: false` to disable this and keep the raw output as-is.
+For reasoning models, Grimoire captures the reasoning separately (from a server's
+`reasoning_content`/`reasoning` field in chat mode, or by parsing it out of the generated text
+otherwise) and never stores it in the summary - it's only logged for debugging. When parsing raw
+text, everything up to the last `reasoning_end_token` is treated as reasoning; that also covers
+setups where the prompt prefills the start token, so only the end token comes back. The delimiters
+differ per model, so set `reasoning_start_token`/`reasoning_end_token` to whatever yours emits
+(they default to `<think>`/`</think>`). Set `strip_reasoning: false` to disable this and keep the
+raw output as-is.
 
 ### Running from source
 

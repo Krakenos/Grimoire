@@ -75,9 +75,11 @@ Celery workers consume `summarization_queue`. The `describe_entity` task:
 to text for koboldai/koboldcpp since they have no chat endpoint. Chat mode uses the dedicated
 `summarization.chat_system_prompt`/`chat_user_prompt` (and `segmented_memory_chat_*`) templates
 instead of the instruct-sequence-based `prompt`/`segmented_memory_prompt`. Reasoning-model output
-(`<think>...</think>`, or a server's `reasoning_content`/`reasoning` field) is split out by
-`split_reasoning()` and returned separately in `GenerationResult.reasoning` — logged for debugging,
-never stored in `Knowledge.summary`/`summary_entry`. `ApiSettings.thinking_budget` adds extra tokens
+(a server's `reasoning_content`/`reasoning` field, or the raw text between
+`ApiSettings.reasoning_start_token`/`reasoning_end_token` — model-specific, defaulting to
+`<think>`/`</think>`) is split out by `split_reasoning()` and returned separately in
+`GenerationResult.reasoning` — logged for debugging, never stored in
+`Knowledge.summary`/`summary_entry`. `ApiSettings.thinking_budget` adds extra tokens
 on top of `summarization.max_tokens` so reasoning doesn't eat into the response budget.
 
 ### Management panel (`grimoire/api/panel.py`)

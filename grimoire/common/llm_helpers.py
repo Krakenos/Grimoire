@@ -1,4 +1,3 @@
-import re
 import time
 from dataclasses import dataclass
 from urllib.parse import urljoin
@@ -17,7 +16,8 @@ _tokenizer_cache: dict[str, AutoTokenizer] = {}
 # endpoints don't understand and may reject.
 _TEXT_ONLY_PARAM_KEYS = ("max_length", "truncation_length", "max_context_length", "stop_sequence")
 
-_THINK_TAG_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+DEFAULT_REASONING_START_TOKEN = "<think>"
+DEFAULT_REASONING_END_TOKEN = "</think>"
 
 
 @dataclass
@@ -27,26 +27,36 @@ class GenerationResult:
     request_body: dict
 
 
-def split_reasoning(text: str, strip_reasoning: bool = True) -> tuple[str, str]:
+def split_reasoning(
+    text: str,
+    strip_reasoning: bool = True,
+    start_token: str = DEFAULT_REASONING_START_TOKEN,
+    end_token: str = DEFAULT_REASONING_END_TOKEN,
+) -> tuple[str, str]:
     """Split reasoning-model output into (content, reasoning).
 
-    Handles two shapes:
-    - a full ``<think>...</think>`` block anywhere in the text
-    - an orphaned closing ``</think>`` with no opening tag, which happens when the prompt
-      prefills the opening tag itself (a common workaround for models that always think)
+    The delimiters are model-specific (``<think>``/``</think>`` for DeepSeek-R1 and Qwen,
+    ``<reasoning>``, ``<|channel|>analysis``... for others), so they come from
+    ``ApiSettings.reasoning_start_token`` / ``reasoning_end_token``. Everything up to the last
+    end token is treated as reasoning, which handles two shapes:
 
-    When ``strip_reasoning`` is False, the text is returned unchanged with no reasoning captured.
+    - a full ``start_token ... end_token`` block anywhere in the text
+    - an orphaned end token with no opening one, which happens when the prompt prefills the
+      start token itself (a common workaround for models that always think)
+
+    When ``strip_reasoning`` is False, or no end token is configured, the text is returned
+    unchanged with no reasoning captured.
     """
-    if not strip_reasoning or not text:
+    if not strip_reasoning or not text or not end_token:
         return text, ""
 
-    if "</think>" in text:
-        reasoning, _, content = text.rpartition("</think>")
-        reasoning = reasoning.replace("<think>", "").strip()
-        return content.strip(), reasoning
+    if end_token in text:
+        reasoning, _, content = text.rpartition(end_token)
+        if start_token:
+            reasoning = reasoning.replace(start_token, "")
+        return content.strip(), reasoning.strip()
 
-    content = _THINK_TAG_RE.sub("", text).strip()
-    return content, ""
+    return text.strip(), ""
 
 
 def _load_tokenizer(tokenizer_name: str) -> AutoTokenizer:
@@ -278,7 +288,12 @@ def generate_text(
         generated_text = response_json["choices"][0]["text"]
 
     if not reasoning:
-        generated_text, split_out_reasoning = split_reasoning(generated_text, api_settings.strip_reasoning)
+        generated_text, split_out_reasoning = split_reasoning(
+            generated_text,
+            api_settings.strip_reasoning,
+            api_settings.reasoning_start_token,
+            api_settings.reasoning_end_token,
+        )
         reasoning = split_out_reasoning
     elif api_settings.strip_reasoning:
         generated_text = generated_text.strip()

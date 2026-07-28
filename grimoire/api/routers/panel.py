@@ -243,6 +243,8 @@ def _build_settings_out(db: Session) -> PanelSettingsOut:
             chat_template_kwargs=api_settings.chat_template_kwargs,
             thinking_budget=api_settings.thinking_budget,
             strip_reasoning=api_settings.strip_reasoning,
+            reasoning_start_token=api_settings.reasoning_start_token,
+            reasoning_end_token=api_settings.reasoning_end_token,
         ),
         summarization=SummarizationPromptSettingsOut(
             prompt=summarization_settings.prompt,
