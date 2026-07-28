@@ -42,6 +42,15 @@ class SummarizationSettings(BaseSettingsModel):
         "Summarize the most important facts and events in the story so far. Limit the summary to one paragraph. "
         "Your response should include nothing but the summary.{input_suffix}{output_sequence}"
     )
+    # Chat-mode equivalents of the templates above (used when summarization_api.api_mode == "chat").
+    # No instruct sequences here - the server applies its own chat template.
+    chat_system_prompt: str = "{previous_summary}{additional_info}{messages}"
+    chat_user_prompt: str = "Describe {term}."
+    segmented_memory_chat_system_prompt: str = "Below is conversation snippet.\n{messages}"
+    segmented_memory_chat_user_prompt: str = (
+        "Summarize the most important facts and events in the story so far. Limit the summary to one paragraph. "
+        "Your response should include nothing but the summary."
+    )
     limit_rate: int = 1
     max_tokens: int = 300
     params: dict = {"min_p": 0.1, "rep_pen": 1.0, "temperature": 0.6, "stop": ["</s>"], "stop_sequence": ["</s>"]}
@@ -57,7 +66,13 @@ class SummarizationSettings(BaseSettingsModel):
 
         return v
 
-    @field_validator("prompt")
+    @field_validator(
+        "prompt",
+        "chat_system_prompt",
+        "chat_user_prompt",
+        "segmented_memory_chat_system_prompt",
+        "segmented_memory_chat_user_prompt",
+    )
     @classmethod
     def replace_newline(cls, v: str) -> str:
         v = v.replace("\\n", "\n")
@@ -86,6 +101,18 @@ class ApiSettings(BaseSettingsModel):
     first_output_sequence: str = ""
     last_output_sequence: str = ""
     bos_token: str = "<s>"
+    # "text" posts a flat prompt to /v1/completions (or Kobold's /api/v1/generate).
+    # "chat" posts a messages list to /v1/chat/completions; not supported by koboldai/koboldcpp.
+    api_mode: str = "text"
+    # OpenAI/vLLM reasoning effort knob (e.g. "low"/"medium"/"high"); unset ("") omits the field.
+    reasoning_effort: str = ""
+    # Extra kwargs merged into the chat request, e.g. {"enable_thinking": false} for Qwen/vLLM/Aphrodite.
+    chat_template_kwargs: dict = {}
+    # Extra tokens added on top of summarization.max_tokens to leave room for reasoning output.
+    thinking_budget: int = 0
+    # Strip <think>...</think> (or an orphaned closing tag, for prefilled-thinking setups) from
+    # generated text so reasoning never ends up in the stored summary.
+    strip_reasoning: bool = True
 
     @field_validator(
         "system_sequence", "system_suffix", "input_sequence", "input_suffix", "output_sequence", "output_suffix"
@@ -93,6 +120,21 @@ class ApiSettings(BaseSettingsModel):
     @classmethod
     def replace_newline(cls, v: str) -> str:
         v = v.replace("\\n", "\n")
+        return v
+
+    @field_validator("api_mode")
+    @classmethod
+    def validate_api_mode(cls, v: str) -> str:
+        v = v.lower()
+        if v not in ("text", "chat"):
+            raise ValueError(f'api_mode must be "text" or "chat", got {v!r}')
+        return v
+
+    @field_validator("chat_template_kwargs", mode="before")
+    @classmethod
+    def parse_chat_template_kwargs(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return json.loads(v) if v else {}
         return v
 
 

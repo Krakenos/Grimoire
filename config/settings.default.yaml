@@ -49,10 +49,23 @@ summarization_api:
   first_output_sequence: ""
   last_output_sequence: ""
   bos_token: "<s>"
+  # "text" posts to /v1/completions (or Kobold's /api/v1/generate, unchanged either way).
+  # "chat" posts a messages list to /v1/chat/completions; not supported by koboldai/koboldcpp,
+  # which fall back to text mode regardless of this setting.
+  api_mode: text
+  reasoning_effort: "" # OpenAI/vLLM reasoning effort knob (e.g. "low"/"medium"/"high"); empty omits it
+  chat_template_kwargs: {} # extra chat kwargs, e.g. {enable_thinking: false} for Qwen/vLLM/Aphrodite
+  thinking_budget: 0 # extra tokens added on top of summarization.max_tokens to leave room for reasoning
+  strip_reasoning: True # strip <think>...</think> (or an orphaned closing tag) from generated text
 
 summarization:
   prompt: "{system_sequence}{previous_summary}{additional_info}{messages}{system_suffix}\n{input_sequence}Describe {term}.{input_suffix}{output_sequence}"
   segmented_memory_prompt: "{system_sequence}Below is conversation snippet.\n{messages}{system_suffix}{input_sequence}Summarize the most important facts and events in the story so far. Limit the summary to one paragraph. Your response should include nothing but the summary.{input_suffix}{output_sequence}"
+  # Chat-mode equivalents of the two prompts above (used when summarization_api.api_mode == "chat").
+  chat_system_prompt: "{previous_summary}{additional_info}{messages}"
+  chat_user_prompt: "Describe {term}."
+  segmented_memory_chat_system_prompt: "Below is conversation snippet.\n{messages}"
+  segmented_memory_chat_user_prompt: "Summarize the most important facts and events in the story so far. Limit the summary to one paragraph. Your response should include nothing but the summary."
   limit_rate: 1
   max_tokens: 300
   params: {'min_p': 0.1, 'rep_pen': 1.0, 'temperature': 0.6, 'stop': ["</s>"], 'stop_sequence': ["</s>"]}

@@ -200,6 +200,11 @@ class SummarizationApiSettingsOut(BaseModel):
     first_output_sequence: str
     last_output_sequence: str
     bos_token: str
+    api_mode: str
+    reasoning_effort: str
+    chat_template_kwargs: dict
+    thinking_budget: int
+    strip_reasoning: bool
 
 
 class SummarizationApiSettingsIn(BaseModel):
@@ -217,11 +222,20 @@ class SummarizationApiSettingsIn(BaseModel):
     first_output_sequence: str | None = None
     last_output_sequence: str | None = None
     bos_token: str | None = None
+    api_mode: str | None = None
+    reasoning_effort: str | None = None
+    chat_template_kwargs: dict | None = None
+    thinking_budget: int | None = None
+    strip_reasoning: bool | None = None
 
 
 class SummarizationPromptSettingsOut(BaseModel):
     prompt: str
     segmented_memory_prompt: str
+    chat_system_prompt: str
+    chat_user_prompt: str
+    segmented_memory_chat_system_prompt: str
+    segmented_memory_chat_user_prompt: str
     limit_rate: int
     max_tokens: int
     params: dict
@@ -230,6 +244,10 @@ class SummarizationPromptSettingsOut(BaseModel):
 class SummarizationPromptSettingsIn(BaseModel):
     prompt: str | None = None
     segmented_memory_prompt: str | None = None
+    chat_system_prompt: str | None = None
+    chat_user_prompt: str | None = None
+    segmented_memory_chat_system_prompt: str | None = None
+    segmented_memory_chat_user_prompt: str | None = None
     limit_rate: int | None = None
     max_tokens: int | None = None
     params: dict | None = None
