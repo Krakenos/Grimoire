@@ -8,7 +8,7 @@ from celery_singleton import Singleton
 from sqlalchemy import NullPool, create_engine, select
 from sqlalchemy.orm import Session
 
-from grimoire.common.llm_helpers import generate_text, is_chat_mode, token_count
+from grimoire.common.llm_helpers import generate_text, is_chat_mode, token_count, total_response_tokens
 from grimoire.common.loggers import general_logger, summary_logger
 from grimoire.common.redis import redis_manager
 from grimoire.core.runtime_settings import get_effective_settings
@@ -293,7 +293,7 @@ def describe_entity(
             general_logger.info("Skipping entry to summarize, disabled entity")
             return None
 
-        max_prompt_context = context_len - response_len
+        max_prompt_context = context_len - total_response_tokens(api_settings, response_len)
         prompt = make_summary_prompt(
             session,
             knowledge_entry,
@@ -508,51 +508,80 @@ def generate_lorebook_entry(
         texts, summarization_backend, summarization_url, tokenizer, prefer_local_tokenizer, summarization_auth
     )
 
-    budget_prompt = build_prompt("", "<temp>")
-    if chat_mode:
-        split_prompt = budget_prompt[0]["content"].split("<temp>")
-        tokens_to_count = [*split_prompt, chat_user_content]
-    else:
-        split_prompt = budget_prompt.split("<temp>")
-        tokens_to_count = split_prompt
-    prompt_tokens = sum(
-        token_count(
-            tokens_to_count,
-            summarization_backend,
-            summarization_url,
-            tokenizer,
-            prefer_local_tokenizer,
-            summarization_auth,
+    response_tokens = total_response_tokens(api_settings, response_len)
+
+    def max_text_tokens_for(previous_summary: str) -> int:
+        """Room left for message text once scaffolding, previous summary and response are reserved.
+
+        The previous summary is fed back into every prompt after the first generation and grows to
+        response-length, so the budget has to be recomputed whenever it changes - budgeting once
+        against an empty summary understates the prompt by that much on every later chunk.
+        """
+        budget_prompt = build_prompt(previous_summary, "<temp>")
+        if chat_mode:
+            tokens_to_count = [*budget_prompt[0]["content"].split("<temp>"), chat_user_content]
+        else:
+            tokens_to_count = budget_prompt.split("<temp>")
+        prompt_tokens = sum(
+            token_count(
+                tokens_to_count,
+                summarization_backend,
+                summarization_url,
+                tokenizer,
+                prefer_local_tokenizer,
+                summarization_auth,
+            )
         )
-    )
-    max_text_tokens = context_len - prompt_tokens
+        return context_len - prompt_tokens - response_tokens
+
+    max_text_tokens = max_text_tokens_for("")
+    if max_text_tokens <= 0:
+        general_logger.error(
+            f"No room for lorebook text for {ent_name}: context length {context_len} is too small for the "
+            f"prompt plus a {response_tokens} token response"
+        )
+        return None
+
+    def warn_skipped(text_tokens: int, budget: int) -> None:
+        general_logger.warning(
+            f"Skipping a message of {text_tokens} tokens for lorebook entry {ent_name}, "
+            f"it does not fit in the {budget} token budget"
+        )
 
     current_text = ""
     current_tokens = 0
     lorebook_definition = ""
     for text, tokens in zip(texts, text_tokens, strict=True):
         if tokens > max_text_tokens:
-            # exception when text is too long
-            pass
-        elif current_tokens + tokens <= max_text_tokens:
+            warn_skipped(tokens, max_text_tokens)
+            continue
+
+        if current_tokens + tokens <= max_text_tokens:
             current_tokens += tokens
             current_text = f"{current_text}{text}"
+            continue
+
+        # This text does not fit alongside what has accumulated, so summarize that first and let
+        # this text open the next chunk.
+        full_prompt = build_prompt(lorebook_definition, current_text)
+        result = generate_text(
+            full_prompt,
+            generation_params,
+            api_settings,
+            max_retries,
+            retry_interval,
+        )
+        lorebook_definition = result.text
+        # The budget shrinks once a summary feeds back into the prompt, so re-check this text
+        # against the new one rather than the budget it was accepted under.
+        max_text_tokens = max_text_tokens_for(lorebook_definition)
+        if tokens > max_text_tokens:
+            warn_skipped(tokens, max_text_tokens)
+            current_tokens = 0
+            current_text = ""
         else:
-            full_prompt = build_prompt(lorebook_definition, current_text)
-            result = generate_text(
-                full_prompt,
-                generation_params,
-                api_settings,
-                max_retries,
-                retry_interval,
-            )
-            lorebook_definition = result.text
-            if current_tokens < max_text_tokens:
-                current_tokens = tokens
-                current_text = text
-            else:
-                current_tokens = 0
-                current_text = ""
+            current_tokens = tokens
+            current_text = text
 
     if current_text:
         full_prompt = build_prompt(lorebook_definition, current_text)

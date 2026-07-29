@@ -252,6 +252,19 @@ def is_chat_mode(api_settings: ApiSettings) -> bool:
     return api_settings.api_mode == "chat" and api_settings.backend.lower() not in _KOBOLD_BACKENDS
 
 
+def total_response_tokens(api_settings: ApiSettings, response_len: int) -> int:
+    """How many tokens generate_text may produce, including reasoning headroom.
+
+    ``thinking_budget`` is added on top of the requested ``max_tokens`` in chat mode, so callers
+    sizing a prompt against ``context_length`` have to reserve it too - otherwise the prompt is
+    budgeted for ``max_tokens`` alone while the request asks for ``max_tokens + thinking_budget``,
+    and the two together can overrun the model's context window.
+    """
+    if is_chat_mode(api_settings) and api_settings.thinking_budget > 0:
+        return response_len + api_settings.thinking_budget
+    return response_len
+
+
 def get_model_name(api_url: str, api_key, api_type):
     if api_type.lower() == "tabby":
         model_endpoint = urljoin(api_url, "/v1/model")
@@ -289,8 +302,8 @@ def generate_text(
         else:
             model_name = get_model_name(api_url, api_key, api_type)
         chat_params = {k: v for k, v in params.items() if k not in _TEXT_ONLY_PARAM_KEYS}
-        if api_settings.thinking_budget > 0 and "max_tokens" in chat_params:
-            chat_params["max_tokens"] = chat_params["max_tokens"] + api_settings.thinking_budget
+        if "max_tokens" in chat_params:
+            chat_params["max_tokens"] = total_response_tokens(api_settings, chat_params["max_tokens"])
         if api_settings.reasoning_effort:
             chat_params["reasoning_effort"] = api_settings.reasoning_effort
         if api_settings.chat_template_kwargs:
