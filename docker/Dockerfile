@@ -2,11 +2,15 @@ FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update -y
-RUN apt-get install -y software-properties-common
-RUN add-apt-repository ppa:deadsnakes/ppa
-RUN apt-get update -y
-RUN apt-get install -y python3.12-dev python3.12-venv
+# Keep the updates and the installs in one RUN. Split across layers, a cached `apt-get update`
+# keeps serving a months-old package index while Ubuntu and deadsnakes delete the superseded
+# .debs it names, so the install layer 404s on every file it asks for.
+RUN apt-get update -y \
+    && apt-get install -y software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update -y \
+    && apt-get install -y python3.12-dev python3.12-venv \
+    && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
