@@ -364,7 +364,13 @@ def queue_logging() -> None:
 
 @celery_app.task
 def generate_segmented_memory(
-    chat_id: int, start_index: int, end_index: int, create_date=datetime, max_retries: int = 50, retry_interval: int = 1
+    chat_id: int,
+    start_index: int,
+    end_index: int,
+    create_date=datetime,
+    include_names: bool = True,
+    max_retries: int = 50,
+    retry_interval: int = 1,
 ) -> None:
     from grimoire.core.vector_embeddings import get_text_embeddings
 
@@ -396,13 +402,22 @@ def generate_segmented_memory(
                 secondary_database_settings.message_encryption,
                 secondary_database_settings.encryption_key,
             )
-            texts = [
-                f"{mes.character.name}: {txt}"
-                for txt, mes in zip(messages_texts, messages, strict=False)
-                if txt is not None
-            ]
+            if include_names:
+                texts = []
+                for txt, mes in zip(messages_texts, messages, strict=False):
+                    if txt is None:
+                        continue
+                    name = mes.character.name
+                    texts.append(f"{name}: {txt}" if name else txt)
+            else:
+                texts = [txt for txt in messages_texts if txt is not None]
         else:
-            texts = [f"{mes.character.name}: {mes.message}" for mes in messages]
+            if include_names:
+                texts = [
+                    f"{mes.character.name}: {mes.message}" if mes.character.name else mes.message for mes in messages
+                ]
+            else:
+                texts = [mes.message for mes in messages]
 
         joined_texts = "\n".join(texts)
         if chat_mode:
