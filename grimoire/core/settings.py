@@ -32,25 +32,49 @@ class TokenizationSettings(BaseSettingsModel):
     local_tokenizer: str = "oobabooga/llama-tokenizer"
 
 
+ENTITY_INSTRUCTION = (
+    "Above is an extract from a work of fiction. Use the details from that extract to describe {term} in one brief "
+    "paragraph. The paragraph must contain all relevant information pertaining to {term}. The paragraph must adhere "
+    "to all the following rules:\n"
+    "1. Write in matter of factly manner, as plainly as possible. Avoid writing in style reminiscent of prose and "
+    "prefer simple descriptions.\n"
+    "2. Paragraph must be as efficient as possible, providing as much information about {term} as possible in as "
+    "little text as possible.\n"
+    "3. If you lack enough information about {term} do not prolong the description and cut it short and to the "
+    "point.\n"
+    "4. Simplify verbose descriptions with plain and straight to the point ones. Making sure they are still accurate "
+    "and consistent with provided extract.\n"
+    "5. You are allowed to make your conclusions in order to simplify the descriptions, however these conclusions "
+    "must be written in a confident matter of factly manner.\n"
+    "6. Do not make any assumptions if information is not provided in the text, refer only to the provided text. If "
+    "you know more about {term} than what the extract provides, actively ignore that knowledge.\n"
+    '7. Assumptious terms such as "it appears that..." "it seems that..." are prohibited, write everything you know '
+    "with confidence.\n"
+    "8. You are allowed to use explicit language, terms, and descriptions in the paragraph when it's appropriate to "
+    "do so in order to provide an accurate description of {term}."
+)
+
+SEGMENTED_MEMORY_INSTRUCTION = (
+    "Above is an extract from a work of fiction. Summarize the most important facts and events in the story so far. "
+    "Limit the summary to one paragraph. Your response should include nothing but the summary."
+)
+
+
 class SummarizationSettings(BaseSettingsModel):
     prompt: str = (
         "{system_sequence}{previous_summary}{additional_info}{messages}{system_suffix}\n"
-        "{input_sequence}Describe {term}.{input_suffix}{output_sequence}"
+        "{input_sequence}" + ENTITY_INSTRUCTION + "{input_suffix}{output_sequence}"
     )
     segmented_memory_prompt: str = (
-        "{system_sequence}Below is conversation snippet.\n{messages}{system_suffix}{input_sequence}"
-        "Summarize the most important facts and events in the story so far. Limit the summary to one paragraph. "
-        "Your response should include nothing but the summary.{input_suffix}{output_sequence}"
+        "{system_sequence}{messages}{system_suffix}\n"
+        "{input_sequence}" + SEGMENTED_MEMORY_INSTRUCTION + "{input_suffix}{output_sequence}"
     )
     # Chat-mode equivalents of the templates above (used when summarization_api.api_mode == "chat").
     # No instruct sequences here - the server applies its own chat template.
     chat_system_prompt: str = "{previous_summary}{additional_info}{messages}"
-    chat_user_prompt: str = "Describe {term}."
-    segmented_memory_chat_system_prompt: str = "Below is conversation snippet.\n{messages}"
-    segmented_memory_chat_user_prompt: str = (
-        "Summarize the most important facts and events in the story so far. Limit the summary to one paragraph. "
-        "Your response should include nothing but the summary."
-    )
+    chat_user_prompt: str = ENTITY_INSTRUCTION
+    segmented_memory_chat_system_prompt: str = "{messages}"
+    segmented_memory_chat_user_prompt: str = SEGMENTED_MEMORY_INSTRUCTION
     limit_rate: int = 1
     max_tokens: int = 300
     params: dict = {"min_p": 0.1, "rep_pen": 1.0, "temperature": 0.6, "stop": ["</s>"], "stop_sequence": ["</s>"]}
