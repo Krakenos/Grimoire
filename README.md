@@ -53,10 +53,13 @@ summarization_api:
 summarization:
   # Used only in chat mode, in place of `prompt` / `segmented_memory_prompt`. Same placeholders,
   # but no instruct sequences - the server applies its own chat template.
+  # The extract goes in the system message, the instruction in the user message.
   chat_system_prompt: "{previous_summary}{additional_info}{messages}"
-  chat_user_prompt: "Describe {term}."
-  segmented_memory_chat_system_prompt: "Below is conversation snippet.\n{messages}"
-  segmented_memory_chat_user_prompt: "Summarize the most important facts and events in the story so far. Limit the summary to one paragraph. Your response should include nothing but the summary."
+  chat_user_prompt: |-
+    Above is an extract from a work of fiction. Use the details from that extract to describe {term} in one brief paragraph.
+    # ...the default continues with the numbered style rules, see config/settings.default.yaml
+  segmented_memory_chat_system_prompt: "{messages}"
+  segmented_memory_chat_user_prompt: "Above is an extract from a work of fiction. Summarize the most important facts and events in the story so far. Limit the summary to one paragraph. Your response should include nothing but the summary."
 ```
 
 For reasoning models, Grimoire captures the reasoning separately (from a server's
