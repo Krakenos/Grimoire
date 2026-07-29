@@ -1,6 +1,6 @@
 from unittest import TestCase, mock
 
-from grimoire.common.llm_helpers import generate_text, is_chat_mode, split_reasoning
+from grimoire.common.llm_helpers import generate_text, is_chat_mode, split_reasoning, total_response_tokens
 from grimoire.core.settings import ApiSettings
 
 
@@ -29,6 +29,26 @@ class TestIsChatMode(TestCase):
     def test_chat_mode_falls_back_for_kobold_backends(self):
         self.assertFalse(is_chat_mode(_api_settings(api_mode="chat", backend="koboldcpp")))
         self.assertFalse(is_chat_mode(_api_settings(api_mode="chat", backend="koboldai")))
+
+
+class TestTotalResponseTokens(TestCase):
+    def test_budget_added_in_chat_mode(self):
+        api_settings = _api_settings(api_mode="chat", thinking_budget=900)
+        self.assertEqual(total_response_tokens(api_settings, 300), 1200)
+
+    def test_no_budget_returns_response_len(self):
+        api_settings = _api_settings(api_mode="chat", thinking_budget=0)
+        self.assertEqual(total_response_tokens(api_settings, 300), 300)
+
+    def test_budget_ignored_in_text_mode(self):
+        # generate_text only adds the budget on the chat path, so reserving it in text mode
+        # would shrink the prompt for tokens the request never asks for.
+        api_settings = _api_settings(api_mode="text", thinking_budget=900)
+        self.assertEqual(total_response_tokens(api_settings, 300), 300)
+
+    def test_budget_ignored_for_kobold_chat_fallback(self):
+        api_settings = _api_settings(api_mode="chat", backend="koboldcpp", thinking_budget=900)
+        self.assertEqual(total_response_tokens(api_settings, 300), 300)
 
 
 class TestSplitReasoning(TestCase):
