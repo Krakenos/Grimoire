@@ -30,8 +30,8 @@
 **/obj
 **/secrets.dev.yaml
 **/values.dev.yaml
-LICENSE
-README.md
+# LICENSE and README.md are deliberately not ignored: pyproject.toml declares them as
+# readme/license.file, and hatchling refuses to build the project without them.
 .idea
 *.log
 db.sqlite3
