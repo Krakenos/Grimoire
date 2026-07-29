@@ -464,7 +464,7 @@ def update_characters(
     return character_dict
 
 
-def queue_segmented_memories(chat: Chat, new_messages: list[Message]) -> None:
+def queue_segmented_memories(chat: Chat, new_messages: list[Message], include_names: bool = True) -> None:
     memory_interval = chat.segmented_memory_interval
     memory_messages = chat.segmented_memory_messages
     for message in new_messages:
@@ -474,6 +474,7 @@ def queue_segmented_memories(chat: Chat, new_messages: list[Message]) -> None:
                 start_index=message.message_index - memory_messages + 1,
                 end_index=message.message_index,
                 create_date=datetime.now(),
+                include_names=include_names,
             )
 
 
@@ -576,7 +577,7 @@ def process_request(
             include_names,
         )
 
-    queue_segmented_memories(chat, new_messages)
+    queue_segmented_memories(chat, new_messages, include_names)
 
     vector_embeddings = np.array([embedding_dict[mes] for mes in chat_texts])
     ordered_entries = semantic_search(vector_embeddings, chat.id, db_session)
