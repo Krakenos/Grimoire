@@ -69,6 +69,22 @@ And to run Grimoire API use:
 ```bash
 uv run python run.py
 ```
+
+### Running the development stack in Docker
+
+Instead of installing Python dependencies locally (e.g. on Windows, where some packages are troublesome),
+the whole stack can run in containers with the source bind-mounted, using the `./dev` helper
+(bash; on Windows use Git Bash). It needs Docker with GPU support (Docker Desktop on WSL2 with an NVIDIA GPU).
+
+```bash
+./dev up      # builds the dev image, starts API on :5005 (auto-reload), Celery worker, redis and postgres
+./dev test    # run the unit tests inside the container
+./dev help    # all commands
+```
+
+On first run `./dev up` creates `config/settings.yaml` pointing at the `postgres` and `redis` containers.
+An LLM backend running on the host machine is reachable from the containers at `http://host.docker.internal:<port>`.
+
 ### Usage
 Following backends are supported:
 

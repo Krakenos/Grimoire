@@ -1,0 +1,3 @@
+# Keep LF everywhere, including Windows checkouts: shell scripts and source files are used
+# inside Linux containers (bind-mounted in dev, copied into the image for production).
+* text=auto eol=lf

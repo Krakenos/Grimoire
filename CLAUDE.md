@@ -8,6 +8,33 @@ Grimoire is a RAG (Retrieval Augmented Generation) server that builds long-term 
 
 ## Commands
 
+### Dev containers (default workflow — use this)
+
+The repo is checked out on Windows; all Python runs in the `grimoire-dev` Docker image with the repo
+bind-mounted at `/app`. Do not run `uv sync` or Python on the host. Use the `./dev` wrapper (from the
+Bash tool) for everything:
+
+```bash
+./dev up                     # build image if needed + start api (:5005, auto-reload), worker, redis, postgres
+./dev ps                     # status; ./dev logs api / ./dev logs worker for recent logs
+./dev test                   # all unit tests
+./dev test tests.unit.test_grimoire.TestFilterSimilarEntities.test_filter_with_relations
+./dev lint                   # ruff check . (./dev lint --fix)
+./dev format                 # ruff format .
+./dev restart worker         # Celery doesn't auto-reload; restart after editing tasks
+./dev migrate                # alembic upgrade head (also runs automatically when api starts)
+./dev revision "description" # alembic autogenerate
+./dev build                  # rebuild image after uv.lock / pyproject.toml changes, then ./dev up
+./dev exec <cmd...>          # anything else inside the api container
+```
+
+`test`, `lint`, `format` and `exec` need the stack running (`./dev up`). Inside the containers the DB is
+`postgres:5432` and Redis `redis:6379`; `./dev up` creates `config/settings.yaml` with those values if it
+doesn't exist. Services on the Windows host (e.g. the LLM backend) are at `http://host.docker.internal:<port>`.
+A `.env` file in the repo root is loaded by the settings (`load_dotenv`) for the `!env` values.
+
+The commands below are the equivalent native (Linux/WSL) workflow, for reference.
+
 ### Setup
 ```bash
 cp config/settings.default.yaml config/settings.yaml
