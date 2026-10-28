@@ -2,11 +2,13 @@ FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update -y
-RUN apt-get install -y software-properties-common
-RUN add-apt-repository ppa:deadsnakes/ppa
-RUN apt-get update -y
-RUN apt-get install -y python3.12-dev python3.12-venv
+# Single layer so a cached `apt-get update` can't go stale against the install (404s on old package versions)
+RUN apt-get update -y \
+    && apt-get install -y software-properties-common \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update -y \
+    && apt-get install -y python3.12-dev python3.12-venv \
+    && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -16,6 +18,18 @@ ENV UV_LINK_MODE=copy
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
+
+# Development image used by docker-compose-dev.yaml. Holds only the dependencies; the source is
+# bind-mounted over /app, so the venv lives outside it and uv must not re-sync it at run time.
+FROM base AS dev
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+ENV UV_NO_SYNC=1
+ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONPATH=/app
+ENV RUFF_CACHE_DIR=/tmp/ruff_cache
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --extra cuda --no-install-project
 
 FROM base AS deps
 COPY pyproject.toml uv.lock ./
