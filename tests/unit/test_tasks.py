@@ -84,11 +84,13 @@ class TestGenerateLorebookEntryBudget(TestCase):
         without = self._run(texts, _settings(context_length=900, max_tokens=100))
         self.assertEqual(without.call_count, 1)
 
-        # Same context, but chat mode adds thinking_budget on top of the response reservation.
-        with_budget = self._run(
-            texts, _settings(context_length=900, max_tokens=100, thinking_budget=400, api_mode="chat")
-        )
-        self.assertGreater(with_budget.call_count, 1)
+        # Same context, but thinking_budget is added on top of the response reservation.
+        for api_mode in ("text", "chat"):
+            with self.subTest(api_mode=api_mode):
+                with_budget = self._run(
+                    texts, _settings(context_length=900, max_tokens=100, thinking_budget=400, api_mode=api_mode)
+                )
+                self.assertGreater(with_budget.call_count, 1)
 
     def test_oversized_text_is_skipped_not_silently_dropped(self):
         texts = ["A" * 10, "B" * 5000, "C" * 10]

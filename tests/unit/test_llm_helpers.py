@@ -40,15 +40,13 @@ class TestTotalResponseTokens(TestCase):
         api_settings = _api_settings(api_mode="chat", thinking_budget=0)
         self.assertEqual(total_response_tokens(api_settings, 300), 300)
 
-    def test_budget_ignored_in_text_mode(self):
-        # generate_text only adds the budget on the chat path, so reserving it in text mode
-        # would shrink the prompt for tokens the request never asks for.
+    def test_budget_added_in_text_mode(self):
         api_settings = _api_settings(api_mode="text", thinking_budget=900)
-        self.assertEqual(total_response_tokens(api_settings, 300), 300)
+        self.assertEqual(total_response_tokens(api_settings, 300), 1200)
 
-    def test_budget_ignored_for_kobold_chat_fallback(self):
-        api_settings = _api_settings(api_mode="chat", backend="koboldcpp", thinking_budget=900)
-        self.assertEqual(total_response_tokens(api_settings, 300), 300)
+    def test_budget_added_for_kobold(self):
+        api_settings = _api_settings(api_mode="text", backend="koboldcpp", thinking_budget=900)
+        self.assertEqual(total_response_tokens(api_settings, 300), 1200)
 
 
 class TestSplitReasoning(TestCase):
@@ -184,6 +182,29 @@ class TestGenerateTextTextMode(TestCase):
 
         self.assertEqual(result.text, "<think>pondering</think>a summary")
         self.assertEqual(result.reasoning, "")
+
+    @mock.patch("requests.post")
+    def test_thinking_budget_added_on_top_of_max_tokens(self, mock_post):
+        mock_post.return_value = MockResponse({"choices": [{"text": "a summary"}]})
+        api_settings = _api_settings(api_mode="text", thinking_budget=1024)
+        params = {"max_tokens": 300}
+
+        generate_text("a flat prompt", params, api_settings)
+
+        called_json = mock_post.call_args.kwargs["json"]
+        self.assertEqual(called_json["max_tokens"], 1324)
+        self.assertEqual(params["max_tokens"], 300, "caller's params must not be mutated")
+
+    @mock.patch("requests.post")
+    def test_thinking_budget_added_on_top_of_kobold_max_length(self, mock_post):
+        mock_post.return_value = MockResponse({"results": [{"text": "a summary"}]})
+        api_settings = _api_settings(backend="koboldcpp", api_mode="text", thinking_budget=1024)
+
+        generate_text("a flat prompt", {"max_length": 300, "max_tokens": 300}, api_settings)
+
+        called_json = mock_post.call_args.kwargs["json"]
+        self.assertEqual(called_json["max_length"], 1324)
+        self.assertEqual(called_json["max_tokens"], 1324)
 
 
 class TestGenerateTextChatMode(TestCase):

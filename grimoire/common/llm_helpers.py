@@ -255,14 +255,29 @@ def is_chat_mode(api_settings: ApiSettings) -> bool:
 def total_response_tokens(api_settings: ApiSettings, response_len: int) -> int:
     """How many tokens generate_text may produce, including reasoning headroom.
 
-    ``thinking_budget`` is added on top of the requested ``max_tokens`` in chat mode, so callers
-    sizing a prompt against ``context_length`` have to reserve it too - otherwise the prompt is
-    budgeted for ``max_tokens`` alone while the request asks for ``max_tokens + thinking_budget``,
-    and the two together can overrun the model's context window.
+    ``thinking_budget`` is added on top of the requested response length in every mode, since
+    reasoning models think just the same over text completions. Callers sizing a prompt against
+    ``context_length`` have to reserve it too - otherwise the prompt is budgeted for ``max_tokens``
+    alone while the request asks for ``max_tokens + thinking_budget``, and the two together can
+    overrun the model's context window.
     """
-    if is_chat_mode(api_settings) and api_settings.thinking_budget > 0:
+    if api_settings.thinking_budget > 0:
         return response_len + api_settings.thinking_budget
     return response_len
+
+
+# Response-length keys that thinking_budget extends: OpenAI-style ``max_tokens`` and Kobold's
+# ``max_length``.
+_RESPONSE_LENGTH_KEYS = ("max_tokens", "max_length")
+
+
+def _with_thinking_budget(params: dict, api_settings: ApiSettings) -> dict:
+    """Copy of ``params`` with every response-length key extended by ``thinking_budget``."""
+    params = dict(params)
+    for key in _RESPONSE_LENGTH_KEYS:
+        if key in params:
+            params[key] = total_response_tokens(api_settings, params[key])
+    return params
 
 
 def get_model_name(api_url: str, api_key, api_type):
@@ -292,6 +307,8 @@ def generate_text(
     if api_settings.api_mode == "chat" and not chat_mode:
         general_logger.warning(f"{api_type} does not support chat completions, falling back to text completion")
 
+    params = _with_thinking_budget(params, api_settings)
+
     if api_type.lower() in _KOBOLD_BACKENDS:
         request_body = {"prompt": prompt}
         request_body.update(params)
@@ -302,8 +319,6 @@ def generate_text(
         else:
             model_name = get_model_name(api_url, api_key, api_type)
         chat_params = {k: v for k, v in params.items() if k not in _TEXT_ONLY_PARAM_KEYS}
-        if "max_tokens" in chat_params:
-            chat_params["max_tokens"] = total_response_tokens(api_settings, chat_params["max_tokens"])
         if api_settings.reasoning_effort:
             chat_params["reasoning_effort"] = api_settings.reasoning_effort
         if api_settings.chat_template_kwargs:
