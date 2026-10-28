@@ -319,6 +319,9 @@ def describe_entity(
             max_retries,
             retry_interval,
         )
+        if not result.text.strip():
+            general_logger.warning(f"Empty summary generated for {term}, keeping the previous one")
+            return None
         summary_text = result.text.replace("\n\n", "\n")
         summary_entry_text = f"[ {knowledge_entry.entity}: {summary_text} ]"
         summary_embedding = get_text_embeddings(summary_text)[0]
@@ -440,6 +443,11 @@ def generate_segmented_memory(
             retry_interval,
         )
         memory_text = result.text
+        if not memory_text.strip():
+            general_logger.warning(
+                f"Empty segmented memory generated for chat {chat_id}, messages {start_index}-{end_index}, skipping"
+            )
+            return None
         vector_embedding = get_text_embeddings(memory_text)[0]
         memory_entry = f"[ Memory: {memory_text} ]"
         tokens = token_count(
@@ -548,6 +556,12 @@ def generate_lorebook_entry(
             f"it does not fit in the {budget} token budget"
         )
 
+    def keep_previous_if_empty(new_definition: str, previous_definition: str) -> str:
+        if new_definition.strip():
+            return new_definition
+        general_logger.warning(f"Empty definition generated for lorebook entry {ent_name}, keeping the previous one")
+        return previous_definition
+
     current_text = ""
     current_tokens = 0
     lorebook_definition = ""
@@ -571,7 +585,7 @@ def generate_lorebook_entry(
             max_retries,
             retry_interval,
         )
-        lorebook_definition = result.text
+        lorebook_definition = keep_previous_if_empty(result.text, lorebook_definition)
         # The budget shrinks once a summary feeds back into the prompt, so re-check this text
         # against the new one rather than the budget it was accepted under.
         max_text_tokens = max_text_tokens_for(lorebook_definition)
@@ -592,7 +606,7 @@ def generate_lorebook_entry(
             max_retries,
             retry_interval,
         )
-        lorebook_definition = result.text
+        lorebook_definition = keep_previous_if_empty(result.text, lorebook_definition)
 
     if lorebook_definition:
         # success

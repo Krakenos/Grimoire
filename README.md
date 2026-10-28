@@ -66,7 +66,10 @@ For reasoning models, Grimoire captures the reasoning separately (from a server'
 `reasoning_content`/`reasoning` field in chat mode, or by parsing it out of the generated text
 otherwise) and never stores it in the summary - it's only logged for debugging. When parsing raw
 text, everything up to the last `reasoning_end_token` is treated as reasoning; that also covers
-setups where the prompt prefills the start token, so only the end token comes back. The delimiters
+setups where the prompt prefills the start token, so only the end token comes back. A start token
+that is never closed means generation ran out of tokens mid-reasoning; that output is treated as
+reasoning only, so the existing summary is kept rather than overwritten (raise `thinking_budget` if
+this keeps happening). The delimiters
 differ per model, so set `reasoning_start_token`/`reasoning_end_token` to whatever yours emits
 (they default to `<think>`/`</think>`). Set `strip_reasoning: false` to disable this and keep the
 raw output as-is.
