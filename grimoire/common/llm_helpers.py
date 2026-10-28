@@ -42,11 +42,13 @@ def split_reasoning(
     The delimiters are model-specific (``<think>``/``</think>`` for DeepSeek-R1 and Qwen,
     ``<reasoning>``, ``<|channel|>analysis``... for others), so they come from
     ``ApiSettings.reasoning_start_token`` / ``reasoning_end_token``. Everything up to the last
-    end token is treated as reasoning, which handles two shapes:
+    end token is treated as reasoning, which handles three shapes:
 
     - a full ``start_token ... end_token`` block anywhere in the text
     - an orphaned end token with no opening one, which happens when the prompt prefills the
       start token itself (a common workaround for models that always think)
+    - a start token that is never closed, which happens when generation hits the token limit
+      mid-reasoning; everything from the start token on is reasoning, usually leaving no content
 
     When ``strip_reasoning`` is False, or no end token is configured, the text is returned
     unchanged with no reasoning captured.
@@ -58,6 +60,10 @@ def split_reasoning(
         reasoning, _, content = text.rpartition(end_token)
         if start_token:
             reasoning = reasoning.replace(start_token, "")
+        return content.strip(), reasoning.strip()
+
+    if start_token and start_token in text:
+        content, _, reasoning = text.partition(start_token)
         return content.strip(), reasoning.strip()
 
     return text.strip(), ""
@@ -374,5 +380,11 @@ def generate_text(
         reasoning = split_out_reasoning
     elif api_settings.strip_reasoning:
         generated_text = generated_text.strip()
+
+    if not generated_text and reasoning:
+        general_logger.warning(
+            "Generation produced reasoning but no content, it likely ran out of tokens while thinking - "
+            "consider raising summarization_api.thinking_budget"
+        )
 
     return GenerationResult(text=generated_text, reasoning=reasoning, request_body=request_body)

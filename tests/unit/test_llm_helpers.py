@@ -102,6 +102,17 @@ class TestSplitReasoning(TestCase):
         self.assertEqual(content, "The actual answer.")
         self.assertEqual(reasoning, "pondering things")
 
+    def test_unclosed_start_token_is_all_reasoning(self):
+        # Generation hit the token limit before the model finished thinking.
+        content, reasoning = split_reasoning("<think>still pondering when tokens ran o")
+        self.assertEqual(content, "")
+        self.assertEqual(reasoning, "still pondering when tokens ran o")
+
+    def test_unclosed_start_token_keeps_preceding_content(self):
+        content, reasoning = split_reasoning("An answer. <think>second thoughts")
+        self.assertEqual(content, "An answer.")
+        self.assertEqual(reasoning, "second thoughts")
+
     def test_empty_end_token_disables_splitting(self):
         text = "<think>pondering</think>answer"
         content, reasoning = split_reasoning(text, start_token="", end_token="")
@@ -182,6 +193,17 @@ class TestGenerateTextTextMode(TestCase):
 
         self.assertEqual(result.text, "<think>pondering</think>a summary")
         self.assertEqual(result.reasoning, "")
+
+    @mock.patch("requests.post")
+    def test_truncated_reasoning_is_not_returned_as_text(self, mock_post):
+        mock_post.return_value = MockResponse({"choices": [{"text": "<think>ran out mid-thou"}]})
+        api_settings = _api_settings(api_mode="text")
+
+        with self.assertLogs("general", level="WARNING"):
+            result = generate_text("a flat prompt", {"max_tokens": 300}, api_settings)
+
+        self.assertEqual(result.text, "")
+        self.assertEqual(result.reasoning, "ran out mid-thou")
 
     @mock.patch("requests.post")
     def test_thinking_budget_added_on_top_of_max_tokens(self, mock_post):
@@ -273,6 +295,20 @@ class TestGenerateTextChatMode(TestCase):
 
         self.assertEqual(result.text, "clean answer")
         self.assertEqual(result.reasoning, "internal musing")
+
+    @mock.patch("requests.post")
+    def test_reasoning_without_content_warns_and_returns_empty_text(self, mock_post):
+        mock_post.return_value = MockResponse(
+            {"choices": [{"message": {"content": None, "reasoning_content": "ran out mid-thou"}}]}
+        )
+        api_settings = _api_settings(api_mode="chat")
+
+        with self.assertLogs("general", level="WARNING") as logs:
+            result = generate_text([{"role": "user", "content": "hi"}], {"max_tokens": 300}, api_settings)
+
+        self.assertEqual(result.text, "")
+        self.assertEqual(result.reasoning, "ran out mid-thou")
+        self.assertTrue(any("thinking_budget" in line for line in logs.output))
 
     @mock.patch("requests.post")
     def test_openrouter_style_reasoning_field(self, mock_post):
