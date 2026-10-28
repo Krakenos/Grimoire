@@ -729,26 +729,19 @@ function _settingsField(section, name) {
 }
 
 function _fillSettingsForm(data) {
-  for (const [name, value] of Object.entries(data.summarization_api)) {
-    if (name === 'auth_key_set') continue;
-    const el = _settingsField('summarization_api', name);
-    if (el) el.value = value;
+  for (const section of SETTINGS_SECTIONS) {
+    for (const [name, value] of Object.entries(data[section])) {
+      if (name === 'auth_key_set') continue;
+      const el = _settingsField(section, name);
+      if (!el) continue;
+      if (el.type === 'checkbox') el.checked = value;
+      else if ('json' in el.dataset) el.value = JSON.stringify(value, null, 2);
+      else el.value = value;
+    }
   }
+
   _settingsField('summarization_api', 'auth_key').placeholder =
     data.summarization_api.auth_key_set ? 'unchanged (key is set)' : 'unchanged (no key set)';
-
-  for (const [name, value] of Object.entries(data.summarization)) {
-    const el = _settingsField('summarization', name);
-    if (!el) continue;
-    el.value = name === 'params' ? JSON.stringify(value, null, 2) : value;
-  }
-
-  for (const [name, value] of Object.entries(data.tokenization)) {
-    const el = _settingsField('tokenization', name);
-    if (!el) continue;
-    if (el.type === 'checkbox') el.checked = value;
-    else el.value = value;
-  }
 
   for (const section of SETTINGS_SECTIONS) {
     const badge = document.querySelector(`[data-badge="${section}"]`);
@@ -788,13 +781,21 @@ function _readSection(section) {
       if (el.value !== '') out[name] = Number(el.value);
     } else if (name === 'auth_key') {
       if (el.value) out[name] = el.value;  // blank = leave unchanged
-    } else if (name === 'params') {
+    } else if ('json' in el.dataset) {
       out[name] = JSON.parse(el.value);    // let JSON errors surface to the caller
     } else {
       out[name] = el.value;
     }
   });
   return out;
+}
+
+function _readSectionOrThrow(section, label) {
+  try {
+    return _readSection(section);
+  } catch (parseErr) {
+    throw new Error(`${label} must be valid JSON: ${parseErr.message}`);
+  }
 }
 
 async function saveSettings(e) {
@@ -804,16 +805,9 @@ async function saveSettings(e) {
   saveBtn.textContent = 'Saving…';
 
   try {
-    let params;
-    try {
-      params = _readSection('summarization');
-    } catch (parseErr) {
-      throw new Error(`Sampler params must be valid JSON: ${parseErr.message}`);
-    }
-
     const body = {
-      summarization_api: _readSection('summarization_api'),
-      summarization: params,
+      summarization_api: _readSectionOrThrow('summarization_api', 'Chat template kwargs'),
+      summarization: _readSectionOrThrow('summarization', 'Sampler params'),
       tokenization: _readSection('tokenization'),
     };
     const data = await put('/settings', body);

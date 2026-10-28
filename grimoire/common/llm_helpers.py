@@ -1,26 +1,128 @@
 import time
+from dataclasses import dataclass
+from typing import cast
 from urllib.parse import urljoin
 
 import requests
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from grimoire.common.loggers import general_logger
 from grimoire.common.redis import redis_manager
 from grimoire.common.utils import time_execution
-from grimoire.core.settings import settings
+from grimoire.core.settings import ApiSettings, settings
 
-_tokenizer_cache: dict[str, AutoTokenizer] = {}
+_tokenizer_cache: dict[str, PreTrainedTokenizerBase] = {}
+
+_FALLBACK_TOKENIZER = "oobabooga/llama-tokenizer"
+_TOKENIZER_PROBE_TEXT = "The quick brown fox jumps over the lazy dog."
+
+# Keys Grimoire injects for Kobold-style text completion that OpenAI-style chat completion
+# endpoints don't understand and may reject.
+_TEXT_ONLY_PARAM_KEYS = ("max_length", "truncation_length", "max_context_length", "stop_sequence")
+
+DEFAULT_REASONING_START_TOKEN = "<think>"
+DEFAULT_REASONING_END_TOKEN = "</think>"
 
 
-def _load_tokenizer(tokenizer_name: str) -> AutoTokenizer:
-    if tokenizer_name in _tokenizer_cache:
-        return _tokenizer_cache[tokenizer_name]
+@dataclass
+class GenerationResult:
+    text: str
+    reasoning: str
+    request_body: dict
+
+
+def split_reasoning(
+    text: str,
+    strip_reasoning: bool = True,
+    start_token: str = DEFAULT_REASONING_START_TOKEN,
+    end_token: str = DEFAULT_REASONING_END_TOKEN,
+) -> tuple[str, str]:
+    """Split reasoning-model output into (content, reasoning).
+
+    The delimiters are model-specific (``<think>``/``</think>`` for DeepSeek-R1 and Qwen,
+    ``<reasoning>``, ``<|channel|>analysis``... for others), so they come from
+    ``ApiSettings.reasoning_start_token`` / ``reasoning_end_token``. Everything up to the last
+    end token is treated as reasoning, which handles three shapes:
+
+    - a full ``start_token ... end_token`` block anywhere in the text
+    - an orphaned end token with no opening one, which happens when the prompt prefills the
+      start token itself (a common workaround for models that always think)
+    - a start token that is never closed, which happens when generation hits the token limit
+      mid-reasoning; everything from the start token on is reasoning, usually leaving no content
+
+    When ``strip_reasoning`` is False, or no end token is configured, the text is returned
+    unchanged with no reasoning captured.
+    """
+    if not strip_reasoning or not text or not end_token:
+        return text, ""
+
+    if end_token in text:
+        reasoning, _, content = text.rpartition(end_token)
+        if start_token:
+            reasoning = reasoning.replace(start_token, "")
+        return content.strip(), reasoning.strip()
+
+    if start_token and start_token in text:
+        content, _, reasoning = text.partition(start_token)
+        return content.strip(), reasoning.strip()
+
+    return text.strip(), ""
+
+
+def _tokenizer_is_usable(tokenizer: PreTrainedTokenizerBase) -> bool:
+    """Whether a loaded tokenizer actually has a vocabulary behind it.
+
+    Repositories holding only GGUF quants often ship a ``config.json`` without any tokenizer
+    files. ``AutoTokenizer`` resolves the class from that config and returns an empty tokenizer
+    instead of raising, which then counts every text as 0 tokens - silently disabling every
+    context-length check downstream. Encoding a probe is the cheapest reliable check.
+    """
     try:
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, token=settings.HF_TOKEN or None)
-    except OSError as s:
+        if tokenizer.vocab_size <= 1:
+            return False
+        return len(tokenizer.encode(_TOKENIZER_PROBE_TEXT)) > 0
+    except Exception as e:
+        general_logger.warning(f"Tokenizer failed to encode probe text: {e}")
+        return False
+
+
+def _from_pretrained(tokenizer_name: str, **kwargs) -> PreTrainedTokenizerBase:
+    """Typed wrapper around the ``AutoTokenizer`` factory.
+
+    ``AutoTokenizer.from_pretrained`` carries an unannotated decorator, so type checkers infer
+    None as its return type and flag every use of the loaded tokenizer. Routing it through
+    ``object`` once here restores the real type instead of spreading casts over each call site.
+    """
+    tokenizer: object = AutoTokenizer.from_pretrained(tokenizer_name, **kwargs)
+    return cast(PreTrainedTokenizerBase, tokenizer)
+
+
+def _try_load_tokenizer(tokenizer_name: str) -> PreTrainedTokenizerBase | None:
+    """Load a tokenizer, returning None when it is missing or unusable."""
+    try:
+        tokenizer = _from_pretrained(tokenizer_name, token=settings.HF_TOKEN or None)
+    except Exception as s:
         general_logger.warning(f"Could not load {tokenizer_name} tokenizer, defaulting to llama-tokenizer")
         general_logger.warning(s)
-        tokenizer = AutoTokenizer.from_pretrained("oobabooga/llama-tokenizer")
+        return None
+
+    if not _tokenizer_is_usable(tokenizer):
+        general_logger.warning(
+            f"Tokenizer {tokenizer_name} loaded without a usable vocabulary "
+            f"(repositories with GGUF quants often lack tokenizer files), defaulting to llama-tokenizer"
+        )
+        return None
+
+    return tokenizer
+
+
+def _load_tokenizer(tokenizer_name: str) -> PreTrainedTokenizerBase:
+    if tokenizer_name in _tokenizer_cache:
+        return _tokenizer_cache[tokenizer_name]
+
+    tokenizer = _try_load_tokenizer(tokenizer_name)
+    if tokenizer is None:
+        tokenizer = _from_pretrained(_FALLBACK_TOKENIZER)
     _tokenizer_cache[tokenizer_name] = tokenizer
     return tokenizer
 
@@ -144,6 +246,46 @@ def get_context_length(api_url: str) -> int:
     return value
 
 
+_KOBOLD_BACKENDS = ("koboldai", "koboldcpp")
+
+
+def is_chat_mode(api_settings: ApiSettings) -> bool:
+    """Whether generate_text will use the chat-completions endpoint for these settings.
+
+    Kobold backends have no chat-completions endpoint, so chat mode always falls back to text
+    there regardless of api_mode.
+    """
+    return api_settings.api_mode == "chat" and api_settings.backend.lower() not in _KOBOLD_BACKENDS
+
+
+def total_response_tokens(api_settings: ApiSettings, response_len: int) -> int:
+    """How many tokens generate_text may produce, including reasoning headroom.
+
+    ``thinking_budget`` is added on top of the requested response length in every mode, since
+    reasoning models think just the same over text completions. Callers sizing a prompt against
+    ``context_length`` have to reserve it too - otherwise the prompt is budgeted for ``max_tokens``
+    alone while the request asks for ``max_tokens + thinking_budget``, and the two together can
+    overrun the model's context window.
+    """
+    if api_settings.thinking_budget > 0:
+        return response_len + api_settings.thinking_budget
+    return response_len
+
+
+# Response-length keys that thinking_budget extends: OpenAI-style ``max_tokens`` and Kobold's
+# ``max_length``.
+_RESPONSE_LENGTH_KEYS = ("max_tokens", "max_length")
+
+
+def _with_thinking_budget(params: dict, api_settings: ApiSettings) -> dict:
+    """Copy of ``params`` with every response-length key extended by ``thinking_budget``."""
+    params = dict(params)
+    for key in _RESPONSE_LENGTH_KEYS:
+        if key in params:
+            params[key] = total_response_tokens(api_settings, params[key])
+    return params
+
+
 def get_model_name(api_url: str, api_key, api_type):
     if api_type.lower() == "tabby":
         model_endpoint = urljoin(api_url, "/v1/model")
@@ -157,22 +299,43 @@ def get_model_name(api_url: str, api_key, api_type):
 
 
 def generate_text(
-    prompt: str,
+    prompt: str | list[dict],
     params: dict,
-    api_type: str,
-    api_url: str,
-    api_key: str = None,
+    api_settings: ApiSettings,
     max_retries: int = 50,
     retry_interval: int = 1,
-):
-    if api_type.lower() in ("koboldai", "koboldcpp"):
+) -> GenerationResult:
+    api_type = api_settings.backend
+    api_url = api_settings.url
+    api_key = api_settings.auth_key
+    chat_mode = is_chat_mode(api_settings)
+
+    if api_settings.api_mode == "chat" and not chat_mode:
+        general_logger.warning(f"{api_type} does not support chat completions, falling back to text completion")
+
+    params = _with_thinking_budget(params, api_settings)
+
+    if api_type.lower() in _KOBOLD_BACKENDS:
         request_body = {"prompt": prompt}
         request_body.update(params)
         endpoint = urljoin(api_url, "/api/v1/generate")
+    elif chat_mode:
+        if api_settings.model:
+            model_name = api_settings.model
+        else:
+            model_name = get_model_name(api_url, api_key, api_type)
+        chat_params = {k: v for k, v in params.items() if k not in _TEXT_ONLY_PARAM_KEYS}
+        if api_settings.reasoning_effort:
+            chat_params["reasoning_effort"] = api_settings.reasoning_effort
+        if api_settings.chat_template_kwargs:
+            chat_params["chat_template_kwargs"] = api_settings.chat_template_kwargs
+        request_body = {"model": model_name, "messages": prompt}
+        request_body.update(chat_params)
+        endpoint = urljoin(api_url, "/v1/chat/completions")
     else:
         request_body = {"prompt": prompt}
-        if settings.summarization_api.model:
-            model_name = settings.summarization_api.model
+        if api_settings.model:
+            model_name = api_settings.model
         else:
             model_name = get_model_name(api_url, api_key, api_type)
         request_body["model"] = model_name
@@ -197,9 +360,31 @@ def generate_text(
         raise Exception("Could not generate text, max retries exceeded")
 
     response_json = response.json()
-    if api_type.lower() in ("koboldai", "koboldcpp"):
+    reasoning = ""
+    if api_type.lower() in _KOBOLD_BACKENDS:
         generated_text = response_json["results"][0]["text"]
+    elif chat_mode:
+        message = response_json["choices"][0]["message"]
+        generated_text = message.get("content") or ""
+        reasoning = message.get("reasoning_content") or message.get("reasoning") or ""
     else:
         generated_text = response_json["choices"][0]["text"]
 
-    return generated_text, request_body
+    if not reasoning:
+        generated_text, split_out_reasoning = split_reasoning(
+            generated_text,
+            api_settings.strip_reasoning,
+            api_settings.reasoning_start_token,
+            api_settings.reasoning_end_token,
+        )
+        reasoning = split_out_reasoning
+    elif api_settings.strip_reasoning:
+        generated_text = generated_text.strip()
+
+    if not generated_text and reasoning:
+        general_logger.warning(
+            "Generation produced reasoning but no content, it likely ran out of tokens while thinking - "
+            "consider raising summarization_api.thinking_budget"
+        )
+
+    return GenerationResult(text=generated_text, reasoning=reasoning, request_body=request_body)
