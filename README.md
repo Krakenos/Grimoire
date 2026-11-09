@@ -31,6 +31,49 @@ summarization_api: # Api used for summarization
   output_suffix: "\n"
 ```
 
+#### Chat completions and reasoning/thinking models
+
+By default Grimoire talks to the summarization backend with plain text completions
+(`/v1/completions`, or Kobold's native `/api/v1/generate`). Set `api_mode: chat` to instead use
+chat completions (`/v1/chat/completions`), which most modern OpenAI-compatible servers (vLLM,
+Aphrodite, Tabby, GenericOAI) support alongside text completions. KoboldAI/KoboldCPP have no chat
+endpoint, so they always use text completions regardless of `api_mode`.
+
+```yaml
+summarization_api:
+  backend: GenericOAI
+  api_mode: chat # "text" (default) or "chat"
+  reasoning_effort: "" # OpenAI/vLLM reasoning effort knob, e.g. "low"/"medium"/"high"; empty omits it
+  chat_template_kwargs: {} # extra chat kwargs, e.g. {enable_thinking: false} for Qwen/vLLM/Aphrodite
+  thinking_budget: 0 # extra tokens added on top of summarization.max_tokens to leave room for reasoning
+  strip_reasoning: true # strip the reasoning block (or an orphaned end token) from generated text
+  reasoning_start_token: "<think>" # reasoning delimiters your model emits in raw text
+  reasoning_end_token: "</think>"  # empty disables text-based splitting
+
+summarization:
+  # Used only in chat mode, in place of `prompt` / `segmented_memory_prompt`. Same placeholders,
+  # but no instruct sequences - the server applies its own chat template.
+  # The extract goes in the system message, the instruction in the user message.
+  chat_system_prompt: "{previous_summary}{additional_info}{messages}"
+  chat_user_prompt: |-
+    Above is an extract from a work of fiction. Use the details from that extract to describe {term} in one brief paragraph.
+    # ...the default continues with the numbered style rules, see config/settings.default.yaml
+  segmented_memory_chat_system_prompt: "{messages}"
+  segmented_memory_chat_user_prompt: "Above is an extract from a work of fiction. Summarize the most important facts and events in the story so far. Limit the summary to one paragraph. Your response should include nothing but the summary."
+```
+
+For reasoning models, Grimoire captures the reasoning separately (from a server's
+`reasoning_content`/`reasoning` field in chat mode, or by parsing it out of the generated text
+otherwise) and never stores it in the summary - it's only logged for debugging. When parsing raw
+text, everything up to the last `reasoning_end_token` is treated as reasoning; that also covers
+setups where the prompt prefills the start token, so only the end token comes back. A start token
+that is never closed means generation ran out of tokens mid-reasoning; that output is treated as
+reasoning only, so the existing summary is kept rather than overwritten (raise `thinking_budget` if
+this keeps happening). The delimiters
+differ per model, so set `reasoning_start_token`/`reasoning_end_token` to whatever yours emits
+(they default to `<think>`/`</think>`). Set `strip_reasoning: false` to disable this and keep the
+raw output as-is.
+
 ### Running from source
 
 Install dependencies (creates `.venv` automatically):

@@ -73,3 +73,24 @@ class TestGetEffectiveSettings(TestCase):
         result = get_effective_settings(session)
 
         self.assertEqual(file_settings.summarization_api.backend, result.summarization_api.backend)
+
+    def test_old_override_row_missing_new_fields_gets_defaults(self):
+        # An override row saved before api_mode/chat-completion support was added won't have those
+        # keys. Merging is shallow at the section level, so the row should still validate cleanly
+        # and fall back to the ApiSettings/SummarizationSettings defaults for the new fields.
+        session = _fake_session(
+            [
+                _override_row("summarization_api", {"model": "custom-model"}),
+                _override_row("summarization", {"limit_rate": 2}),
+            ]
+        )
+        result = get_effective_settings(session)
+
+        self.assertEqual("custom-model", result.summarization_api.model)
+        self.assertEqual("text", result.summarization_api.api_mode)
+        self.assertEqual("", result.summarization_api.reasoning_effort)
+        self.assertEqual({}, result.summarization_api.chat_template_kwargs)
+        self.assertEqual(0, result.summarization_api.thinking_budget)
+        self.assertTrue(result.summarization_api.strip_reasoning)
+        self.assertEqual(2, result.summarization.limit_rate)
+        self.assertEqual(file_settings.summarization.chat_system_prompt, result.summarization.chat_system_prompt)
