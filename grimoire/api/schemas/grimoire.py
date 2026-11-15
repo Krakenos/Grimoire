@@ -118,6 +118,10 @@ class MemoriesDetailOut(BaseModel):
     created_date: datetime
 
 
+class MemoryPatch(BaseModel):
+    summary: str
+
+
 class GraphNode(BaseModel):
     label: str
     memory_list: list[int]
@@ -138,3 +142,143 @@ class GraphOut(BaseModel):
     graph: dict = {}
     nodes: list[GraphNode]
     edges: list[GraphEdge]
+
+
+class AutoLorebookRequest(BaseModel):
+    text: str
+
+
+class AutoLorebookResponse(BaseModel):
+    request_id: str
+
+
+class LorebookEntry(BaseModel):
+    comment: str = "No comment provided"
+    key: list[str] = []
+    keysecondary: list[str] = []
+    content: str = "No content provided"
+    position: int = 0
+    constant: bool = False
+    order: int = 100
+    disable: bool = False
+    selective: bool = True
+    selectiveLogic: int = 0
+
+
+class Lorebook(BaseModel):
+    name: str = "Automatically generated Lorebook"
+    description: str = "No description provided"
+    entries: dict[str, LorebookEntry] = {}
+
+
+class LorebookStatusResponse(BaseModel):
+    status: str = "processing"
+    lorebook: Lorebook | None = None
+
+
+class LorebookStatusRequest(BaseModel):
+    request_id: str
+
+
+# ---------------------------------------------------------------------------
+# Management panel — editable settings
+# ---------------------------------------------------------------------------
+
+
+class SummarizationApiSettingsOut(BaseModel):
+    backend: str
+    model: str
+    url: str
+    auth_key_set: bool  # auth_key itself is never sent back to the client
+    context_length: int
+    system_sequence: str
+    system_suffix: str
+    input_sequence: str
+    input_suffix: str
+    output_sequence: str
+    output_suffix: str
+    first_output_sequence: str
+    last_output_sequence: str
+    bos_token: str
+    api_mode: str
+    reasoning_effort: str
+    chat_template_kwargs: dict
+    thinking_budget: int
+    strip_reasoning: bool
+    reasoning_start_token: str
+    reasoning_end_token: str
+
+
+class SummarizationApiSettingsIn(BaseModel):
+    backend: str | None = None
+    model: str | None = None
+    url: str | None = None
+    auth_key: str | None = None  # blank/omitted preserves the currently stored value
+    context_length: int | None = None
+    system_sequence: str | None = None
+    system_suffix: str | None = None
+    input_sequence: str | None = None
+    input_suffix: str | None = None
+    output_sequence: str | None = None
+    output_suffix: str | None = None
+    first_output_sequence: str | None = None
+    last_output_sequence: str | None = None
+    bos_token: str | None = None
+    api_mode: str | None = None
+    reasoning_effort: str | None = None
+    chat_template_kwargs: dict | None = None
+    thinking_budget: int | None = None
+    strip_reasoning: bool | None = None
+    reasoning_start_token: str | None = None
+    reasoning_end_token: str | None = None
+
+
+class SummarizationPromptSettingsOut(BaseModel):
+    prompt: str
+    segmented_memory_prompt: str
+    chat_system_prompt: str
+    chat_user_prompt: str
+    segmented_memory_chat_system_prompt: str
+    segmented_memory_chat_user_prompt: str
+    limit_rate: int
+    max_tokens: int
+    params: dict
+
+
+class SummarizationPromptSettingsIn(BaseModel):
+    prompt: str | None = None
+    segmented_memory_prompt: str | None = None
+    chat_system_prompt: str | None = None
+    chat_user_prompt: str | None = None
+    segmented_memory_chat_system_prompt: str | None = None
+    segmented_memory_chat_user_prompt: str | None = None
+    limit_rate: int | None = None
+    max_tokens: int | None = None
+    params: dict | None = None
+
+
+class TokenizationSettingsOut(BaseModel):
+    prefer_local_tokenizer: bool
+    local_tokenizer: str
+
+
+class TokenizationSettingsIn(BaseModel):
+    prefer_local_tokenizer: bool | None = None
+    local_tokenizer: str | None = None
+
+
+class PanelSettingsOut(BaseModel):
+    summarization_api: SummarizationApiSettingsOut
+    summarization: SummarizationPromptSettingsOut
+    tokenization: TokenizationSettingsOut
+    overridden_sections: list[str]  # sections currently backed by a DB override, vs. file defaults
+
+
+class PanelSettingsIn(BaseModel):
+    summarization_api: SummarizationApiSettingsIn | None = None
+    summarization: SummarizationPromptSettingsIn | None = None
+    tokenization: TokenizationSettingsIn | None = None
+
+
+class SettingsResetRequest(BaseModel):
+    section: str

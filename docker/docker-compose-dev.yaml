@@ -1,3 +1,29 @@
+# Dev environment.
+#   Redis + Postgres only:   docker compose -f docker/docker-compose-dev.yaml up -d
+#   Whole stack in Docker:   ./dev up   (enables the "app" profile, see ./dev help)
+name: grimoire-dev
+
+x-grimoire-app: &grimoire-app
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile
+    target: dev
+  image: grimoire-dev
+  profiles: ["app"]
+  working_dir: /app
+  volumes:
+    - ..:/app
+    - hf_cache:/root/.cache/huggingface
+  gpus: all
+  extra_hosts:
+    # Reach services running on the host (e.g. an LLM backend) at http://host.docker.internal:<port>
+    - "host.docker.internal:host-gateway"
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_started
+
 services:
   redis:
     image: redis
@@ -15,8 +41,32 @@ services:
     ports:
       - 5430:5432
     volumes:
-      - ./db_data/data:/var/lib/postgresql/data
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U grimoire -d grimoire"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  api:
+    <<: *grimoire-app
+    container_name: "grimoire-api"
+    # The bind mount doesn't reliably deliver file events from Windows; uvicorn falls back to
+    # polling (StatReload) because watchfiles isn't installed, which works across the mount.
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn grimoire.api.client:app --host 0.0.0.0 --port 5005 --reload --reload-dir grimoire"
+    ports:
+      - 5005:5005
+
+  worker:
+    <<: *grimoire-app
+    container_name: "grimoire-worker"
+    # Celery doesn't auto-reload; use ./dev restart worker after changing task code.
+    command: >
+      celery -A grimoire.core.tasks worker -B -s /tmp/celerybeat-schedule
+      -l info -c 1 -Q summarization_queue,celery --pool=threads
 
 volumes:
   db:
-    driver: local
+  hf_cache:

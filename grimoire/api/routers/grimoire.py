@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 from starlette import status
 from starlette.responses import Response
 
 from grimoire.api.schemas.grimoire import (
+    AutoLorebookRequest,
+    AutoLorebookResponse,
     ChatData,
     ChatIn,
     ChatMessageIn,
@@ -16,12 +18,18 @@ from grimoire.api.schemas.grimoire import (
     KnowledgeDetailPatch,
     KnowledgeIn,
     KnowledgeOut,
+    LorebookStatusRequest,
+    LorebookStatusResponse,
     MemoriesOut,
     UserIn,
     UserOut,
 )
 from grimoire.common import api_utils
-from grimoire.core.grimoire import process_request
+from grimoire.core.grimoire import (
+    extract_text_from_upload,
+    generate_lorebook,
+    process_request,
+)
 from grimoire.db.connection import get_db
 
 router = APIRouter(tags=["Grimoire specific endpoints"])
@@ -231,3 +239,21 @@ def get_data(chat_data: ChatData, db: Session = Depends(get_db)):
         chat_data.external_user_id,
         chat_data.max_tokens,
     )
+
+
+@router.post("/autolorebook/create", response_model=AutoLorebookResponse)
+def autolorebook_create(req: AutoLorebookRequest):
+    request_id = str(generate_lorebook(req.text))
+    return AutoLorebookResponse(request_id=request_id)
+
+
+@router.post("/autolorebook/status", response_model=LorebookStatusResponse)
+def autolorebook_status(req: LorebookStatusRequest):
+    return api_utils.get_autolorebook(req.request_id)
+
+
+@router.post("/autolorebook/upload_file", response_model=AutoLorebookResponse)
+async def autolorebook_create_from_file(file: UploadFile):
+    text = await extract_text_from_upload(file)
+    request_id = str(generate_lorebook(text))
+    return AutoLorebookResponse(request_id=request_id)

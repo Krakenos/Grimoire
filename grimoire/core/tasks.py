@@ -1,4 +1,5 @@
 import copy
+import json
 import ssl
 from datetime import datetime
 
@@ -7,9 +8,10 @@ from celery_singleton import Singleton
 from sqlalchemy import NullPool, create_engine, select
 from sqlalchemy.orm import Session
 
-from grimoire.common.llm_helpers import generate_text, token_count
+from grimoire.common.llm_helpers import generate_text, is_chat_mode, token_count, total_response_tokens
 from grimoire.common.loggers import general_logger, summary_logger
 from grimoire.common.redis import redis_manager
+from grimoire.core.runtime_settings import get_effective_settings
 from grimoire.core.settings import ApiSettings, SecondaryDatabaseSettings, SummarizationSettings, settings
 from grimoire.db.models import Character, Knowledge, Message, SegmentedMemory
 from grimoire.db.queries import get_knowledge_entity, get_messages_by_index
@@ -29,10 +31,14 @@ if redis_manager.sentinel:
 
     celery_app.conf.broker_transport_options = transport_options
 
+# Lorebook entries are dropped from an entity description prompt until at least this many messages fit
+MIN_SUMMARY_MESSAGES = 3
+
 celery_app.conf.task_routes = {
     "grimoire.core.tasks.summarize": {"queue": "summarization_queue"},
     "grimoire.core.tasks.describe_entity": {"queue": "summarization_queue"},
     "grimoire.core.tasks.generate_segmented_memory": {"queue": "summarization_queue"},
+    "grimoire.core.tasks.generate_lorebook_entry": {"queue": "summarization_queue"},
 }
 
 
@@ -64,23 +70,8 @@ def get_additional_info(knowledge_entry: Knowledge, session: Session) -> str:
     return additional_info
 
 
-def make_summary_prompt(
-    session: Session,
-    knowledge_entry: Knowledge,
-    max_context: int,
-    api_settings: ApiSettings,
-    summarization_settings: SummarizationSettings,
-    secondary_database_settings: SecondaryDatabaseSettings,
-    prefer_local_tokenizer: bool,
-    tokenizer: str,
-    extra_info: list[str],
-    include_names: bool = True,
-) -> str | None:
-    summarization_url = api_settings.url
-    summarization_backend = api_settings.backend
-    summarization_auth = api_settings.auth_key
-
-    instruct_fields = {
+def build_instruct_fields(api_settings: ApiSettings) -> dict:
+    return {
         "bos_token": api_settings.bos_token,
         "system_sequence": api_settings.system_sequence,
         "system_suffix": api_settings.system_suffix,
@@ -92,15 +83,44 @@ def make_summary_prompt(
         "last_output_sequence": api_settings.last_output_sequence,
     }
 
-    secondary_database = secondary_database_settings.enabled
-    secondary_database_encryption_method = secondary_database_settings.message_encryption
-    secondary_database_encryption_key = secondary_database_settings.encryption_key
-    chat_id = knowledge_entry.chat_id
 
-    if knowledge_entry.summary_entry:
-        summary = f"{knowledge_entry.summary_entry}\n"
-    else:
-        summary = ""
+def build_generation_params(
+    api_settings: ApiSettings, summarization_settings: SummarizationSettings, response_len: int, context_len: int
+) -> dict:
+    generation_params = {
+        "max_length": response_len,
+        "max_tokens": response_len,
+        "truncation_length": context_len,
+        "max_context_length": context_len,
+    }
+    generation_params.update(copy.deepcopy(summarization_settings.params))
+
+    if is_chat_mode(api_settings):
+        # Instruct sequences are meaningless once the server applies its own chat template.
+        return generation_params
+
+    additional_stops = [
+        api_settings.input_sequence.strip(),
+        api_settings.output_sequence.strip(),
+        api_settings.first_output_sequence.strip(),
+        api_settings.last_output_sequence.strip(),
+        api_settings.input_suffix.strip(),
+        api_settings.output_suffix.strip(),
+    ]
+    additional_stops = [stop for stop in additional_stops if stop]
+    generation_params["stop"].extend(additional_stops)
+    generation_params["stop_sequence"].extend(additional_stops)
+    return generation_params
+
+
+def get_summary_messages(
+    session: Session,
+    knowledge_entry: Knowledge,
+    secondary_database_settings: SecondaryDatabaseSettings,
+    include_names: bool = True,
+) -> list[str]:
+    """Messages mentioning the entity plus their neighbours, oldest first."""
+    chat_id = knowledge_entry.chat_id
 
     message_indices = [message.message_index for message in knowledge_entry.messages]
     chunk_indices = set()
@@ -109,19 +129,20 @@ def make_summary_prompt(
     chunk_indices -= {-1, 0}
     final_indices = sorted(chunk_indices)
 
-    if secondary_database:
-        query = (
-            select(Message)
-            .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
-            .order_by(Message.message_index)
-        )
-        query_results = session.scalars(query).all()
+    query = (
+        select(Message)
+        .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
+        .order_by(Message.message_index)
+    )
+    query_results = session.scalars(query).all()
+    sender_names = [mes.character.name for mes in query_results]
+
+    if secondary_database_settings.enabled:
         external_ids = [mes.external_id for mes in query_results]
-        sender_names = [mes.character.name for mes in query_results]
         db_messages = get_messages_from_external_db(
             external_ids,
-            secondary_database_encryption_method,
-            secondary_database_encryption_key,
+            secondary_database_settings.message_encryption,
+            secondary_database_settings.encryption_key,
         )
         if include_names:
             messages = []
@@ -134,14 +155,7 @@ def make_summary_prompt(
             messages = [message for message in db_messages if message is not None]
 
     else:
-        query = (
-            select(Message)
-            .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
-            .order_by(Message.message_index)
-        )
-        query_results = session.scalars(query).all()
         db_messages = [mes.message for mes in query_results]
-        sender_names = [mes.character.name for mes in query_results]
         if include_names:
             messages = []
             for name, message in zip(sender_names, db_messages, strict=True):
@@ -152,45 +166,126 @@ def make_summary_prompt(
         else:
             messages = db_messages
 
-    if len(messages) <= 1:
+    return messages
+
+
+def make_summary_prompt(
+    session: Session,
+    knowledge_entry: Knowledge,
+    max_context: int,
+    api_settings: ApiSettings,
+    summarization_settings: SummarizationSettings,
+    secondary_database_settings: SecondaryDatabaseSettings,
+    prefer_local_tokenizer: bool,
+    tokenizer: str,
+    extra_info: list[str],
+    include_names: bool = True,
+) -> str | list[dict] | None:
+    """Builds the entity description prompt, or returns None if there is nothing to summarize."""
+    summarization_url = api_settings.url
+    summarization_backend = api_settings.backend
+    summarization_auth = api_settings.auth_key
+    chat_mode = is_chat_mode(api_settings)
+
+    instruct_fields = build_instruct_fields(api_settings)
+    term = knowledge_entry.entity
+
+    if knowledge_entry.summary_entry:
+        summary = f"{knowledge_entry.summary_entry}\n"
+    else:
+        summary = ""
+
+    messages = get_summary_messages(session, knowledge_entry, secondary_database_settings, include_names)
+
+    if len(messages) <= 1:  # Edge case of having 1 message for summary, only may happen at start of chat
+        general_logger.info("Skipping entry to summarize, only 1 message for term exists")
         return None
 
-    prompt = ""
-    reversed_messages = []
-    additional_info = get_additional_info(knowledge_entry, session)
-    extra_text = "\n".join(extra_info)
-    extra_text = f"{extra_text}\n" if extra_text else ""  # add ending newline if there is extra_text
-    additional_info = f"{additional_info}{extra_text}"
+    def count_tokens(texts: list[str]) -> list[int]:
+        return token_count(
+            texts, summarization_backend, summarization_url, tokenizer, prefer_local_tokenizer, summarization_auth
+        )
 
-    for message in messages[::-1]:
-        reversed_messages.append(f"{message}\n")
-        messages_text = "".join(reversed_messages[::-1])
-        new_prompt = summarization_settings.prompt.format(
-            term=knowledge_entry.entity,
+    def build_prompt(additional_info: str, messages_text: str) -> str | list[dict]:
+        if chat_mode:
+            system_content = summarization_settings.chat_system_prompt.format(
+                previous_summary=summary,
+                additional_info=additional_info,
+                messages=messages_text,
+                term=term,
+            )
+            return [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": summarization_settings.chat_user_prompt.format(term=term)},
+            ]
+        return summarization_settings.prompt.format(
+            term=term,
             previous_summary=summary,
             additional_info=additional_info,
             messages=messages_text,
             **instruct_fields,
         )
-        prompt_without_summary = new_prompt
-        if summary:
-            prompt_without_summary = new_prompt.replace(summary, "")
-        splitted_prompt = prompt_without_summary.split(messages_text)
-        to_tokenize = [*splitted_prompt, *reversed_messages, summary]
-        to_tokenize = [text for text in to_tokenize if text != "" and text is not None]
-        new_tokens = token_count(
-            to_tokenize, summarization_backend, summarization_url, tokenizer, prefer_local_tokenizer, summarization_auth
-        )
-        sum_tokens = sum(new_tokens)
-        if sum_tokens > max_context:
-            break
+
+    def fixed_tokens(additional_info: str) -> int:
+        """Tokens of everything in the prompt except the messages."""
+        scaffold = build_prompt(additional_info, "<temp>")
+        if chat_mode:
+            pieces = [*scaffold[0]["content"].split("<temp>"), scaffold[1]["content"]]
         else:
-            prompt = new_prompt
+            pieces = scaffold.split("<temp>")
+        pieces = [piece for piece in pieces if piece]
+        return sum(count_tokens(pieces)) if pieces else 0
 
-    return prompt
+    messages = [f"{message}\n" for message in messages]
+    message_tokens = count_tokens(messages)
+
+    character_info = get_additional_info(knowledge_entry, session)
+
+    def make_additional_info(lorebook_entries: list[str]) -> str:
+        extra_text = "\n".join(lorebook_entries)
+        extra_text = f"{extra_text}\n" if extra_text else ""  # add ending newline if there is extra_text
+        return f"{character_info}{extra_text}"
+
+    lorebook_entries = list(extra_info)
+    additional_info = make_additional_info(lorebook_entries)
+    budget = max_context - fixed_tokens(additional_info)
+
+    min_messages_tokens = sum(message_tokens[-MIN_SUMMARY_MESSAGES:])
+    if lorebook_entries and min_messages_tokens > budget:
+        # Lorebook text crowds out the chat itself, drop the largest entries until enough messages fit.
+        entry_tokens = dict(zip(lorebook_entries, count_tokens(lorebook_entries), strict=True))
+        dropped_entries = 0
+        while lorebook_entries and min_messages_tokens > budget:
+            lorebook_entries.remove(max(lorebook_entries, key=entry_tokens.__getitem__))
+            dropped_entries += 1
+            additional_info = make_additional_info(lorebook_entries)
+            budget = max_context - fixed_tokens(additional_info)
+        general_logger.warning(
+            f"Dropped {dropped_entries} of {len(extra_info)} lorebook entries from the summary prompt for {term} "
+            f"to make room for chat messages"
+        )
+
+    # Newest messages are the most relevant, so fill the budget from the end.
+    fitting_messages = 0
+    used_tokens = 0
+    for tokens in message_tokens[::-1]:
+        if used_tokens + tokens > budget:
+            break
+        used_tokens += tokens
+        fitting_messages += 1
+
+    if fitting_messages == 0:
+        general_logger.warning(
+            f"Skipping entry to summarize, no message for {term} fits in the {max_context} token prompt context "
+            f"after the previous summary, character info and lorebook entries ({max_context - budget} tokens)"
+        )
+        return None
+
+    return build_prompt(additional_info, "".join(messages[-fitting_messages:]))
 
 
-@celery_app.task(base=Singleton, lock_expiry=60)
+# Lorebook entries vary between requests, so they must not make otherwise identical jobs distinct
+@celery_app.task(base=Singleton, lock_expiry=60, unique_on=["term", "chat_id"])
 def describe_entity(
     term: str,
     chat_id: int,
@@ -201,10 +296,11 @@ def describe_entity(
 ) -> None:
     from grimoire.core.vector_embeddings import get_text_embeddings
 
-    api_settings = settings.summarization_api
-    summarization_settings = settings.summarization
-    tokenization_settings = settings.tokenization
-    secondary_database_settings = settings.secondary_database
+    runtime_settings = get_effective_settings()
+    api_settings = runtime_settings.summarization_api
+    summarization_settings = runtime_settings.summarization
+    tokenization_settings = runtime_settings.tokenization
+    secondary_database_settings = runtime_settings.secondary_database
 
     summarization_url = api_settings.url
     summarization_backend = api_settings.backend
@@ -234,7 +330,7 @@ def describe_entity(
             general_logger.info("Skipping entry to summarize, disabled entity")
             return None
 
-        max_prompt_context = context_len - response_len
+        max_prompt_context = context_len - total_response_tokens(api_settings, response_len)
         prompt = make_summary_prompt(
             session,
             knowledge_entry,
@@ -248,38 +344,21 @@ def describe_entity(
             include_names,
         )
 
-        if prompt is None:  # Edge case of having 1 message for summary, only may happen at start of chat
-            general_logger.info("Skipping entry to summarize, only 1 message for term exists")
+        if prompt is None:
             return None
 
-        generation_params = {
-            "max_length": response_len,
-            "max_tokens": response_len,
-            "truncation_length": context_len,
-            "max_context_length": context_len,
-        }
-        generation_params.update(copy.deepcopy(summarization_settings.params))
-        additional_stops = [
-            api_settings.input_sequence.strip(),
-            api_settings.output_sequence.strip(),
-            api_settings.first_output_sequence.strip(),
-            api_settings.last_output_sequence.strip(),
-            api_settings.input_suffix.strip(),
-            api_settings.output_suffix.strip(),
-        ]
-        additional_stops = [stop for stop in additional_stops if stop]
-        generation_params["stop"].extend(additional_stops)
-        generation_params["stop_sequence"].extend(additional_stops)
-        summary_text, request_json = generate_text(
+        generation_params = build_generation_params(api_settings, summarization_settings, response_len, context_len)
+        result = generate_text(
             prompt,
             generation_params,
-            summarization_backend,
-            summarization_url,
-            summarization_auth,
+            api_settings,
             max_retries,
             retry_interval,
         )
-        summary_text = summary_text.replace("\n\n", "\n")
+        if not result.text.strip():
+            general_logger.warning(f"Empty summary generated for {term}, keeping the previous one")
+            return None
+        summary_text = result.text.replace("\n\n", "\n")
         summary_entry_text = f"[ {knowledge_entry.entity}: {summary_text} ]"
         summary_embedding = get_text_embeddings(summary_text)[0]
         knowledge_entry.summary = summary_text
@@ -295,8 +374,10 @@ def describe_entity(
         knowledge_entry.update_count = 1
         knowledge_entry.updated_date = datetime.now()
         knowledge_entry.vector_embedding = summary_embedding
-        summary_logger.debug(f"({knowledge_entry.token_count} tokens){term}: {summary_text}\n{request_json}")
+        summary_logger.debug(f"({knowledge_entry.token_count} tokens){term}: {summary_text}\n{result.request_body}")
         summary_logger.debug(f"#### PROMPT ####\n{prompt}\n#### RESPONSE ####\n{summary_text}")
+        if result.reasoning:
+            summary_logger.debug(f"#### REASONING ####\n{result.reasoning}")
         session.commit()
 
 
@@ -322,16 +403,23 @@ def queue_logging() -> None:
 
 @celery_app.task
 def generate_segmented_memory(
-    chat_id: int, start_index: int, end_index: int, create_date=datetime, max_retries: int = 50, retry_interval: int = 1
+    chat_id: int,
+    start_index: int,
+    end_index: int,
+    create_date=datetime,
+    include_names: bool = True,
+    max_retries: int = 50,
+    retry_interval: int = 1,
 ) -> None:
     from grimoire.core.vector_embeddings import get_text_embeddings
 
-    seg_mem_prompt_template = settings.summarization.segmented_memory_prompt
+    runtime_settings = get_effective_settings()
+    seg_mem_prompt_template = runtime_settings.summarization.segmented_memory_prompt
 
-    api_settings = settings.summarization_api
-    summarization_settings = settings.summarization
-    tokenization_settings = settings.tokenization
-    secondary_database_settings = settings.secondary_database
+    api_settings = runtime_settings.summarization_api
+    summarization_settings = runtime_settings.summarization
+    tokenization_settings = runtime_settings.tokenization
+    secondary_database_settings = runtime_settings.secondary_database
 
     summarization_url = api_settings.url
     summarization_backend = api_settings.backend
@@ -340,17 +428,8 @@ def generate_segmented_memory(
     response_len = summarization_settings.max_tokens
     prefer_local_tokenizer = tokenization_settings.prefer_local_tokenizer
     tokenizer = tokenization_settings.local_tokenizer
-    instruct_fields = {
-        "bos_token": api_settings.bos_token,
-        "system_sequence": api_settings.system_sequence,
-        "system_suffix": api_settings.system_suffix,
-        "input_sequence": api_settings.input_sequence,
-        "input_suffix": api_settings.input_suffix,
-        "output_sequence": api_settings.output_sequence,
-        "output_suffix": api_settings.output_suffix,
-        "first_output_sequence": api_settings.first_output_sequence,
-        "last_output_sequence": api_settings.last_output_sequence,
-    }
+    chat_mode = is_chat_mode(api_settings)
+    instruct_fields = build_instruct_fields(api_settings)
 
     with Session(celery_db_engine) as session:
         messages = get_messages_by_index(start_index, end_index, chat_id, session)
@@ -362,43 +441,49 @@ def generate_segmented_memory(
                 secondary_database_settings.message_encryption,
                 secondary_database_settings.encryption_key,
             )
-            texts = [
-                f"{mes.character.name}: {txt}"
-                for txt, mes in zip(messages_texts, messages, strict=False)
-                if txt is not None
+            if include_names:
+                texts = []
+                for txt, mes in zip(messages_texts, messages, strict=False):
+                    if txt is None:
+                        continue
+                    name = mes.character.name
+                    texts.append(f"{name}: {txt}" if name else txt)
+            else:
+                texts = [txt for txt in messages_texts if txt is not None]
+        else:
+            if include_names:
+                texts = [
+                    f"{mes.character.name}: {mes.message}" if mes.character.name else mes.message for mes in messages
+                ]
+            else:
+                texts = [mes.message for mes in messages]
+
+        joined_texts = "\n".join(texts)
+        if chat_mode:
+            seg_mem_prompt = [
+                {
+                    "role": "system",
+                    "content": summarization_settings.segmented_memory_chat_system_prompt.format(messages=joined_texts),
+                },
+                {"role": "user", "content": summarization_settings.segmented_memory_chat_user_prompt},
             ]
         else:
-            texts = [f"{mes.character.name}: {mes.message}" for mes in messages]
+            seg_mem_prompt = seg_mem_prompt_template.format(messages=joined_texts, **instruct_fields)
 
-        seg_mem_prompt = seg_mem_prompt_template.format(messages="\n".join(texts), **instruct_fields)
-
-        generation_params = {
-            "max_length": response_len,
-            "max_tokens": response_len,
-            "truncation_length": context_len,
-            "max_context_length": context_len,
-        }
-        generation_params.update(copy.deepcopy(summarization_settings.params))
-        additional_stops = [
-            api_settings.input_sequence.strip(),
-            api_settings.output_sequence.strip(),
-            api_settings.first_output_sequence.strip(),
-            api_settings.last_output_sequence.strip(),
-            api_settings.input_suffix.strip(),
-            api_settings.output_suffix.strip(),
-        ]
-        additional_stops = [stop for stop in additional_stops if stop]
-        generation_params["stop"].extend(additional_stops)
-        generation_params["stop_sequence"].extend(additional_stops)
-        memory_text, request_json = generate_text(
+        generation_params = build_generation_params(api_settings, summarization_settings, response_len, context_len)
+        result = generate_text(
             seg_mem_prompt,
             generation_params,
-            summarization_backend,
-            summarization_url,
-            summarization_auth,
+            api_settings,
             max_retries,
             retry_interval,
         )
+        memory_text = result.text
+        if not memory_text.strip():
+            general_logger.warning(
+                f"Empty segmented memory generated for chat {chat_id}, messages {start_index}-{end_index}, skipping"
+            )
+            return None
         vector_embedding = get_text_embeddings(memory_text)[0]
         memory_entry = f"[ Memory: {memory_text} ]"
         tokens = token_count(
@@ -420,3 +505,155 @@ def generate_segmented_memory(
         new_memory.messages.extend(messages)
         session.add(new_memory)
         session.commit()
+
+
+@celery_app.task
+def generate_lorebook_entry(
+    ent_name: str, texts: list[str], request_id: str, max_retries: int = 50, retry_interval: int = 1
+) -> None:
+    runtime_settings = get_effective_settings()
+    api_settings = runtime_settings.summarization_api
+    summarization_settings = runtime_settings.summarization
+    tokenization_settings = runtime_settings.tokenization
+
+    summarization_url = api_settings.url
+    summarization_backend = api_settings.backend
+    summarization_auth = api_settings.auth_key
+    context_len = api_settings.context_length
+    response_len = summarization_settings.max_tokens
+    prefer_local_tokenizer = tokenization_settings.prefer_local_tokenizer
+    tokenizer = tokenization_settings.local_tokenizer
+    chat_mode = is_chat_mode(api_settings)
+
+    generation_params = build_generation_params(api_settings, summarization_settings, response_len, context_len)
+    instruct_fields = build_instruct_fields(api_settings)
+    chat_user_content = summarization_settings.chat_user_prompt.format(term=ent_name)
+
+    def build_prompt(previous_summary: str, messages_text: str) -> str | list[dict]:
+        if chat_mode:
+            system_content = summarization_settings.chat_system_prompt.format(
+                term=ent_name, previous_summary=previous_summary, additional_info="", messages=messages_text
+            )
+            return [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": chat_user_content},
+            ]
+        return summarization_settings.prompt.format(
+            term=ent_name,
+            previous_summary=previous_summary,
+            additional_info="",
+            messages=messages_text,
+            **instruct_fields,
+        )
+
+    texts = [f"{text}\n" for text in texts]
+
+    text_tokens = token_count(
+        texts, summarization_backend, summarization_url, tokenizer, prefer_local_tokenizer, summarization_auth
+    )
+
+    response_tokens = total_response_tokens(api_settings, response_len)
+
+    def max_text_tokens_for(previous_summary: str) -> int:
+        """Room left for message text once scaffolding, previous summary and response are reserved.
+
+        The previous summary is fed back into every prompt after the first generation and grows to
+        response-length, so the budget has to be recomputed whenever it changes - budgeting once
+        against an empty summary understates the prompt by that much on every later chunk.
+        """
+        budget_prompt = build_prompt(previous_summary, "<temp>")
+        if chat_mode:
+            tokens_to_count = [*budget_prompt[0]["content"].split("<temp>"), chat_user_content]
+        else:
+            tokens_to_count = budget_prompt.split("<temp>")
+        prompt_tokens = sum(
+            token_count(
+                tokens_to_count,
+                summarization_backend,
+                summarization_url,
+                tokenizer,
+                prefer_local_tokenizer,
+                summarization_auth,
+            )
+        )
+        return context_len - prompt_tokens - response_tokens
+
+    max_text_tokens = max_text_tokens_for("")
+    if max_text_tokens <= 0:
+        general_logger.error(
+            f"No room for lorebook text for {ent_name}: context length {context_len} is too small for the "
+            f"prompt plus a {response_tokens} token response"
+        )
+        return None
+
+    def warn_skipped(text_tokens: int, budget: int) -> None:
+        general_logger.warning(
+            f"Skipping a message of {text_tokens} tokens for lorebook entry {ent_name}, "
+            f"it does not fit in the {budget} token budget"
+        )
+
+    def keep_previous_if_empty(new_definition: str, previous_definition: str) -> str:
+        if new_definition.strip():
+            return new_definition
+        general_logger.warning(f"Empty definition generated for lorebook entry {ent_name}, keeping the previous one")
+        return previous_definition
+
+    current_text = ""
+    current_tokens = 0
+    lorebook_definition = ""
+    for text, tokens in zip(texts, text_tokens, strict=True):
+        if tokens > max_text_tokens:
+            warn_skipped(tokens, max_text_tokens)
+            continue
+
+        if current_tokens + tokens <= max_text_tokens:
+            current_tokens += tokens
+            current_text = f"{current_text}{text}"
+            continue
+
+        # This text does not fit alongside what has accumulated, so summarize that first and let
+        # this text open the next chunk.
+        full_prompt = build_prompt(lorebook_definition, current_text)
+        result = generate_text(
+            full_prompt,
+            generation_params,
+            api_settings,
+            max_retries,
+            retry_interval,
+        )
+        lorebook_definition = keep_previous_if_empty(result.text, lorebook_definition)
+        # The budget shrinks once a summary feeds back into the prompt, so re-check this text
+        # against the new one rather than the budget it was accepted under.
+        max_text_tokens = max_text_tokens_for(lorebook_definition)
+        if tokens > max_text_tokens:
+            warn_skipped(tokens, max_text_tokens)
+            current_tokens = 0
+            current_text = ""
+        else:
+            current_tokens = tokens
+            current_text = text
+
+    if current_text:
+        full_prompt = build_prompt(lorebook_definition, current_text)
+        result = generate_text(
+            full_prompt,
+            generation_params,
+            api_settings,
+            max_retries,
+            retry_interval,
+        )
+        lorebook_definition = keep_previous_if_empty(result.text, lorebook_definition)
+
+    if lorebook_definition:
+        # success
+        key = f"LOREBOOK_ENTRY_{request_id}_{ent_name}"
+        value = {"status": "success", "result": lorebook_definition}
+        redis_client = redis_manager.get_client()
+        redis_client.set(key, json.dumps(value), settings.redis.CACHE_EXPIRE_TIME)
+
+    else:
+        # failed
+        key = f"LOREBOOK_ENTRY_{request_id}_{ent_name}"
+        value = {"status": "failed", "result": "Failed to create a definition for entry"}
+        redis_client = redis_manager.get_client()
+        redis_client.set(key, json.dumps(value), settings.redis.CACHE_EXPIRE_TIME)

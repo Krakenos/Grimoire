@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Helper for the containerised dev environment (docker/docker-compose-dev.yaml).
+# Everything Python runs inside the grimoire-dev image; the repo is bind-mounted at /app.
+# Run ./dev help for the list of commands.
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+# Stop Git Bash on Windows from rewriting arguments that look like paths (/app, /tmp, ...)
+export MSYS_NO_PATHCONV=1
+
+compose() {
+    docker compose -f docker/docker-compose-dev.yaml --profile app "$@"
+}
+
+# docker compose exec allocates a TTY by default, which fails when not attached to a terminal
+tty_flag=()
+if [ ! -t 0 ] || [ ! -t 1 ]; then
+    tty_flag=(-T)
+fi
+
+in_api() {
+    compose exec "${tty_flag[@]}" api "$@"
+}
+
+ensure_settings() {
+    if [ ! -f config/settings.yaml ]; then
+        # Same as settings.default.yaml, but pointing at the compose services instead of host ports
+        sed -e 's#@127\.0\.0\.1:5430/#@postgres:5432/#' \
+            -e 's#HOST: "127\.0\.0\.1:6370"#HOST: "redis:6379"#' \
+            config/settings.default.yaml >config/settings.yaml
+        echo "Created config/settings.yaml for the dev containers."
+        echo "Services on the Windows host (e.g. the LLM backend) are at http://host.docker.internal:<port>."
+    fi
+}
+
+usage() {
+    cat <<'EOF'
+Usage: ./dev <command> [args]
+
+  up [svc...]        build the image if needed and start the stack (api on :5005, worker, redis, postgres)
+  down [args]        stop the stack (data volumes are kept; pass -v to wipe them)
+  build              rebuild the dev image (needed after uv.lock / pyproject.toml changes)
+  restart [svc...]   restart services (default: worker, which doesn't auto-reload)
+  ps                 show service status
+  logs [args]        recent logs, e.g. ./dev logs api   ./dev logs -f worker
+
+  test [args]        run unit tests (default: discover tests/), e.g. ./dev test tests.unit.test_grimoire
+  lint [args]        ruff check, e.g. ./dev lint --fix
+  format [args]      ruff format
+  migrate            alembic upgrade head
+  revision "msg"     alembic revision --autogenerate -m "msg"
+
+  shell              bash inside the api container
+  exec <cmd...>      run any command inside the api container
+  psql               psql shell on the dev database
+EOF
+}
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+up)
+    ensure_settings
+    compose up -d --build "$@"
+    ;;
+down) compose down "$@" ;;
+build) compose build "$@" ;;
+restart)
+    if [ $# -eq 0 ]; then set -- worker; fi
+    compose restart "$@"
+    ;;
+ps) compose ps ;;
+logs) compose logs --tail=200 "$@" ;;
+test)
+    if [ $# -eq 0 ]; then set -- discover tests/; fi
+    in_api python -m unittest "$@"
+    ;;
+lint) in_api ruff check . "$@" ;;
+format) in_api ruff format . "$@" ;;
+migrate) in_api alembic upgrade head ;;
+revision)
+    if [ $# -ne 1 ]; then
+        echo 'Usage: ./dev revision "description"' >&2
+        exit 1
+    fi
+    in_api alembic revision --autogenerate -m "$1"
+    ;;
+shell) in_api bash ;;
+exec) in_api "$@" ;;
+psql) compose exec "${tty_flag[@]}" postgres psql -U grimoire grimoire ;;
+help | -h | --help) usage ;;
+*)
+    echo "Unknown command: $cmd" >&2
+    usage >&2
+    exit 1
+    ;;
+esac

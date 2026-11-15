@@ -15,33 +15,45 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.12",
 ]
-requires-python = ">=3.10"
-dependencies = [
-    "alembic~=1.12.1",
-    "aiohttp~=3.9.3",
-    "celery~=5.3.6",
-    "celery-singleton~=0.3.1",
-    "cryptography~=43.0.0",
-    "fastapi~=0.110.1",
-    "pgvector~=0.3.3",
-    "psycopg2-binary~=2.9.9",
-    "pydantic~=2.4.2",
-    "python-dotenv~=1.0.0",
-    "PyYAML~=6.0.1",
-    "requests~=2.31.0",
-    "spacy~=3.7.2",
-    "spacy[cuda12x]",
-    "SQLAlchemy~=2.0.22",
-    "SQLAlchemy-Utils~=0.41.2",
-    "sseclient-py~=1.8.0",
-    "transformers~=4.43.3",
-    "uvicorn~=0.23.2",
-    "redis~=5.0.3",
-    "rapidfuzz~=3.9.6",
-    "starlette~=0.37.2",
-    "numpy~=1.26.4",
-]
+requires-python = ">=3.12"
 dynamic = ["version"]
+dependencies = [
+    "alembic>=1.12.1",
+    "celery>=5.3.6",
+    "celery-singleton>=0.3.1",
+    "cryptography>=50.0.0",
+    "fastapi>=0.110.1",
+    "pgvector>=0.3.3",
+    "psycopg2-binary>=2.9.9",
+    "pydantic>=2.10.3",
+    "python-dotenv>=1.2.2",
+    "PyYAML>=6.0.1",
+    "rapidfuzz>=3.9.6",
+    "redis>=5.0.3",
+    "requests>=2.33.1",
+    "sentence-transformers>=5.6.0",
+    "spacy>=3.8.3",
+    "SQLAlchemy>=2.0.22",
+    "SQLAlchemy-Utils>=0.41.2",
+    # <5.17: 5.17 removed PreTrainedModel.get_extended_attention_mask, which the pinned gte remote code
+    # (Alibaba-NLP/new-impl, EMBEDDING_MODEL_CODE_REVISION) calls in forward(); encode() fails without it.
+    "transformers>=5.10.0,<5.17",
+    "uvicorn>=0.23.2",
+    "numpy>=1.26.4",
+    "networkx>=3.6.1",
+    "pypdf2>=3.0.1",
+    "ebooklib>=0.20",
+    "beautifulsoup4>=4.14.3",
+    "en-core-web-trf",
+    "python-multipart>=0.0.27",
+    "aiofiles>=25.1.0",
+]
+
+[project.optional-dependencies]
+cuda = ["spacy[cuda12x]"]
+
+[dependency-groups]
+dev = ["ruff"]
 
 [tool.hatch.version]
 path = "grimoire/__init__.py"
@@ -80,6 +92,9 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
 docstring-code-line-length = "dynamic"
+
+[tool.uv.sources]
+en-core-web-trf = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.8.0/en_core_web_trf-3.8.0-py3-none-any.whl" }
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.params.Depends", "fastapi.Query", "fastapi.params.Query"]

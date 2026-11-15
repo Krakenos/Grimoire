@@ -8,7 +8,7 @@ Grimoire collects the messages that are meant to be sent to LLM and analyzes the
 ### Setup
 #### Prerequisites
 To run Grimoire you need to have installed:
-- Python 3.10 or above
+- [uv](https://docs.astral.sh/uv/) (manages Python and dependencies)
 - Docker
 - Linux (for Windows run under WSL)
 
@@ -31,42 +31,103 @@ summarization_api: # Api used for summarization
   output_suffix: "\n"
 ```
 
+#### Chat completions and reasoning/thinking models
+
+By default Grimoire talks to the summarization backend with plain text completions
+(`/v1/completions`, or Kobold's native `/api/v1/generate`). Set `api_mode: chat` to instead use
+chat completions (`/v1/chat/completions`), which most modern OpenAI-compatible servers (vLLM,
+Aphrodite, Tabby, GenericOAI) support alongside text completions. KoboldAI/KoboldCPP have no chat
+endpoint, so they always use text completions regardless of `api_mode`.
+
+```yaml
+summarization_api:
+  backend: GenericOAI
+  api_mode: chat # "text" (default) or "chat"
+  reasoning_effort: "" # OpenAI/vLLM reasoning effort knob, e.g. "low"/"medium"/"high"; empty omits it
+  chat_template_kwargs: {} # extra chat kwargs, e.g. {enable_thinking: false} for Qwen/vLLM/Aphrodite
+  thinking_budget: 0 # extra tokens added on top of summarization.max_tokens to leave room for reasoning
+  strip_reasoning: true # strip the reasoning block (or an orphaned end token) from generated text
+  reasoning_start_token: "<think>" # reasoning delimiters your model emits in raw text
+  reasoning_end_token: "</think>"  # empty disables text-based splitting
+
+summarization:
+  # Used only in chat mode, in place of `prompt` / `segmented_memory_prompt`. Same placeholders,
+  # but no instruct sequences - the server applies its own chat template.
+  # The extract goes in the system message, the instruction in the user message.
+  chat_system_prompt: "{previous_summary}{additional_info}{messages}"
+  chat_user_prompt: |-
+    Above is an extract from a work of fiction. Use the details from that extract to describe {term} in one brief paragraph.
+    # ...the default continues with the numbered style rules, see config/settings.default.yaml
+  segmented_memory_chat_system_prompt: "{messages}"
+  segmented_memory_chat_user_prompt: "Above is an extract from a work of fiction. Summarize the most important facts and events in the story so far. Limit the summary to one paragraph. Your response should include nothing but the summary."
+```
+
+For reasoning models, Grimoire captures the reasoning separately (from a server's
+`reasoning_content`/`reasoning` field in chat mode, or by parsing it out of the generated text
+otherwise) and never stores it in the summary - it's only logged for debugging. When parsing raw
+text, everything up to the last `reasoning_end_token` is treated as reasoning; that also covers
+setups where the prompt prefills the start token, so only the end token comes back. A start token
+that is never closed means generation ran out of tokens mid-reasoning; that output is treated as
+reasoning only, so the existing summary is kept rather than overwritten (raise `thinking_budget` if
+this keeps happening). The delimiters
+differ per model, so set `reasoning_start_token`/`reasoning_end_token` to whatever yours emits
+(they default to `<think>`/`</think>`). Set `strip_reasoning: false` to disable this and keep the
+raw output as-is.
+
 ### Running from source
 
-Create python virtual environment and enter it
+Install dependencies (creates `.venv` automatically):
 ```bash
-python -m venv venv
-source venv/bin/activate
+uv sync
+```
+
+If you have a CUDA GPU and want GPU acceleration:
+```bash
+uv sync --extra cuda
 ```
 
 Run containers for Grimoire dependencies (redis and postgres):
 ```bash
-docker compose -f /docker/docker-compose-dev.yaml up -d 
+docker compose -f docker/docker-compose-dev.yaml up -d
 ```
 
-Installing Grimoire requirements:
+Download the spacy model:
 ```bash
-pip install -r requirements.txt
-python -m spacy download en_core_web_trf
+uv run python -m spacy download en_core_web_trf
 ```
 
 Setup database:
-
 ```bash
-alembic upgrade head
+uv run alembic upgrade head
 ```
 
 To start a process that will make summarization prompts use the following command:
 
 ```bash
-celery -A grimoire.core.tasks worker --loglevel=INFO --concurrency=1 -Q summarization_queue --pool=threads
+uv run celery -A grimoire.core.tasks worker --loglevel=INFO --concurrency=1 -Q summarization_queue --pool=threads
 ```
 Note: -concurrency=1 refers to how many prompts will be directed to side api at the same time. Leave it at 1 unless you know the backend supports proper queueing or batching.
 
 And to run Grimoire API use:
 ```bash
-python run.py
+uv run python run.py
 ```
+
+### Running the development stack in Docker
+
+Instead of installing Python dependencies locally (e.g. on Windows, where some packages are troublesome),
+the whole stack can run in containers with the source bind-mounted, using the `./dev` helper
+(bash; on Windows use Git Bash). It needs Docker with GPU support (Docker Desktop on WSL2 with an NVIDIA GPU).
+
+```bash
+./dev up      # builds the dev image, starts API on :5005 (auto-reload), Celery worker, redis and postgres
+./dev test    # run the unit tests inside the container
+./dev help    # all commands
+```
+
+On first run `./dev up` creates `config/settings.yaml` pointing at the `postgres` and `redis` containers.
+An LLM backend running on the host machine is reachable from the containers at `http://host.docker.internal:<port>`.
+
 ### Usage
 Following backends are supported:
 
@@ -107,3 +168,55 @@ This will run messages through the pipeline, save them, queue new summaries, and
   }
 ]
 ```
+
+### Management panel
+
+Grimoire ships an optional web panel at http://127.0.0.1:5005/panel for inspecting and editing what
+it has stored: users and their chats, message history, knowledge entries and segmented memories
+(view, edit, delete), a memory graph, and the summarization settings.
+
+It is off by default. To enable it:
+
+```yaml
+enable_management_panel: True
+```
+
+**The panel is a local administration tool, and the correct production deployment is to leave it
+off.** It has no per-user access control by design — anyone who reaches it reads and edits *every*
+user's chats, and can repoint the summarization backend at another server. That is fine for a
+single-operator instance on your own machine, and unacceptable on a host that serves other people.
+Turning it off is the control; a key is not a substitute for it.
+
+If the panel is enabled on a host that anyone else can reach, set a key:
+
+```yaml
+PANEL_KEY: "a-secret-only-you-have"
+```
+
+The panel prompts for it in the browser on the first request and remembers it. `PANEL_KEY` must not
+be the same value as `AUTH_KEY` — `AUTH_KEY` is the key you give to chat clients, so reusing it
+would make every client key a key over every user's data. Grimoire refuses to start if they match,
+and logs a warning when the panel is enabled with no key at all.
+
+With the panel disabled its endpoints do not exist at all — the sub-application is never mounted, so
+`/panel` and everything under it returns 404 rather than being merely access-controlled.
+
+#### Settings edited in the panel outlive it
+
+Settings changed through the panel are saved to the `setting_override` database table and layered
+over `settings.yaml` every time they are read, including by the Celery worker. **Disabling the panel
+stops further edits but does not revert edits already made.** If you change the summarization backend
+in the panel and later set `enable_management_panel: False`, the worker keeps using the overridden
+value and your `settings.yaml` will appear to be ignored.
+
+Only `summarization_api`, `summarization` and `tokenization` can be overridden this way. To go back
+to what is in the file, either use the panel's reset control while it is still enabled, or clear the
+rows directly:
+
+```bash
+docker compose -f docker/docker-compose-dev.yaml exec postgres \
+  psql -U grimoire -d grimoire -c "DELETE FROM setting_override;"
+```
+
+Overrides are read from the database on each use rather than cached at startup, so this takes effect
+on the next summarization with no restart needed.
