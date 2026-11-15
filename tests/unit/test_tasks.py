@@ -302,3 +302,41 @@ class TestDescribeEntitySkipsWithoutPrompt(TaskTestCase):
         self.generate_text.assert_not_called()
         self.assertEqual(entry.summary, "old summary")
         self.session.commit.assert_not_called()
+
+
+class TestMakeSummaryPromptLorebook(SummaryPromptTestCase):
+    MESSAGES = ["a" * 10, "b" * 10, "c" * 10, "d" * 10]  # 11 tokens each with the newline
+
+    def test_lorebook_kept_when_it_fits(self):
+        prompt = self._prompt(self.MESSAGES, max_context=1000, lorebook=["L" * 20, "M" * 20])
+        self.assertIn("L" * 20, prompt)
+        self.assertIn("M" * 20, prompt)
+
+    def test_largest_entries_dropped_until_min_messages_fit(self):
+        # 3 messages need 33 tokens. With all entries (21 + 31 + 6 tokens) 42 - 58 is left,
+        # dropping the 30 token entry leaves 42 - 27 = 15, dropping the 20 token one too leaves 36.
+        lorebook = ["L" * 20, "M" * 30, "S" * 5]
+        for api_mode in ("text", "chat"):
+            with self.subTest(api_mode=api_mode):
+                with self.assertLogs("general", level="WARNING") as logs:
+                    prompt = self._text(
+                        self._prompt(self.MESSAGES, max_context=42, api_mode=api_mode, lorebook=lorebook)
+                    )
+                self.assertEqual(prompt, f"{'S' * 5}\n{'b' * 10}\n{'c' * 10}\n{'d' * 10}\n")
+                self.assertTrue(any("Dropped 2 of 3 lorebook entries" in line for line in logs.output))
+
+    def test_remaining_room_still_used_for_messages(self):
+        # Without lorebook text, more than the minimum fits.
+        prompt = self._prompt(self.MESSAGES, max_context=44, lorebook=["L" * 50])
+        self.assertEqual(prompt, "".join(f"{message}\n" for message in self.MESSAGES))
+
+    def test_fewer_messages_than_minimum(self):
+        # Only two messages exist, so the lorebook entry only has to leave room for those.
+        prompt = self._prompt(["a" * 10, "b" * 10], max_context=50, lorebook=["L" * 20])
+        self.assertEqual(prompt, f"{'L' * 20}\n{'a' * 10}\n{'b' * 10}\n")
+
+    def test_skipped_when_character_info_alone_is_too_large(self):
+        with self.assertLogs("general", level="WARNING") as logs:
+            prompt = self._prompt(self.MESSAGES, max_context=30, character_info="C" * 40, lorebook=["L" * 5])
+        self.assertIsNone(prompt)
+        self.assertTrue(any("no message for Kessler fits" in line for line in logs.output))

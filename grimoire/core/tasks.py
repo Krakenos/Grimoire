@@ -31,6 +31,9 @@ if redis_manager.sentinel:
 
     celery_app.conf.broker_transport_options = transport_options
 
+# Lorebook entries are dropped from an entity description prompt until at least this many messages fit
+MIN_SUMMARY_MESSAGES = 3
+
 celery_app.conf.task_routes = {
     "grimoire.core.tasks.summarize": {"queue": "summarization_queue"},
     "grimoire.core.tasks.describe_entity": {"queue": "summarization_queue"},
@@ -236,12 +239,31 @@ def make_summary_prompt(
     messages = [f"{message}\n" for message in messages]
     message_tokens = count_tokens(messages)
 
-    additional_info = get_additional_info(knowledge_entry, session)
-    extra_text = "\n".join(extra_info)
-    extra_text = f"{extra_text}\n" if extra_text else ""  # add ending newline if there is extra_text
-    additional_info = f"{additional_info}{extra_text}"
+    character_info = get_additional_info(knowledge_entry, session)
 
+    def make_additional_info(lorebook_entries: list[str]) -> str:
+        extra_text = "\n".join(lorebook_entries)
+        extra_text = f"{extra_text}\n" if extra_text else ""  # add ending newline if there is extra_text
+        return f"{character_info}{extra_text}"
+
+    lorebook_entries = list(extra_info)
+    additional_info = make_additional_info(lorebook_entries)
     budget = max_context - fixed_tokens(additional_info)
+
+    min_messages_tokens = sum(message_tokens[-MIN_SUMMARY_MESSAGES:])
+    if lorebook_entries and min_messages_tokens > budget:
+        # Lorebook text crowds out the chat itself, drop the largest entries until enough messages fit.
+        entry_tokens = dict(zip(lorebook_entries, count_tokens(lorebook_entries), strict=True))
+        dropped_entries = 0
+        while lorebook_entries and min_messages_tokens > budget:
+            lorebook_entries.remove(max(lorebook_entries, key=entry_tokens.__getitem__))
+            dropped_entries += 1
+            additional_info = make_additional_info(lorebook_entries)
+            budget = max_context - fixed_tokens(additional_info)
+        general_logger.warning(
+            f"Dropped {dropped_entries} of {len(extra_info)} lorebook entries from the summary prompt for {term} "
+            f"to make room for chat messages"
+        )
 
     # Newest messages are the most relevant, so fill the budget from the end.
     fitting_messages = 0
