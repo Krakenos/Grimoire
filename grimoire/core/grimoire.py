@@ -573,7 +573,7 @@ def process_request(
         describe_entity.delay(
             ent,
             chat.id,
-            list(ent_lb_map[ent]),
+            sorted(ent_lb_map[ent]),
             include_names,
         )
 

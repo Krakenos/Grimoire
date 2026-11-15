@@ -31,6 +31,9 @@ if redis_manager.sentinel:
 
     celery_app.conf.broker_transport_options = transport_options
 
+# Lorebook entries are dropped from an entity description prompt until at least this many messages fit
+MIN_SUMMARY_MESSAGES = 3
+
 celery_app.conf.task_routes = {
     "grimoire.core.tasks.summarize": {"queue": "summarization_queue"},
     "grimoire.core.tasks.describe_entity": {"queue": "summarization_queue"},
@@ -110,34 +113,14 @@ def build_generation_params(
     return generation_params
 
 
-def make_summary_prompt(
+def get_summary_messages(
     session: Session,
     knowledge_entry: Knowledge,
-    max_context: int,
-    api_settings: ApiSettings,
-    summarization_settings: SummarizationSettings,
     secondary_database_settings: SecondaryDatabaseSettings,
-    prefer_local_tokenizer: bool,
-    tokenizer: str,
-    extra_info: list[str],
     include_names: bool = True,
-) -> str | list[dict] | None:
-    summarization_url = api_settings.url
-    summarization_backend = api_settings.backend
-    summarization_auth = api_settings.auth_key
-    chat_mode = is_chat_mode(api_settings)
-
-    instruct_fields = build_instruct_fields(api_settings)
-
-    secondary_database = secondary_database_settings.enabled
-    secondary_database_encryption_method = secondary_database_settings.message_encryption
-    secondary_database_encryption_key = secondary_database_settings.encryption_key
+) -> list[str]:
+    """Messages mentioning the entity plus their neighbours, oldest first."""
     chat_id = knowledge_entry.chat_id
-
-    if knowledge_entry.summary_entry:
-        summary = f"{knowledge_entry.summary_entry}\n"
-    else:
-        summary = ""
 
     message_indices = [message.message_index for message in knowledge_entry.messages]
     chunk_indices = set()
@@ -146,19 +129,20 @@ def make_summary_prompt(
     chunk_indices -= {-1, 0}
     final_indices = sorted(chunk_indices)
 
-    if secondary_database:
-        query = (
-            select(Message)
-            .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
-            .order_by(Message.message_index)
-        )
-        query_results = session.scalars(query).all()
+    query = (
+        select(Message)
+        .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
+        .order_by(Message.message_index)
+    )
+    query_results = session.scalars(query).all()
+    sender_names = [mes.character.name for mes in query_results]
+
+    if secondary_database_settings.enabled:
         external_ids = [mes.external_id for mes in query_results]
-        sender_names = [mes.character.name for mes in query_results]
         db_messages = get_messages_from_external_db(
             external_ids,
-            secondary_database_encryption_method,
-            secondary_database_encryption_key,
+            secondary_database_settings.message_encryption,
+            secondary_database_settings.encryption_key,
         )
         if include_names:
             messages = []
@@ -171,14 +155,7 @@ def make_summary_prompt(
             messages = [message for message in db_messages if message is not None]
 
     else:
-        query = (
-            select(Message)
-            .where(Message.message_index.in_(final_indices), Message.chat_id == chat_id)
-            .order_by(Message.message_index)
-        )
-        query_results = session.scalars(query).all()
         db_messages = [mes.message for mes in query_results]
-        sender_names = [mes.character.name for mes in query_results]
         if include_names:
             messages = []
             for name, message in zip(sender_names, db_messages, strict=True):
@@ -189,66 +166,126 @@ def make_summary_prompt(
         else:
             messages = db_messages
 
-    if len(messages) <= 1:
+    return messages
+
+
+def make_summary_prompt(
+    session: Session,
+    knowledge_entry: Knowledge,
+    max_context: int,
+    api_settings: ApiSettings,
+    summarization_settings: SummarizationSettings,
+    secondary_database_settings: SecondaryDatabaseSettings,
+    prefer_local_tokenizer: bool,
+    tokenizer: str,
+    extra_info: list[str],
+    include_names: bool = True,
+) -> str | list[dict] | None:
+    """Builds the entity description prompt, or returns None if there is nothing to summarize."""
+    summarization_url = api_settings.url
+    summarization_backend = api_settings.backend
+    summarization_auth = api_settings.auth_key
+    chat_mode = is_chat_mode(api_settings)
+
+    instruct_fields = build_instruct_fields(api_settings)
+    term = knowledge_entry.entity
+
+    if knowledge_entry.summary_entry:
+        summary = f"{knowledge_entry.summary_entry}\n"
+    else:
+        summary = ""
+
+    messages = get_summary_messages(session, knowledge_entry, secondary_database_settings, include_names)
+
+    if len(messages) <= 1:  # Edge case of having 1 message for summary, only may happen at start of chat
+        general_logger.info("Skipping entry to summarize, only 1 message for term exists")
         return None
 
-    prompt = [] if chat_mode else ""
-    reversed_messages = []
-    additional_info = get_additional_info(knowledge_entry, session)
-    extra_text = "\n".join(extra_info)
-    extra_text = f"{extra_text}\n" if extra_text else ""  # add ending newline if there is extra_text
-    additional_info = f"{additional_info}{extra_text}"
-
-    for message in messages[::-1]:
-        reversed_messages.append(f"{message}\n")
-        messages_text = "".join(reversed_messages[::-1])
-
-        if chat_mode:
-            new_system = summarization_settings.chat_system_prompt.format(
-                previous_summary=summary,
-                additional_info=additional_info,
-                messages=messages_text,
-                term=knowledge_entry.entity,
-            )
-            new_user = summarization_settings.chat_user_prompt.format(term=knowledge_entry.entity)
-            system_without_summary = new_system
-            if summary:
-                system_without_summary = new_system.replace(summary, "")
-            splitted_prompt = system_without_summary.split(messages_text)
-            to_tokenize = [*splitted_prompt, *reversed_messages, summary, new_user]
-        else:
-            new_prompt = summarization_settings.prompt.format(
-                term=knowledge_entry.entity,
-                previous_summary=summary,
-                additional_info=additional_info,
-                messages=messages_text,
-                **instruct_fields,
-            )
-            prompt_without_summary = new_prompt
-            if summary:
-                prompt_without_summary = new_prompt.replace(summary, "")
-            splitted_prompt = prompt_without_summary.split(messages_text)
-            to_tokenize = [*splitted_prompt, *reversed_messages, summary]
-
-        to_tokenize = [text for text in to_tokenize if text != "" and text is not None]
-        new_tokens = token_count(
-            to_tokenize, summarization_backend, summarization_url, tokenizer, prefer_local_tokenizer, summarization_auth
+    def count_tokens(texts: list[str]) -> list[int]:
+        return token_count(
+            texts, summarization_backend, summarization_url, tokenizer, prefer_local_tokenizer, summarization_auth
         )
-        sum_tokens = sum(new_tokens)
-        if sum_tokens > max_context:
-            break
-        elif chat_mode:
-            prompt = [
-                {"role": "system", "content": new_system},
-                {"role": "user", "content": new_user},
+
+    def build_prompt(additional_info: str, messages_text: str) -> str | list[dict]:
+        if chat_mode:
+            system_content = summarization_settings.chat_system_prompt.format(
+                previous_summary=summary,
+                additional_info=additional_info,
+                messages=messages_text,
+                term=term,
+            )
+            return [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": summarization_settings.chat_user_prompt.format(term=term)},
             ]
+        return summarization_settings.prompt.format(
+            term=term,
+            previous_summary=summary,
+            additional_info=additional_info,
+            messages=messages_text,
+            **instruct_fields,
+        )
+
+    def fixed_tokens(additional_info: str) -> int:
+        """Tokens of everything in the prompt except the messages."""
+        scaffold = build_prompt(additional_info, "<temp>")
+        if chat_mode:
+            pieces = [*scaffold[0]["content"].split("<temp>"), scaffold[1]["content"]]
         else:
-            prompt = new_prompt
+            pieces = scaffold.split("<temp>")
+        pieces = [piece for piece in pieces if piece]
+        return sum(count_tokens(pieces)) if pieces else 0
 
-    return prompt
+    messages = [f"{message}\n" for message in messages]
+    message_tokens = count_tokens(messages)
+
+    character_info = get_additional_info(knowledge_entry, session)
+
+    def make_additional_info(lorebook_entries: list[str]) -> str:
+        extra_text = "\n".join(lorebook_entries)
+        extra_text = f"{extra_text}\n" if extra_text else ""  # add ending newline if there is extra_text
+        return f"{character_info}{extra_text}"
+
+    lorebook_entries = list(extra_info)
+    additional_info = make_additional_info(lorebook_entries)
+    budget = max_context - fixed_tokens(additional_info)
+
+    min_messages_tokens = sum(message_tokens[-MIN_SUMMARY_MESSAGES:])
+    if lorebook_entries and min_messages_tokens > budget:
+        # Lorebook text crowds out the chat itself, drop the largest entries until enough messages fit.
+        entry_tokens = dict(zip(lorebook_entries, count_tokens(lorebook_entries), strict=True))
+        dropped_entries = 0
+        while lorebook_entries and min_messages_tokens > budget:
+            lorebook_entries.remove(max(lorebook_entries, key=entry_tokens.__getitem__))
+            dropped_entries += 1
+            additional_info = make_additional_info(lorebook_entries)
+            budget = max_context - fixed_tokens(additional_info)
+        general_logger.warning(
+            f"Dropped {dropped_entries} of {len(extra_info)} lorebook entries from the summary prompt for {term} "
+            f"to make room for chat messages"
+        )
+
+    # Newest messages are the most relevant, so fill the budget from the end.
+    fitting_messages = 0
+    used_tokens = 0
+    for tokens in message_tokens[::-1]:
+        if used_tokens + tokens > budget:
+            break
+        used_tokens += tokens
+        fitting_messages += 1
+
+    if fitting_messages == 0:
+        general_logger.warning(
+            f"Skipping entry to summarize, no message for {term} fits in the {max_context} token prompt context "
+            f"after the previous summary, character info and lorebook entries ({max_context - budget} tokens)"
+        )
+        return None
+
+    return build_prompt(additional_info, "".join(messages[-fitting_messages:]))
 
 
-@celery_app.task(base=Singleton, lock_expiry=60)
+# Lorebook entries vary between requests, so they must not make otherwise identical jobs distinct
+@celery_app.task(base=Singleton, lock_expiry=60, unique_on=["term", "chat_id"])
 def describe_entity(
     term: str,
     chat_id: int,
@@ -307,8 +344,7 @@ def describe_entity(
             include_names,
         )
 
-        if prompt is None:  # Edge case of having 1 message for summary, only may happen at start of chat
-            general_logger.info("Skipping entry to summarize, only 1 message for term exists")
+        if prompt is None:
             return None
 
         generation_params = build_generation_params(api_settings, summarization_settings, response_len, context_len)

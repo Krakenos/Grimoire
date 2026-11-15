@@ -163,7 +163,7 @@ class TaskTestCase(TestCase):
     def _patch_task(self, generated_text):
         self._patch("grimoire.core.tasks.get_effective_settings", return_value=_settings(context_length=5000))
         self._patch("grimoire.core.tasks.token_count", side_effect=_token_count)
-        self._patch(
+        self.generate_text = self._patch(
             "grimoire.core.tasks.generate_text",
             return_value=mock.Mock(text=generated_text, reasoning="ran out mid-thou", request_body={}),
         )
@@ -222,3 +222,135 @@ class TestGenerateSegmentedMemoryEmptyOutput(TaskTestCase):
         self.assertEqual(self.memory_cls.call_args.kwargs["summary"], "what happened")
         self.session.add.assert_called_once()
         self.session.commit.assert_called_once()
+
+
+class SummaryPromptTestCase(TestCase):
+    """Runs make_summary_prompt with the DB, tokenizer and character lookup mocked out."""
+
+    def _patch(self, target, **kwargs):
+        patcher = mock.patch(target, **kwargs)
+        self.addCleanup(patcher.stop)
+        return patcher.start()
+
+    def _prompt(self, messages, max_context, api_mode="text", summary_entry="", character_info="", lorebook=()):
+        from grimoire.core.tasks import make_summary_prompt
+
+        self._patch("grimoire.core.tasks.get_summary_messages", return_value=list(messages))
+        self._patch("grimoire.core.tasks.get_additional_info", return_value=character_info)
+        self._patch("grimoire.core.tasks.token_count", side_effect=_token_count)
+        runtime = _settings(api_mode=api_mode)
+        runtime.summarization.prompt = "{previous_summary}{additional_info}{messages}"
+        runtime.summarization.chat_system_prompt = "{previous_summary}{additional_info}{messages}"
+        entry = mock.Mock(entity="Kessler", summary_entry=summary_entry, chat_id=1)
+        return make_summary_prompt(
+            mock.Mock(),
+            entry,
+            max_context,
+            runtime.summarization_api,
+            runtime.summarization,
+            runtime.secondary_database,
+            False,
+            "",
+            list(lorebook),
+        )
+
+    @staticmethod
+    def _text(prompt):
+        return prompt[0]["content"] if isinstance(prompt, list) else prompt
+
+
+class TestMakeSummaryPrompt(SummaryPromptTestCase):
+    def test_single_message_returns_none(self):
+        self.assertIsNone(self._prompt(["A" * 10], max_context=1000))
+
+    def test_all_messages_fit(self):
+        for api_mode in ("text", "chat"):
+            with self.subTest(api_mode=api_mode):
+                prompt = self._prompt(["a" * 10, "b" * 10, "c" * 10], max_context=1000, api_mode=api_mode)
+                self.assertEqual(self._text(prompt), f"{'a' * 10}\n{'b' * 10}\n{'c' * 10}\n")
+
+    def test_oldest_messages_are_dropped_first(self):
+        # Each message is 11 tokens with its newline; 30 leaves room for the newest two only.
+        prompt = self._prompt(["a" * 10, "b" * 10, "c" * 10], max_context=30)
+        self.assertEqual(prompt, f"{'b' * 10}\n{'c' * 10}\n")
+
+    def test_fixed_part_counts_against_the_budget(self):
+        # The 10 token summary leaves 20, enough for the newest message only.
+        prompt = self._prompt(["a" * 10, "b" * 10, "c" * 10], max_context=30, summary_entry="S" * 9)
+        self.assertEqual(prompt, f"{'S' * 9}\n{'c' * 10}\n")
+
+    def test_nothing_fits_returns_none(self):
+        for api_mode in ("text", "chat"):
+            with self.subTest(api_mode=api_mode):
+                with self.assertLogs("general", level="WARNING") as logs:
+                    prompt = self._prompt(
+                        ["a" * 10, "b" * 10], max_context=30, api_mode=api_mode, character_info="C" * 25
+                    )
+                self.assertIsNone(prompt)
+                self.assertTrue(any("no message for Kessler fits" in line for line in logs.output))
+
+
+class TestDescribeEntitySkipsWithoutPrompt(TaskTestCase):
+    def test_no_generation_without_prompt(self):
+        from grimoire.core.tasks import describe_entity
+
+        self._patch_task("new summary")
+        self._patch("grimoire.core.tasks.make_summary_prompt", return_value=None)
+        entry = mock.Mock(entity="Kessler", summary="old summary", update_count=5, frozen=False, enabled=True)
+        self._patch("grimoire.core.tasks.get_knowledge_entity", return_value=entry)
+        describe_entity("Kessler", 1, [])
+        self.generate_text.assert_not_called()
+        self.assertEqual(entry.summary, "old summary")
+        self.session.commit.assert_not_called()
+
+
+class TestMakeSummaryPromptLorebook(SummaryPromptTestCase):
+    MESSAGES = ["a" * 10, "b" * 10, "c" * 10, "d" * 10]  # 11 tokens each with the newline
+
+    def test_lorebook_kept_when_it_fits(self):
+        prompt = self._prompt(self.MESSAGES, max_context=1000, lorebook=["L" * 20, "M" * 20])
+        self.assertIn("L" * 20, prompt)
+        self.assertIn("M" * 20, prompt)
+
+    def test_largest_entries_dropped_until_min_messages_fit(self):
+        # 3 messages need 33 tokens. With all entries (21 + 31 + 6 tokens) 42 - 58 is left,
+        # dropping the 30 token entry leaves 42 - 27 = 15, dropping the 20 token one too leaves 36.
+        lorebook = ["L" * 20, "M" * 30, "S" * 5]
+        for api_mode in ("text", "chat"):
+            with self.subTest(api_mode=api_mode):
+                with self.assertLogs("general", level="WARNING") as logs:
+                    prompt = self._text(
+                        self._prompt(self.MESSAGES, max_context=42, api_mode=api_mode, lorebook=lorebook)
+                    )
+                self.assertEqual(prompt, f"{'S' * 5}\n{'b' * 10}\n{'c' * 10}\n{'d' * 10}\n")
+                self.assertTrue(any("Dropped 2 of 3 lorebook entries" in line for line in logs.output))
+
+    def test_remaining_room_still_used_for_messages(self):
+        # Without lorebook text, more than the minimum fits.
+        prompt = self._prompt(self.MESSAGES, max_context=44, lorebook=["L" * 50])
+        self.assertEqual(prompt, "".join(f"{message}\n" for message in self.MESSAGES))
+
+    def test_fewer_messages_than_minimum(self):
+        # Only two messages exist, so the lorebook entry only has to leave room for those.
+        prompt = self._prompt(["a" * 10, "b" * 10], max_context=50, lorebook=["L" * 20])
+        self.assertEqual(prompt, f"{'L' * 20}\n{'a' * 10}\n{'b' * 10}\n")
+
+    def test_skipped_when_character_info_alone_is_too_large(self):
+        with self.assertLogs("general", level="WARNING") as logs:
+            prompt = self._prompt(self.MESSAGES, max_context=30, character_info="C" * 40, lorebook=["L" * 5])
+        self.assertIsNone(prompt)
+        self.assertTrue(any("no message for Kessler fits" in line for line in logs.output))
+
+
+class TestDescribeEntityDeduplication(TestCase):
+    def _lock(self, *args):
+        from grimoire.core.tasks import describe_entity
+
+        return describe_entity.generate_lock(describe_entity.name, list(args))
+
+    def test_lorebook_entries_do_not_affect_the_lock(self):
+        self.assertEqual(self._lock("Kessler", 1, ["[ A: a ]"]), self._lock("Kessler", 1, ["[ B: b ]", "[ C: c ]"]))
+
+    def test_different_entities_get_different_locks(self):
+        self.assertNotEqual(self._lock("Kessler", 1, []), self._lock("Alex", 1, []))
+        self.assertNotEqual(self._lock("Kessler", 1, []), self._lock("Kessler", 2, []))
