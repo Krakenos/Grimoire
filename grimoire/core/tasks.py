@@ -178,6 +178,7 @@ def make_summary_prompt(
     extra_info: list[str],
     include_names: bool = True,
 ) -> str | list[dict] | None:
+    """Builds the entity description prompt, or returns None if there is nothing to summarize."""
     summarization_url = api_settings.url
     summarization_backend = api_settings.backend
     summarization_auth = api_settings.auth_key
@@ -193,7 +194,8 @@ def make_summary_prompt(
 
     messages = get_summary_messages(session, knowledge_entry, secondary_database_settings, include_names)
 
-    if len(messages) <= 1:
+    if len(messages) <= 1:  # Edge case of having 1 message for summary, only may happen at start of chat
+        general_logger.info("Skipping entry to summarize, only 1 message for term exists")
         return None
 
     def count_tokens(texts: list[str]) -> list[int]:
@@ -251,7 +253,11 @@ def make_summary_prompt(
         fitting_messages += 1
 
     if fitting_messages == 0:
-        return [] if chat_mode else ""
+        general_logger.warning(
+            f"Skipping entry to summarize, no message for {term} fits in the {max_context} token prompt context "
+            f"after the previous summary, character info and lorebook entries ({max_context - budget} tokens)"
+        )
+        return None
 
     return build_prompt(additional_info, "".join(messages[-fitting_messages:]))
 
@@ -315,8 +321,7 @@ def describe_entity(
             include_names,
         )
 
-        if prompt is None:  # Edge case of having 1 message for summary, only may happen at start of chat
-            general_logger.info("Skipping entry to summarize, only 1 message for term exists")
+        if prompt is None:
             return None
 
         generation_params = build_generation_params(api_settings, summarization_settings, response_len, context_len)

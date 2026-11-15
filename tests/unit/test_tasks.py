@@ -163,7 +163,7 @@ class TaskTestCase(TestCase):
     def _patch_task(self, generated_text):
         self._patch("grimoire.core.tasks.get_effective_settings", return_value=_settings(context_length=5000))
         self._patch("grimoire.core.tasks.token_count", side_effect=_token_count)
-        self._patch(
+        self.generate_text = self._patch(
             "grimoire.core.tasks.generate_text",
             return_value=mock.Mock(text=generated_text, reasoning="ran out mid-thou", request_body={}),
         )
@@ -278,3 +278,27 @@ class TestMakeSummaryPrompt(SummaryPromptTestCase):
         # The 10 token summary leaves 20, enough for the newest message only.
         prompt = self._prompt(["a" * 10, "b" * 10, "c" * 10], max_context=30, summary_entry="S" * 9)
         self.assertEqual(prompt, f"{'S' * 9}\n{'c' * 10}\n")
+
+    def test_nothing_fits_returns_none(self):
+        for api_mode in ("text", "chat"):
+            with self.subTest(api_mode=api_mode):
+                with self.assertLogs("general", level="WARNING") as logs:
+                    prompt = self._prompt(
+                        ["a" * 10, "b" * 10], max_context=30, api_mode=api_mode, character_info="C" * 25
+                    )
+                self.assertIsNone(prompt)
+                self.assertTrue(any("no message for Kessler fits" in line for line in logs.output))
+
+
+class TestDescribeEntitySkipsWithoutPrompt(TaskTestCase):
+    def test_no_generation_without_prompt(self):
+        from grimoire.core.tasks import describe_entity
+
+        self._patch_task("new summary")
+        self._patch("grimoire.core.tasks.make_summary_prompt", return_value=None)
+        entry = mock.Mock(entity="Kessler", summary="old summary", update_count=5, frozen=False, enabled=True)
+        self._patch("grimoire.core.tasks.get_knowledge_entity", return_value=entry)
+        describe_entity("Kessler", 1, [])
+        self.generate_text.assert_not_called()
+        self.assertEqual(entry.summary, "old summary")
+        self.session.commit.assert_not_called()
