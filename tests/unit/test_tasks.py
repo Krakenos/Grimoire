@@ -222,3 +222,59 @@ class TestGenerateSegmentedMemoryEmptyOutput(TaskTestCase):
         self.assertEqual(self.memory_cls.call_args.kwargs["summary"], "what happened")
         self.session.add.assert_called_once()
         self.session.commit.assert_called_once()
+
+
+class SummaryPromptTestCase(TestCase):
+    """Runs make_summary_prompt with the DB, tokenizer and character lookup mocked out."""
+
+    def _patch(self, target, **kwargs):
+        patcher = mock.patch(target, **kwargs)
+        self.addCleanup(patcher.stop)
+        return patcher.start()
+
+    def _prompt(self, messages, max_context, api_mode="text", summary_entry="", character_info="", lorebook=()):
+        from grimoire.core.tasks import make_summary_prompt
+
+        self._patch("grimoire.core.tasks.get_summary_messages", return_value=list(messages))
+        self._patch("grimoire.core.tasks.get_additional_info", return_value=character_info)
+        self._patch("grimoire.core.tasks.token_count", side_effect=_token_count)
+        runtime = _settings(api_mode=api_mode)
+        runtime.summarization.prompt = "{previous_summary}{additional_info}{messages}"
+        runtime.summarization.chat_system_prompt = "{previous_summary}{additional_info}{messages}"
+        entry = mock.Mock(entity="Kessler", summary_entry=summary_entry, chat_id=1)
+        return make_summary_prompt(
+            mock.Mock(),
+            entry,
+            max_context,
+            runtime.summarization_api,
+            runtime.summarization,
+            runtime.secondary_database,
+            False,
+            "",
+            list(lorebook),
+        )
+
+    @staticmethod
+    def _text(prompt):
+        return prompt[0]["content"] if isinstance(prompt, list) else prompt
+
+
+class TestMakeSummaryPrompt(SummaryPromptTestCase):
+    def test_single_message_returns_none(self):
+        self.assertIsNone(self._prompt(["A" * 10], max_context=1000))
+
+    def test_all_messages_fit(self):
+        for api_mode in ("text", "chat"):
+            with self.subTest(api_mode=api_mode):
+                prompt = self._prompt(["a" * 10, "b" * 10, "c" * 10], max_context=1000, api_mode=api_mode)
+                self.assertEqual(self._text(prompt), f"{'a' * 10}\n{'b' * 10}\n{'c' * 10}\n")
+
+    def test_oldest_messages_are_dropped_first(self):
+        # Each message is 11 tokens with its newline; 30 leaves room for the newest two only.
+        prompt = self._prompt(["a" * 10, "b" * 10, "c" * 10], max_context=30)
+        self.assertEqual(prompt, f"{'b' * 10}\n{'c' * 10}\n")
+
+    def test_fixed_part_counts_against_the_budget(self):
+        # The 10 token summary leaves 20, enough for the newest message only.
+        prompt = self._prompt(["a" * 10, "b" * 10, "c" * 10], max_context=30, summary_entry="S" * 9)
+        self.assertEqual(prompt, f"{'S' * 9}\n{'c' * 10}\n")
