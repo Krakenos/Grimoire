@@ -340,3 +340,17 @@ class TestMakeSummaryPromptLorebook(SummaryPromptTestCase):
             prompt = self._prompt(self.MESSAGES, max_context=30, character_info="C" * 40, lorebook=["L" * 5])
         self.assertIsNone(prompt)
         self.assertTrue(any("no message for Kessler fits" in line for line in logs.output))
+
+
+class TestDescribeEntityDeduplication(TestCase):
+    def _lock(self, *args):
+        from grimoire.core.tasks import describe_entity
+
+        return describe_entity.generate_lock(describe_entity.name, list(args))
+
+    def test_lorebook_entries_do_not_affect_the_lock(self):
+        self.assertEqual(self._lock("Kessler", 1, ["[ A: a ]"]), self._lock("Kessler", 1, ["[ B: b ]", "[ C: c ]"]))
+
+    def test_different_entities_get_different_locks(self):
+        self.assertNotEqual(self._lock("Kessler", 1, []), self._lock("Alex", 1, []))
+        self.assertNotEqual(self._lock("Kessler", 1, []), self._lock("Kessler", 2, []))

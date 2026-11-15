@@ -284,7 +284,8 @@ def make_summary_prompt(
     return build_prompt(additional_info, "".join(messages[-fitting_messages:]))
 
 
-@celery_app.task(base=Singleton, lock_expiry=60)
+# Lorebook entries vary between requests, so they must not make otherwise identical jobs distinct
+@celery_app.task(base=Singleton, lock_expiry=60, unique_on=["term", "chat_id"])
 def describe_entity(
     term: str,
     chat_id: int,
